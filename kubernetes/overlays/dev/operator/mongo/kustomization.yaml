@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dev
+
+resources:
+  - mongo-operator-crds.yaml
+  - mongo-operator-rbac.yaml
+  - mongo-operator.yaml
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: percona-server-mongodb-operator
+      spec:
+        template:
+          spec:
+            containers:
+              - name: percona-server-mongodb-operator
+                env:
+                  - name: WATCH_NAMESPACE
+                    value: "dev"

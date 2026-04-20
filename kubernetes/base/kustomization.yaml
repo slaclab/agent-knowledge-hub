@@ -6,6 +6,3 @@ resources:
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
-  - mongodb-statefulset.yaml
-  - mongodb-service.yaml
-  - mongodb-pvc.yaml

@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dev
+
+resources:
+  - mongo.yaml
+
+secretGenerator:
+  - name: mongodb-secrets
+    literals:
+      - MONGODB_BACKUP_USER=backup
+      - MONGODB_BACKUP_PASSWORD=backuppassword
+      - MONGODB_CLUSTER_ADMIN_USER=clusterAdmin
+      - MONGODB_CLUSTER_ADMIN_PASSWORD=clusterAdminPassword
+      - MONGODB_CLUSTER_MONITOR_USER=clusterMonitor
+      - MONGODB_CLUSTER_MONITOR_PASSWORD=clusterMonitorPassword
+      - MONGODB_USER_ADMIN_USER=userAdmin
+      - MONGODB_USER_ADMIN_PASSWORD=userAdminPassword
+    options:
+      disableNameSuffixHash: true

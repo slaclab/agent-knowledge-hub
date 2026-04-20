@@ -5,7 +5,10 @@ REGISTRY     ?= docker.io/slaclab
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 
-.PHONY: apply diff destroy rollout-restart dump docker-build docker-push
+.PHONY: apply diff destroy rollout-restart dump operator-apply docker-build docker-push
+
+operator-apply:
+	KUBECONFIG=$(KUBECONFIG) kubectl apply --server-side --force-conflicts -k operator/mongo/
 
 apply: ensure-context
 	kubectl apply -k .

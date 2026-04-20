@@ -1,7 +1,7 @@
 CONTEXT      = agent-knowledge-hub-dev
 NAMESPACE    = agent-knowledge-hub-dev
 KUBECONFIG  ?= $(HOME)/.kube/contexts/s3df/dev
-REGISTRY     ?= $(error REGISTRY is not set — e.g. make docker-push REGISTRY=registry.example.com/myproject)
+REGISTRY     ?=
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

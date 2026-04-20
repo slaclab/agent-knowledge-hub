@@ -1,8 +1,8 @@
 NODE_MODULES := node_modules
 NEXT         := $(NODE_MODULES)/.bin/next
 
-REGISTRY     ?= $(error REGISTRY is not set — e.g. make docker-push REGISTRY=registry.example.com/myproject)
-IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-frontend
+REGISTRY     ?=
+IMAGE        ?= $(if $(REGISTRY),$(REGISTRY)/agent-knowledge-hub-frontend,agent-knowledge-hub-frontend)
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

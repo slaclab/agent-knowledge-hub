@@ -4,8 +4,8 @@ PIP      := $(VENV)/bin/pip
 UVICORN  := $(VENV)/bin/uvicorn
 PYTEST   := $(VENV)/bin/pytest
 
-REGISTRY     ?= $(error REGISTRY is not set — e.g. make docker-push REGISTRY=registry.example.com/myproject)
-IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
+REGISTRY     ?=
+IMAGE        ?= $(if $(REGISTRY),$(REGISTRY)/agent-knowledge-hub-backend,agent-knowledge-hub-backend)
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

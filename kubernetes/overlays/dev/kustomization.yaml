@@ -6,6 +6,7 @@ namespace: dev
 resources:
   - ../../base
   - namespace.yaml
+  - ingress.yaml
 
 images:
   - name: agent-knowledge-hub-backend

@@ -14,13 +14,15 @@ spec:
     spec:
       containers:
         - name: backend
-          image: agent-knowledge-hub-backend:dev
+          image: slaclab/agent-knowledge-hub-backend:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:
             - configMapRef:
                 name: backend-config
+            - secretRef:
+                name: agent-knowledge-hub-secrets
           livenessProbe:
             httpGet:
               path: /health

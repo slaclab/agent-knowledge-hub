@@ -6,20 +6,36 @@ TAG              ?= dev
 CONTAINER_RT     ?= sudo podman
 MONGO_SECRET_PATH ?= secret/tid/agent-knowledge-hub-dev/mongo
 
-.PHONY: apply diff destroy rollout-restart dump operator-apply mongodb-apply secrets clean-secrets docker-build docker-push
+.PHONY: apply diff destroy rollout-restart dump operator-apply secrets clean-secrets create-db-user docker-build docker-push
 
 operator-apply:
 	KUBECONFIG=$(KUBECONFIG) kubectl apply --server-side --force-conflicts -k operator/mongo/
 
-mongodb-apply: ensure-context
-	$(MAKE) -C mongodb/ apply KUBECONFIG=$(KUBECONFIG)
-
 secrets:
 	mkdir -p etc/.secrets
+	@set -e; for i in MONGODB_BACKUP_USER MONGODB_BACKUP_PASSWORD \
+	    MONGODB_CLUSTER_ADMIN_USER MONGODB_CLUSTER_ADMIN_PASSWORD \
+	    MONGODB_CLUSTER_MONITOR_USER MONGODB_CLUSTER_MONITOR_PASSWORD \
+	    MONGODB_USER_ADMIN_USER MONGODB_USER_ADMIN_PASSWORD; do \
+	  vault kv get --field=$$i $(MONGO_SECRET_PATH) > etc/.secrets/$$i; \
+	done
 	@MONGO_USER=$$(vault kv get --field=MONGODB_APP_USER $(MONGO_SECRET_PATH)) && \
 	 MONGO_PASS=$$(vault kv get --field=MONGODB_APP_PASSWORD $(MONGO_SECRET_PATH)) && \
 	 echo -n "mongodb://$${MONGO_USER}:$${MONGO_PASS}@mongodb-mongos.$(NAMESPACE).svc.cluster.local/agent-skills?authSource=agent-skills" \
 	   > etc/.secrets/MONGO_URI
+
+create-db-user: ensure-context
+	@APP_USER=$$(vault kv get --field=MONGODB_APP_USER $(MONGO_SECRET_PATH)) && \
+	 APP_PASS=$$(vault kv get --field=MONGODB_APP_PASSWORD $(MONGO_SECRET_PATH)) && \
+	 ADMIN_USER=$$(vault kv get --field=MONGODB_USER_ADMIN_USER $(MONGO_SECRET_PATH)) && \
+	 ADMIN_PASS=$$(vault kv get --field=MONGODB_USER_ADMIN_PASSWORD $(MONGO_SECRET_PATH)) && \
+	 kubectl exec -n $(NAMESPACE) mongodb-mongos-0 -- \
+	   mongosh --quiet admin -u "$$ADMIN_USER" -p "$$ADMIN_PASS" --eval " \
+	     var db = db.getSiblingDB('agent-skills'); \
+	     var u = db.getUser('$$APP_USER'); \
+	     if (u) { db.updateUser('$$APP_USER', {pwd: '$$APP_PASS'}); print('updated'); } \
+	     else { db.createUser({user: '$$APP_USER', pwd: '$$APP_PASS', roles: [{role: 'readWrite', db: 'agent-skills'}]}); print('created'); } \
+	   "
 
 clean-secrets:
 	rm -rf etc/.secrets/

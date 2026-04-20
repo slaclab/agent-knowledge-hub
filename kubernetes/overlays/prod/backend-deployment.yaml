@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-knowledge-hub-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent-knowledge-hub-backend
+  template:
+    metadata:
+      labels:
+        app: agent-knowledge-hub-backend
+    spec:
+      containers:
+        - name: backend
+          image: slaclab/agent-knowledge-hub-backend:prod
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: agent-knowledge-hub-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

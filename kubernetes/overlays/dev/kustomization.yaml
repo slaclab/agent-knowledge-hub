@@ -4,17 +4,13 @@ kind: Kustomization
 namespace: dev
 
 resources:
-  - ../../base
   - namespace.yaml
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
   - ingress.yaml
-
-images:
-  - name: agent-knowledge-hub-backend
-    newName: slaclab/agent-knowledge-hub-backend
-    newTag: dev
-  - name: agent-knowledge-hub-frontend
-    newName: slaclab/agent-knowledge-hub-frontend
-    newTag: dev
+  - mongodb/mongo.yaml
 
 configMapGenerator:
   - name: backend-config
@@ -32,20 +28,15 @@ secretGenerator:
       - etc/.secrets/MONGO_URI
     options:
       disableNameSuffixHash: true
-
-patches:
-  - patch: |-
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: agent-knowledge-hub-backend
-      spec:
-        template:
-          spec:
-            containers:
-              - name: backend
-                envFrom:
-                  - configMapRef:
-                      name: backend-config
-                  - secretRef:
-                      name: agent-knowledge-hub-secrets
+  - name: mongodb-secrets
+    files:
+      - etc/.secrets/MONGODB_BACKUP_USER
+      - etc/.secrets/MONGODB_BACKUP_PASSWORD
+      - etc/.secrets/MONGODB_CLUSTER_ADMIN_USER
+      - etc/.secrets/MONGODB_CLUSTER_ADMIN_PASSWORD
+      - etc/.secrets/MONGODB_CLUSTER_MONITOR_USER
+      - etc/.secrets/MONGODB_CLUSTER_MONITOR_PASSWORD
+      - etc/.secrets/MONGODB_USER_ADMIN_USER
+      - etc/.secrets/MONGODB_USER_ADMIN_PASSWORD
+    options:
+      disableNameSuffixHash: true

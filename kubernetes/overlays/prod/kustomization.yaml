@@ -4,58 +4,25 @@ kind: Kustomization
 namespace: agent-knowledge-hub
 
 resources:
-  - ../../base
   - namespace.yaml
-
-images:
-  - name: agent-knowledge-hub-backend
-    newName: slaclab/agent-knowledge-hub-backend
-    newTag: prod
-  - name: agent-knowledge-hub-frontend
-    newName: slaclab/agent-knowledge-hub-frontend
-    newTag: prod
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
 
 configMapGenerator:
   - name: backend-config
     literals:
-      - MONGO_URI=mongodb://mongodb:27017/agent-skills
       - GITHUB_API_URL=https://api.github.com
       - AUTH_MODE=vouchproxy
     options:
       disableNameSuffixHash: true
 
-patches:
-  - patch: |-
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: agent-knowledge-hub-backend
-      spec:
-        replicas: 2
-        template:
-          spec:
-            containers:
-              - name: backend
-                envFrom:
-                  - configMapRef:
-                      name: backend-config
-                  - secretRef:
-                      name: agent-knowledge-hub-secrets
-  - patch: |-
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: agent-knowledge-hub-frontend
-      spec:
-        replicas: 2
-        template:
-          spec:
-            containers:
-              - name: frontend
-                resources:
-                  requests:
-                    cpu: "200m"
-                    memory: "512Mi"
-                  limits:
-                    cpu: "1000m"
-                    memory: "1Gi"
+secretGenerator:
+  - name: agent-knowledge-hub-secrets
+    files:
+      - etc/.secrets/MONGO_URI
+      - etc/.secrets/GITHUB_TOKEN
+      - etc/.secrets/ADMIN_USERS
+    options:
+      disableNameSuffixHash: true

@@ -24,12 +24,12 @@ destroy: ensure-context
 	kubectl delete -k .
 
 docker-build:
-	$(MAKE) -C ../../backend  docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
-	$(MAKE) -C ../../frontend docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../backend  docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../frontend docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
 
 docker-push:
-	$(MAKE) -C ../../backend  docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
-	$(MAKE) -C ../../frontend docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../backend  docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../frontend docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
 
 ensure-context:
 	@kubectl config current-context | grep -q "$(CONTEXT)" || \

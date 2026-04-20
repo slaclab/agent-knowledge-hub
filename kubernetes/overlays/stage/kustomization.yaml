@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agent-knowledge-hub-stage
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+images:
+  - name: agent-knowledge-hub-backend
+    newTag: stage
+  - name: agent-knowledge-hub-frontend
+    newTag: stage
+
+configMapGenerator:
+  - name: backend-config
+    literals:
+      - MONGO_URI=mongodb://mongodb:27017/agent-skills
+      - GITHUB_API_URL=https://api.github.com
+      - AUTH_MODE=vouchproxy
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: agent-knowledge-hub-backend
+      spec:
+        template:
+          spec:
+            containers:
+              - name: backend
+                envFrom:
+                  - configMapRef:
+                      name: backend-config
+                  - secretRef:
+                      name: agent-knowledge-hub-secrets

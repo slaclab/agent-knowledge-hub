@@ -1,8 +1,8 @@
 NODE_MODULES := node_modules
 NEXT         := $(NODE_MODULES)/.bin/next
 
-REGISTRY     ?=
-IMAGE        ?= $(if $(REGISTRY),$(REGISTRY)/agent-knowledge-hub-frontend,agent-knowledge-hub-frontend)
+REGISTRY     ?= docker.io/slaclab
+IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-frontend
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

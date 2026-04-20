@@ -1,9 +1,12 @@
 CONTEXT      = agent-knowledge-hub-stage
 NAMESPACE    = agent-knowledge-hub-stage
 KUBECONFIG  ?= $(HOME)/.kube/contexts/s3df/stage
-SECRET_PATH ?= secret/tid/agent-knowledge-hub-stage
+REGISTRY     ?= docker.io/slaclab
+TAG          ?= stage
+CONTAINER_RT ?= sudo podman
+SECRET_PATH  ?= secret/tid/agent-knowledge-hub-stage
 
-.PHONY: apply diff destroy rollout-restart dump secrets clean-secrets
+.PHONY: apply diff destroy rollout-restart dump secrets clean-secrets docker-build docker-push
 
 apply: ensure-context secrets
 	kubectl apply -k .
@@ -17,6 +20,7 @@ dump:
 
 rollout-restart: ensure-context
 	kubectl rollout restart deployment/agent-knowledge-hub-backend -n $(NAMESPACE)
+	kubectl rollout restart deployment/agent-knowledge-hub-frontend -n $(NAMESPACE)
 
 destroy: ensure-context
 	kubectl delete -k .
@@ -33,6 +37,14 @@ secrets:
 
 clean-secrets:
 	rm -rf etc/.secrets/
+
+docker-build:
+	$(MAKE) -C ../../../backend  docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../frontend docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+
+docker-push:
+	$(MAKE) -C ../../../backend  docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../../frontend docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
 
 ensure-context:
 	@kubectl config current-context | grep -q "$(CONTEXT)" || \

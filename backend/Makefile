@@ -4,8 +4,8 @@ PIP      := $(VENV)/bin/pip
 UVICORN  := $(VENV)/bin/uvicorn
 PYTEST   := $(VENV)/bin/pytest
 
-REGISTRY     ?=
-IMAGE        ?= $(if $(REGISTRY),$(REGISTRY)/agent-knowledge-hub-backend,agent-knowledge-hub-backend)
+REGISTRY     ?= docker.io/slaclab
+IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

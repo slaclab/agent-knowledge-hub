@@ -15,6 +15,7 @@ spec:
       containers:
         - name: frontend
           image: agent-knowledge-hub-frontend:dev
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
           env:

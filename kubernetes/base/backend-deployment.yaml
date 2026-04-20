@@ -15,6 +15,7 @@ spec:
       containers:
         - name: backend
           image: agent-knowledge-hub-backend:dev
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:

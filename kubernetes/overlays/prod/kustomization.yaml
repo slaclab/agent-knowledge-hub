@@ -9,8 +9,10 @@ resources:
 
 images:
   - name: agent-knowledge-hub-backend
+    newName: slaclab/agent-knowledge-hub-backend
     newTag: prod
   - name: agent-knowledge-hub-frontend
+    newName: slaclab/agent-knowledge-hub-frontend
     newTag: prod
 
 configMapGenerator:

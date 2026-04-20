@@ -18,10 +18,33 @@ images:
 configMapGenerator:
   - name: backend-config
     literals:
-      - MONGO_URI=mongodb://mongodb-rs0.dev.svc.cluster.local/agent-skills?replicaSet=rs0
       - GITHUB_API_URL=https://api.github.com
       - AUTH_MODE=dev
       - DEV_USER=devuser
       - ADMIN_USERS=devuser
     options:
       disableNameSuffixHash: true
+
+secretGenerator:
+  - name: agent-knowledge-hub-secrets
+    files:
+      - etc/.secrets/MONGO_URI
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: agent-knowledge-hub-backend
+      spec:
+        template:
+          spec:
+            containers:
+              - name: backend
+                envFrom:
+                  - configMapRef:
+                      name: backend-config
+                  - secretRef:
+                      name: agent-knowledge-hub-secrets

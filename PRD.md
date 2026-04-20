@@ -22,6 +22,7 @@
 - Automated skill testing or CI integration
 - Billing or monetization
 - Mobile-native apps
+- **OpenCode support** — v1 targets Claude Code plugins/skills only. OpenCode custom agent install support is planned for v2. The data model and API are designed to accommodate OpenCode with minimal backend changes (see Section 15).
 - **MCP server catalog** — MCP servers are infrastructure, centrally controlled at `mcp.sdf.slac.stanford.edu` (SLAC Agent Gateway) with auth/authz managed by the platform team. Users never configure MCP directly; skills consume gateway knowledge transparently. Skills that depend on gateway knowledge show a "Uses SLAC Agent Gateway" badge on their detail page — no further MCP surface in the catalog UI.
 
 **Constraints:**
@@ -105,7 +106,7 @@
 52. As a Claude Code user, I want to type `/agent-knowledge-hub remove <slug>` to uninstall a skill so that I can keep my environment clean.
 53. As a Claude Code user, I want to type `/agent-knowledge-hub rate <slug> <1-5>` to submit a rating directly from my agent session so that I don't have to open a browser to give feedback.
 54. As a Claude Code user, I want `/agent-knowledge-hub` to explain *why* it's recommending each match (e.g. "this skill matches because it provides EPICS Channel Access bindings") so that I can make an informed choice.
-55. As an OpenCode user, I want the same `/agent-knowledge-hub` commands to work in my environment so that I'm not excluded from the catalog ecosystem.
+55. As an OpenCode user, I want the same `/agent-knowledge-hub` commands to work in my environment so that I'm not excluded from the catalog ecosystem. *(v2)*
 56. As an S3DF admin, I want `/agent-knowledge-hub` to be seeded into the global Claude Code skills directory on S3DF so that all users get it without having to install anything manually.
 57. As a skill author, I want to run `/agent-knowledge-hub submit` and be walked through the entire publishing process — creating or selecting a GitHub repo, scaffolding the skill structure, and registering it in the catalog — so I never have to leave my agent session or open a browser.
 
@@ -519,7 +520,6 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 - `agent-knowledge-hub` GitHub repo with skill markdown file
 - `/agent-knowledge-hub` commands: search (LLM-mediated), install, list, update, remove, submit, rate
 - Bootstrap docs: one-time `/plugin marketplace add` + `/plugin install agent-knowledge-hub`
-- OpenCode agent install path (`~/.config/opencode/agents/`) supported alongside Claude Code
 
 ---
 
@@ -786,7 +786,7 @@ make -C kubernetes/overlays/dev rollout-restart
 
 ### Concept
 
-A Claude Code (and OpenCode) skill that lets users discover and install skills from the catalog using natural language — directly inside their agent session, without opening a browser.
+A Claude Code skill that lets users discover and install skills from the catalog using natural language — directly inside their agent session, without opening a browser.
 
 Inspired by `agentskill.sh/install`, but SLAC-specific and smarter: instead of a fixed install command, the user describes their problem and the skill finds and installs what they need.
 
@@ -802,7 +802,7 @@ Inspired by `agentskill.sh/install`, but SLAC-specific and smarter: instead of a
 $agent-knowledge-hub search --label hdf5
 ```
 
-The `$` prefix makes it work identically in OpenCode; `/` prefix is Claude Code.
+The `/` prefix is for Claude Code. OpenCode support is v2.
 
 ### How it works
 
@@ -826,7 +826,7 @@ User types: /agent-knowledge-hub <natural language query>
                 ▼
         Skill installs into target runtime:
           Claude Code → clone/copy to ~/.claude/skills/<slug>/
-          OpenCode    → clone/copy to ~/.opencode/skills/<slug>/   (TBC — see OQ-4)
+          (OpenCode support planned for v2)
 ```
 
 ### Skills vs plugins (terminology)
@@ -836,28 +836,24 @@ In Claude Code, **plugin** and **skill** refer to related but distinct things:
 - A **skill** is a single markdown file (`SKILL.md`) with YAML frontmatter that defines a slash command and its behaviour.
 - A **plugin** is a packaged directory containing a `plugin.json` manifest plus one or more skill markdown files. Plugins are installed via `/plugin install` and namespace their skills as `/plugin-name:skill-name`.
 
-In OpenCode, the equivalent of a skill is a **custom agent** — a markdown file with YAML frontmatter placed in `~/.config/opencode/agents/`.
+v1 of the catalog targets Claude Code plugins/skills only.
 
-**The body content of a skill is identical across runtimes.** The prose instructions, examples, and tool guidance are the same markdown. Only the YAML frontmatter differs: Claude Code uses fields like `allowed-tools`, `user-invocable`, and `context`; OpenCode uses `temperature`, `permissions`, `mode`, and `max_steps`. A skill repo can therefore ship both runtimes by providing two files with the same body but runtime-appropriate headers — no duplication of the actual knowledge content.
+**v2 note — OpenCode compatibility:** In OpenCode, the equivalent is a **custom agent** — a markdown file with YAML frontmatter placed in `~/.config/opencode/agents/`. The body content of a skill is identical across runtimes; only the YAML frontmatter differs (Claude Code uses `allowed-tools`, `user-invocable`, `context`; OpenCode uses `temperature`, `permissions`, `mode`, `max_steps`). A skill repo can ship both runtimes by providing two files with the same prose body but runtime-appropriate headers. The catalog data model already accommodates this via `compatible_platforms` tags — no backend schema changes will be needed when v2 adds OpenCode install support.
 
-The catalog does not need a separate entry type for this distinction. `compatible_platforms` tags (`claude-code`, `opencode`) on the catalog entry are sufficient. The `/agent-knowledge-hub` installer infers which file to copy and where to place it based on the runtime it is running in.
-
-### Install targets
-
-> **Resolved OQ-4:** OpenCode uses *custom agents* (markdown files at `~/.config/opencode/agents/`) rather than skills. The frontmatter schema differs from Claude Code but the body content is the same.
+### Install targets (v1)
 
 | Runtime | Install path | Mechanism |
 |---|---|---|
 | Claude Code | `~/.claude/skills/<slug>/` | `git clone <repo_url>` into skills dir |
-| OpenCode | `~/.config/opencode/agents/<slug>.md` | Copy the OpenCode-compatible markdown file from repo |
+| OpenCode | *(v2)* `~/.config/opencode/agents/<slug>.md` | Copy OpenCode-compatible markdown file from repo |
 
-The `/agent-knowledge-hub` installer detects which runtime is calling it and installs into the appropriate target. For `entry_type: marketplace_ref`, no file install occurs — the browser is opened to the reference URL instead.
+The `/agent-knowledge-hub` installer clones the repo into `~/.claude/skills/<slug>/`. For `entry_type: marketplace_ref`, no file install occurs — the browser is opened to the reference URL instead.
 
 ### Skill file structure (what gets installed)
 
-The catalog entry's `repo_url` points to a GitHub repo. The install step clones or copies it to the appropriate skills directory. No execution happens at install time — the agent runtime picks it up on next invocation.
+The catalog entry's `repo_url` points to a GitHub repo containing a Claude Code plugin (a `plugin.json` manifest plus one or more `SKILL.md` files). The install step clones it to `~/.claude/skills/<slug>/`. No execution happens at install time — Claude Code picks it up on next invocation.
 
-A well-structured skill repo ships both a Claude Code skill file and an OpenCode agent file with the same prose body but runtime-appropriate YAML frontmatter. The `/agent-knowledge-hub` skill detects which file is present and warns the user if support for their runtime is missing.
+The `/agent-knowledge-hub` skill validates that the repo contains a recognisable plugin structure before installing and warns the user if it does not.
 
 ### Claude-mediated matching
 
@@ -921,7 +917,7 @@ The skill template repo (configurable via `SiteSettings.skill_template_repo_url`
 
 ### Open Questions
 
-> **Resolved OQ-4:** OpenCode uses custom agents (`~/.config/opencode/agents/<name>.md`) and MCP servers (`opencode.json`). No "skills" concept. Install paths and mechanisms documented in Section 15.
+> **OQ-4 — Resolved:** v1 targets Claude Code only. OpenCode custom agent install (`~/.config/opencode/agents/`) is v2. The `compatible_platforms` tag on catalog entries is the only schema hook needed — no backend changes required when v2 ships.
 
 > **OQ-5 — Resolved:** Bootstrap uses Claude Code's native `/plugin marketplace` protocol. The catalog exposes a `marketplace.json` manifest; users register it once and install from it directly. OOD integration (pre-seeding for all S3DF users) is a follow-on task. See Section 15 for full bootstrap flow.
 
@@ -948,7 +944,7 @@ Users register the SLAC marketplace once via Claude Code's native `/plugin` prot
 /plugin install epics-query@agent-knowledge-hub
 ```
 
-**OOD integration (follow-on):** Pre-seed the `/plugin marketplace add` call into the S3DF-managed Claude Code / OpenCode container so all users have the SLAC marketplace registered automatically on first launch — removing even the one-time step.
+**OOD integration (follow-on):** Pre-seed the `/plugin marketplace add` call into the S3DF-managed Claude Code container so all users have the SLAC marketplace registered automatically on first launch — removing even the one-time step.
 
 ### `marketplace.json` manifest
 

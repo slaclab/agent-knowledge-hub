@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Nav } from "@/components/nav";
@@ -14,7 +15,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen flex flex-col">
         <AuthProvider>
-          <Nav />
+          <Suspense fallback={<header className="border-b h-14" />}>
+            <Nav />
+          </Suspense>
           <main className="flex-1 container py-8">{children}</main>
           <Footer />
         </AuthProvider>

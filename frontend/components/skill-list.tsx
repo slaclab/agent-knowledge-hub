@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, Suspense } from "react";
 import Link from "next/link";
 import { SkillCard } from "./skill-card";
 import { SortSelect } from "./sort-select";
@@ -60,7 +60,9 @@ export function SkillList({ data, sort, q, labels }: SkillListProps) {
               {l} ×
             </button>
           ))}
-          <SortSelect current={sort} />
+          <Suspense fallback={null}>
+            <SortSelect current={sort} />
+          </Suspense>
         </div>
       </div>
 

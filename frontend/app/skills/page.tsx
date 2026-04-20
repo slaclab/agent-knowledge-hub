@@ -2,6 +2,7 @@ import { listSkills } from "@/lib/api";
 import { SkillList } from "@/components/skill-list";
 import type { SortOption } from "@/types/skill";
 import Link from "next/link";
+import { Suspense } from "react";
 
 interface PageProps {
   searchParams: {
@@ -44,7 +45,9 @@ export default async function SkillsPage({ searchParams }: PageProps) {
           Submit a Skill
         </Link>
       </div>
-      <SkillList data={data} sort={sort} q={q} labels={labels} />
+      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
+        <SkillList data={data} sort={sort} q={q} labels={labels} />
+      </Suspense>
     </div>
   );
 }

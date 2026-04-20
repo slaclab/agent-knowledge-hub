@@ -11,14 +11,23 @@ spec:
     users: mongodb-secrets
   replsets:
     - name: rs0
-      size: 1
+      size: 3
       volumeSpec:
         persistentVolumeClaim:
           resources:
             requests:
               storage: 10Gi
   sharding:
-    enabled: false
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    mongos:
+      size: 3
   backup:
     enabled: false
     image: percona/percona-backup-mongodb:2.9.1

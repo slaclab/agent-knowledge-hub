@@ -18,7 +18,7 @@ secrets:
 	mkdir -p etc/.secrets
 	@MONGO_USER=$$(vault kv get --field=MONGODB_APP_USER $(MONGO_SECRET_PATH)) && \
 	 MONGO_PASS=$$(vault kv get --field=MONGODB_APP_PASSWORD $(MONGO_SECRET_PATH)) && \
-	 echo -n "mongodb://$${MONGO_USER}:$${MONGO_PASS}@mongodb-rs0.$(NAMESPACE).svc.cluster.local/agent-skills?replicaSet=rs0&authSource=agent-skills" \
+	 echo -n "mongodb://$${MONGO_USER}:$${MONGO_PASS}@mongodb-mongos.$(NAMESPACE).svc.cluster.local/agent-skills?authSource=agent-skills" \
 	   > etc/.secrets/MONGO_URI
 
 clean-secrets:

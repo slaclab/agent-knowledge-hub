@@ -1,8 +1,9 @@
 CONTEXT      = agent-knowledge-hub-dev
 NAMESPACE    = agent-knowledge-hub-dev
 KUBECONFIG  ?= $(HOME)/.kube/contexts/s3df/dev
-REGISTRY    ?= localhost:5000
-TAG         ?= dev
+REGISTRY     ?= localhost:5000
+TAG          ?= dev
+CONTAINER_RT ?= sudo podman
 
 .PHONY: apply diff destroy rollout-restart dump docker-build docker-push
 
@@ -23,12 +24,12 @@ destroy: ensure-context
 	kubectl delete -k .
 
 docker-build:
-	$(MAKE) -C ../../backend  docker-build REGISTRY=$(REGISTRY) TAG=$(TAG)
-	$(MAKE) -C ../../frontend docker-build REGISTRY=$(REGISTRY) TAG=$(TAG)
+	$(MAKE) -C ../../backend  docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../frontend docker-build REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
 
 docker-push:
-	$(MAKE) -C ../../backend  docker-push REGISTRY=$(REGISTRY) TAG=$(TAG)
-	$(MAKE) -C ../../frontend docker-push REGISTRY=$(REGISTRY) TAG=$(TAG)
+	$(MAKE) -C ../../backend  docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
+	$(MAKE) -C ../../frontend docker-push REGISTRY=$(REGISTRY) TAG=$(TAG) CONTAINER_RT="$(CONTAINER_RT)"
 
 ensure-context:
 	@kubectl config current-context | grep -q "$(CONTEXT)" || \

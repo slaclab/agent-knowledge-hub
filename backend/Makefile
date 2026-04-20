@@ -4,9 +4,10 @@ PIP      := $(VENV)/bin/pip
 UVICORN  := $(VENV)/bin/uvicorn
 PYTEST   := $(VENV)/bin/pytest
 
-REGISTRY ?= localhost:5000
-IMAGE    ?= $(REGISTRY)/agent-knowledge-hub-backend
-TAG      ?= dev
+REGISTRY     ?= localhost:5000
+IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
+TAG          ?= dev
+CONTAINER_RT ?= sudo podman
 
 .PHONY: dev test run clean docker-build docker-push
 
@@ -26,10 +27,10 @@ run: $(VENV)/bin/activate
 	$(UVICORN) app.main:app --reload
 
 docker-build:
-	docker build -t $(IMAGE):$(TAG) .
+	$(CONTAINER_RT) build -t $(IMAGE):$(TAG) .
 
 docker-push: docker-build
-	docker push $(IMAGE):$(TAG)
+	$(CONTAINER_RT) push $(IMAGE):$(TAG)
 
 clean:
 	rm -rf $(VENV) __pycache__ app/__pycache__ .pytest_cache

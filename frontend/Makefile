@@ -1,9 +1,10 @@
 NODE_MODULES := node_modules
 NEXT         := $(NODE_MODULES)/.bin/next
 
-REGISTRY ?= localhost:5000
-IMAGE    ?= $(REGISTRY)/agent-knowledge-hub-frontend
-TAG      ?= dev
+REGISTRY     ?= localhost:5000
+IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-frontend
+TAG          ?= dev
+CONTAINER_RT ?= sudo podman
 
 .PHONY: dev build start lint clean docker-build docker-push
 
@@ -25,10 +26,10 @@ lint: $(NODE_MODULES)
 	$(NEXT) lint
 
 docker-build:
-	docker build -t $(IMAGE):$(TAG) .
+	$(CONTAINER_RT) build -t $(IMAGE):$(TAG) .
 
 docker-push: docker-build
-	docker push $(IMAGE):$(TAG)
+	$(CONTAINER_RT) push $(IMAGE):$(TAG)
 
 clean:
 	rm -rf $(NODE_MODULES) .next

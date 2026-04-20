@@ -1,0 +1,50 @@
+import { listSkills } from "@/lib/api";
+import { SkillList } from "@/components/skill-list";
+import type { SortOption } from "@/types/skill";
+import Link from "next/link";
+
+interface PageProps {
+  searchParams: {
+    q?: string;
+    labels?: string;
+    sort?: string;
+    page?: string;
+  };
+}
+
+export default async function SkillsPage({ searchParams }: PageProps) {
+  const q = searchParams.q ?? "";
+  const labels = searchParams.labels ? searchParams.labels.split(",").filter(Boolean) : [];
+  const sort = (searchParams.sort as SortOption) ?? "newest";
+  const page = Number(searchParams.page ?? 1);
+
+  const data = await listSkills({ q, labels, sort, page, page_size: 20, server: true });
+
+  if (!data) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <p>Failed to load skills. The backend may be unavailable.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Skill Catalog</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Discover agent skills and plugins built by the SLAC community.
+          </p>
+        </div>
+        <Link
+          href="/skills/submit"
+          className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Submit a Skill
+        </Link>
+      </div>
+      <SkillList data={data} sort={sort} q={q} labels={labels} />
+    </div>
+  );
+}

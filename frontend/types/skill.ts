@@ -1,0 +1,87 @@
+export type EntryType = "skill" | "marketplace_ref";
+export type SkillStatus = "active" | "deactivated";
+
+export interface Skill {
+  id: string;
+  slug: string;
+  name: string;
+  repo_url: string;
+  entry_type: EntryType;
+  status: SkillStatus;
+  deactivation_reason: string | null;
+  superseded_by_slug: string | null;
+  description: string | null;
+  readme_html: string | null;
+  compatible_platforms: string[];
+  license: string | null;
+  version: string | null;
+  github_stars: number | null;
+  last_commit_at: string | null;
+  submitter_id: string;
+  submitted_at: string;
+  updated_at: string;
+  avg_rating: number;
+  rating_count: number;
+  flag_count: number;
+  uses_agent_gateway: boolean;
+}
+
+export interface PaginatedSkills {
+  items: Skill[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface SkillRevision {
+  id: string;
+  skill_id: string;
+  revision_number: number;
+  snapshot: Record<string, unknown>;
+  actor_id: string;
+  action: "create" | "edit" | "refetch" | "deactivate" | "reactivate";
+  changelog_note: string | null;
+  created_at: string;
+}
+
+export interface SkillCreate {
+  repo_url: string;
+  name?: string;
+  description?: string;
+  compatible_platforms?: string[];
+  version?: string;
+  license?: string;
+}
+
+export interface SkillUpdate {
+  name?: string;
+  description?: string;
+  compatible_platforms?: string[];
+  version?: string;
+  license?: string;
+  changelog_note?: string;
+}
+
+export interface User {
+  user_id: string;
+  is_admin: boolean;
+}
+
+export interface GitHubPreview {
+  name: string;
+  description: string | null;
+  stars: number;
+  license: string | null;
+  last_commit_at: string | null;
+}
+
+export type SortOption = "newest" | "highest_rated" | "most_rated" | "most_stars";
+
+export interface SkillListParams {
+  q?: string;
+  labels?: string[];
+  sort?: SortOption;
+  page?: number;
+  page_size?: number;
+}

@@ -1,14 +1,17 @@
-CONTEXT    = agent-knowledge-hub-dev
-NAMESPACE  = agent-knowledge-hub-dev
-KUBECONFIG ?= $(HOME)/.kube/contexts/s3df/dev
+CONTEXT      = agent-knowledge-hub-dev
+NAMESPACE    = agent-knowledge-hub-dev
+KUBECONFIG  ?= $(HOME)/.kube/contexts/s3df/dev
 
-.PHONY: apply diff destroy rollout-restart
+.PHONY: apply diff destroy rollout-restart dump
 
 apply: ensure-context
 	kubectl apply -k .
 
 diff: ensure-context
 	kubectl diff -k .
+
+dump:
+	kubectl kustomize . | yh
 
 rollout-restart: ensure-context
 	kubectl rollout restart deployment/agent-knowledge-hub-backend -n $(NAMESPACE)

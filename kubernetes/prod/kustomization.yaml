@@ -6,6 +6,8 @@ namespace: agent-knowledge-hub
 resources:
   - backend-deployment.yaml
   - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
   - mongodb-statefulset.yaml
   - mongodb-service.yaml
   - mongodb-pvc.yaml

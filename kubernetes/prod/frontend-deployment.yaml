@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-knowledge-hub-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent-knowledge-hub-frontend
+  template:
+    metadata:
+      labels:
+        app: agent-knowledge-hub-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: agent-knowledge-hub-frontend:prod
+          ports:
+            - containerPort: 3000
+          env:
+            - name: BACKEND_URL
+              value: "http://agent-knowledge-hub-backend:8000"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

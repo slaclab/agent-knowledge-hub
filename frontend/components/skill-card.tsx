@@ -1,0 +1,76 @@
+import { cn } from "@/lib/utils";
+import type { Skill } from "@/types/skill";
+import Link from "next/link";
+import { Star, GitFork, AlertTriangle, ArrowRight } from "lucide-react";
+import { PlatformBadges } from "./platform-badges";
+import { StarRating } from "./star-rating";
+import { FlagIndicator } from "./flag-indicator";
+
+interface SkillCardProps {
+  skill: Skill;
+}
+
+export function SkillCard({ skill }: SkillCardProps) {
+  const isDeactivated = skill.status === "deactivated";
+  const isSuperseded = !!skill.superseded_by_slug;
+
+  return (
+    <Link
+      href={`/skills/${skill.slug}`}
+      className={cn(
+        "block rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow p-5",
+        isDeactivated && "opacity-60",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-base leading-tight truncate">{skill.name}</h3>
+            {skill.entry_type === "marketplace_ref" && (
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
+                ref
+              </span>
+            )}
+            {isDeactivated && (
+              <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
+                deactivated
+              </span>
+            )}
+            {isSuperseded && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
+                <ArrowRight className="h-3 w-3" />
+                superseded
+              </span>
+            )}
+            <FlagIndicator count={skill.flag_count} />
+          </div>
+          {skill.description && (
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{skill.description}</p>
+          )}
+        </div>
+        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+          {skill.github_stars !== null && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Star className="h-3 w-3" />
+              {skill.github_stars.toLocaleString()}
+            </span>
+          )}
+          <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
+        </div>
+      </div>
+      {skill.compatible_platforms.length > 0 && (
+        <div className="mt-3">
+          <PlatformBadges platforms={skill.compatible_platforms} />
+        </div>
+      )}
+      {skill.uses_agent_gateway && (
+        <div className="mt-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
+            <GitFork className="h-3 w-3" />
+            Uses SLAC Agent Gateway
+          </span>
+        </div>
+      )}
+    </Link>
+  );
+}

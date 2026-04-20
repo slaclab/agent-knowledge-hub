@@ -21,12 +21,8 @@
 - Hosting or executing skills directly
 - Automated skill testing or CI integration
 - Billing or monetization
-- Semantic/vector search (planned for v2)
 - Mobile-native apps
-- CLI client (`skills search`, `skills install`) — implemented as `/slac-skills` skill in v1, see Section 15
 - **MCP server catalog** — MCP servers are infrastructure, centrally controlled at `mcp.sdf.slac.stanford.edu` (SLAC Agent Gateway) with auth/authz managed by the platform team. Users never configure MCP directly; skills consume gateway knowledge transparently. Skills that depend on gateway knowledge show a "Uses SLAC Agent Gateway" badge on their detail page — no further MCP surface in the catalog UI.
-
-> **Open Question OQ-3:** Should a v2 include a CLI command (e.g. `skills search <query>` or `skills install <slug>`) so scientists can discover and install skills without leaving the terminal? This would significantly improve workflow fit for Claude Code users.
 
 **Constraints:**
 - Auth via SLAC VouchProxy / JWT (no separate user account system)
@@ -39,15 +35,15 @@
 ## 2. User Stories
 
 ### Browsing & Discovery
-1. As a developer, I want to browse a list of all available agent skills so that I can discover knowledge and capabilities that may help my work.
-2. As a developer, I want to filter skills by label (e.g. "data-analysis", "llm", "web-scraping") so that I can narrow results to my domain.
-3. As a developer, I want to search skills by name and description so that I can find something specific quickly.
-4. As a developer, I want to sort skills by rating, recency, or GitHub stars so that I can prioritize high-quality options.
-5. As a developer, I want to view a skill's detail page (description, repo link, labels, rating, version, license) so that I can decide whether to use it.
-6. As a developer, I want to see a skill's README (fetched from GitHub at submission time) on the detail page so that I don't have to leave the site to evaluate it.
-7. As a developer, I want to see which AI platforms a skill is compatible with (e.g. Claude, OpenAI, LangChain) so that I know if it works in my stack.
-8. As a developer, I want to click through to the source GitHub repo directly so that I can inspect the code or file an issue.
-9. As a developer, I want to see other marketplaces (LobeHub, AgentSkill.sh) listed as catalog entries so that the site is a meta-index, not just a walled garden.
+1. As a consumer, I want to browse a list of all available agent skills so that I can discover knowledge and capabilities that may help my work.
+2. As a consumer, I want to filter skills by label (e.g. "data-analysis", "llm", "web-scraping") so that I can narrow results to my domain.
+3. As a consumer, I want to search skills by name and description so that I can find something specific quickly.
+4. As a consumer, I want to sort skills by rating, recency, or GitHub stars so that I can prioritize high-quality options.
+5. As a consumer, I want to view a skill's detail page (description, repo link, labels, rating, version, license) so that I can decide whether to use it.
+6. As a consumer, I want to see a skill's README (fetched from GitHub at submission time) on the detail page so that I don't have to leave the site to evaluate it.
+7. As a consumer, I want to see which AI platforms a skill is compatible with (e.g. Claude, OpenAI, LangChain) so that I know if it works in my stack.
+8. As a consumer, I want to click through to the source GitHub repo directly so that I can inspect the code or file an issue.
+9. As a consumer, I want to use semantic search to find skills by describing my problem in plain English so that I can discover relevant skills even when I don't know the right keywords.
 
 ### Submitting Skills
 10. As a skill author, I want to submit a new skill by providing a GitHub repo URL so that it appears in the catalog.
@@ -60,17 +56,17 @@
 17. As a skill author, I want to submit a "marketplace reference" (link to LobeHub, agentskill.sh, etc.) as a top-level catalog entry so that the site surfaces other discovery resources.
 
 ### Rating
-18. As a user, I want to give a skill a 1–5 star rating so that I can express my experience with it.
-19. As a user, I want to update my rating if my opinion changes so that my feedback stays accurate.
-20. As a user, I want to see the aggregate star rating and total vote count on every skill card so that I can quickly gauge community opinion.
-21. As a user, I should only be able to rate once per skill (one rating per SLAC identity) so that ratings are not gamed.
-22. As a user, I want to see my own rating highlighted on a skill I've already rated so that I know I've already voted.
+18. As a consumer, I want to give a skill a 1–5 star rating so that I can express my experience with it.
+19. As a consumer, I want to update my rating if my opinion changes so that my feedback stays accurate.
+20. As a consumer, I want to see the aggregate star rating and total vote count on every skill card so that I can quickly gauge community opinion.
+21. As a consumer, I should only be able to rate once per skill (one rating per SLAC identity) so that ratings are not gamed.
+22. As a consumer, I want to see my own rating highlighted on a skill I've already rated so that I know I've already voted.
 
 ### Labeling
-23. As a user, I want to add a free-form label to any skill so that I can help others find it through better categorization.
-24. As a user, I want to see all labels applied to a skill on its detail page so that I understand how the community categorizes it.
-25. As a user, I want to click a label and see all skills sharing that label so that I can explore a topic.
-26. As a user, I want to remove a label I personally applied to a skill so that I can correct a mistake.
+23. As a consumer, I want to add a free-form label to any skill so that I can help others find it through better categorization.
+24. As a consumer, I want to see all labels applied to a skill on its detail page so that I understand how the community categorizes it.
+25. As a consumer, I want to click a label and see all skills sharing that label so that I can explore a topic.
+26. As a consumer, I want to remove a label I personally applied to a skill so that I can correct a mistake.
 27. As an admin, I want to rename a label globally (e.g. "ml" → "machine-learning") and have all affected skills automatically updated so that the taxonomy stays clean.
 28. As an admin, I want to merge two labels into one (e.g. "llms" + "llm" → "llm") so that duplicates are consolidated.
 29. As an admin, I want to delete a label and remove it from all skills so that stale or inappropriate labels are removed.
@@ -80,22 +76,38 @@
 31. As an admin, I want to take down any skill listing so that I can remove inappropriate or broken submissions.
 32. As an admin, I want to see a list of all submissions with submitter identity and timestamp so that I have an audit trail.
 33. As an admin, I want to impersonate a skill entry's owner to make corrections so that broken entries can be fixed without contacting the author.
+34. As an admin, I want to mark a skill as disabled/deactivated so that it no longer appears in browsing or search results but its data is preserved.
+35. As an admin, I want to see all flagged skills in a moderation queue with the flag reason and reporter identity so that I can review and act on community reports.
+
+### Provenance & Version History
+36. As a consumer, I want to see the full contribution history of a skill — who submitted it, who edited it, and when — so that I can assess its provenance and trustworthiness.
+37. As a consumer, I want to see which version of a skill I am looking at and browse previous versions so that I understand how it has evolved.
+38. As a skill author, I want each edit I make to be recorded with my identity and a timestamp so that the change history is traceable.
+39. As a skill author, I want to attach a changelog note when updating my skill (e.g. "v1.2 — adds support for EPICS 7") so that consumers can understand what changed without reading the full diff.
+40. As a consumer, I want to see a "superseded by" notice on a skill's detail page when a newer or better skill has replaced it, with a direct link to the replacement.
+
+### Flagging & Moderation
+41. As a consumer, I want to flag a skill as inappropriate so that admins are alerted to content that violates community standards.
+42. As a consumer, I want to flag a skill as stale (e.g. unmaintained, broken) so that admins and other consumers are aware the skill may not work.
+43. As a consumer, I want to flag a skill as superseded by another skill, and link to the replacement, so that the community can converge on the best option.
+44. As a consumer, I want to see a visible indicator on a skill card when it has been flagged or deactivated, so that I know to evaluate it with caution.
+45. As a consumer, I want to see why a skill was deactivated (e.g. "superseded", "inappropriate", "broken") so that I understand the context rather than just finding it missing.
 
 ### Guides & Onboarding
-34. As a new user, I want to see a "getting started" page explaining what the catalog is and how to use it so that I'm not confused on first visit.
-35. As a potential contributor, I want a link to a skill creation guide (or template repo) so that I can quickly scaffold a new skill.
+46. As a new consumer, I want to see a "getting started" page explaining what the catalog is and how to use it so that I'm not confused on first visit.
+47. As a potential contributor, I want a link to a skill creation guide (or template repo) so that I can quickly scaffold a new skill.
 
-### Agent-Native Discovery & Install (`/slac-skills`)
-36. As a Claude Code user, I want to type `/slac-skills I need something to query EPICS` and get back a ranked list of matching skills so that I can discover knowledge and capabilities without leaving my agent session.
-37. As a Claude Code user, I want to type `/slac-skills install <slug>` and have the skill cloned into `~/.claude/skills/` automatically so that I don't have to find the repo and copy files manually.
-38. As a Claude Code user, I want to type `/slac-skills list` to see what skills I have installed so that I have a quick inventory.
-39. As a Claude Code user, I want to type `/slac-skills update <slug>` to pull the latest version of an installed skill so that I stay current without manual git operations.
-40. As a Claude Code user, I want to type `/slac-skills remove <slug>` to uninstall a skill so that I can keep my environment clean.
-41. As a Claude Code user, I want to type `/slac-skills rate <slug> <1-5>` to submit a rating directly from my agent session so that I don't have to open a browser to give feedback.
-42. As a Claude Code user, I want `/slac-skills` to explain *why* it's recommending each match (e.g. "this skill matches because it provides EPICS Channel Access bindings") so that I can make an informed choice.
-43. As an OpenCode user, I want the same `/slac-skills` commands to work in my environment so that I'm not excluded from the catalog ecosystem.
-44. As an S3DF admin, I want `/slac-skills` to be seeded into the global Claude Code skills directory on S3DF so that all users get it without having to install anything manually.
-45. As a skill author, I want to run `/slac-skills submit` and be walked through the entire publishing process — creating or selecting a GitHub repo, scaffolding the skill structure, and registering it in the catalog — so I never have to leave my agent session or open a browser.
+### Agent-Native Discovery & Install (`/agent-knowledge-hub`)
+48. As a Claude Code user, I want to type `/agent-knowledge-hub I need something to query EPICS` and get back a ranked list of matching skills so that I can discover knowledge and capabilities without leaving my agent session.
+49. As a Claude Code user, I want to type `/agent-knowledge-hub install <slug>` and have the skill cloned into `~/.claude/skills/` automatically so that I don't have to find the repo and copy files manually.
+50. As a Claude Code user, I want to type `/agent-knowledge-hub list` to see what skills I have installed so that I have a quick inventory.
+51. As a Claude Code user, I want to type `/agent-knowledge-hub update <slug>` to pull the latest version of an installed skill so that I stay current without manual git operations.
+52. As a Claude Code user, I want to type `/agent-knowledge-hub remove <slug>` to uninstall a skill so that I can keep my environment clean.
+53. As a Claude Code user, I want to type `/agent-knowledge-hub rate <slug> <1-5>` to submit a rating directly from my agent session so that I don't have to open a browser to give feedback.
+54. As a Claude Code user, I want `/agent-knowledge-hub` to explain *why* it's recommending each match (e.g. "this skill matches because it provides EPICS Channel Access bindings") so that I can make an informed choice.
+55. As an OpenCode user, I want the same `/agent-knowledge-hub` commands to work in my environment so that I'm not excluded from the catalog ecosystem.
+56. As an S3DF admin, I want `/agent-knowledge-hub` to be seeded into the global Claude Code skills directory on S3DF so that all users get it without having to install anything manually.
+57. As a skill author, I want to run `/agent-knowledge-hub submit` and be walked through the entire publishing process — creating or selecting a GitHub repo, scaffolding the skill structure, and registering it in the catalog — so I never have to leave my agent session or open a browser.
 
 ---
 
@@ -104,7 +116,7 @@
 ### Functional Requirements
 
 **Skill catalog**
-- FR-1: A skill entry stores: `name`, `repo_url` (required); `description`, `readme_html`, `compatible_platforms`, `license`, `version`, `github_stars`, `last_commit_at`, `submitter_id`, `submitted_at`, `entry_type` (skill | marketplace_ref) — all optional.
+- FR-1: A skill entry stores: `name`, `repo_url` (required); `description`, `readme_html`, `compatible_platforms`, `license`, `version`, `github_stars`, `last_commit_at`, `submitter_id`, `submitted_at`, `entry_type` (skill | marketplace_ref), `status` (active | deactivated), `deactivation_reason`, `superseded_by_slug` — all optional except where noted.
 - FR-2: On submission, the system fetches repo metadata from the GitHub API (name, description, default branch README, stars, last commit date, license) and stores a snapshot.
 - FR-3: Skills are publicly browsable without authentication.
 - FR-4: Submission, rating, and labeling require SLAC authentication (identity derived from VouchProxy headers or JWT).
@@ -127,9 +139,11 @@
 
 **Search & filtering**
 - FR-17: Full-text search over `name` and `description` fields (MongoDB text index).
+- FR-17b: Semantic/vector search over skill name, description, and README content using an embeddings index, so consumers can find skills by describing their problem in plain English.
 - FR-18: Filter by one or more labels (AND or OR, configurable).
 - FR-19: Sort by: newest, highest rated, most rated, most GitHub stars.
 - FR-20: Pagination: 20 skills per page, cursor-based.
+- FR-20b: Deactivated skills are excluded from all browse, search, and filter results; they are only visible to admins and to the original submitter on their own profile/edit page.
 
 **Guides**
 - FR-21: A static "How to create a skill" guide page is linked from the submission form and the nav. The guide must include: (a) a minimal working skill repo structure, (b) a link to the template repo, (c) a step-by-step walkthrough of submitting to the catalog, (d) a "does it work?" verification checklist.
@@ -140,6 +154,24 @@
 - FR-26: Compatible platforms field must use a predefined suggestion list (typeahead, not free-form) with canonical names: `claude-code`, `openai`, `langchain`, `crewai`, `autogen`, `mcp`, `other` — to prevent fragmentation. Users may still type custom values.
 - FR-27: The site must include a "Troubleshooting" section (or FAQ) accessible from the nav or footer, covering at minimum: (a) "My submission failed — GitHub fetch error", (b) "I can browse but can't rate or label — auth issue", (c) "My skill shows stale information — how to re-fetch", (d) "Who do I contact if something is broken?"
 - FR-28: A skill entry may set `uses_agent_gateway: true`. When set, the skill's detail page and card display a "Uses SLAC Agent Gateway" badge. No further MCP configuration is shown — the badge is purely informational, linking to the gateway docs at `mcp.sdf.slac.stanford.edu`.
+
+**Provenance & version history**
+- FR-29: Every write to a skill entry (create, edit, metadata re-fetch) is recorded as an immutable `SkillRevision` document, capturing the full state of the entry, the actor's identity, a timestamp, and an optional changelog note.
+- FR-30: A skill's detail page displays a revision history timeline: who changed it, when, and the changelog note (if provided).
+- FR-31: When submitting an edit, the author may optionally supply a short changelog note (max 280 chars) describing what changed.
+- FR-32: The `version` field is editable by the skill author; each change is captured in the revision history.
+- FR-33: A skill entry may set `superseded_by_slug` pointing to another skill. When set, the detail page and card display a "Superseded by <name>" notice with a link to the replacement skill.
+
+**Flagging & moderation**
+- FR-34: Any authenticated consumer may submit a flag on a skill with a reason drawn from a fixed enum: `inappropriate`, `stale`, `superseded`, `broken`, `other` — plus an optional free-text note (max 500 chars).
+- FR-35: A consumer may flag a skill as superseded and supply the slug of the replacement skill; if the replacement exists, it is linked in the flag record.
+- FR-36: A consumer may not submit more than one active flag per skill (one flag per SLAC identity per skill; the consumer may update or retract their flag).
+- FR-37: All active flags for a skill are visible in aggregate to admins (count + reasons) and surfaced in a moderation queue at `GET /api/admin/flags`.
+- FR-38: A skill card and detail page display a subtle "flagged" indicator when the skill has one or more unresolved flags, so consumers can evaluate it with appropriate caution.
+- FR-39: An admin may resolve a flag (dismiss or act), marking it as resolved with a note; resolved flags are retained for audit purposes but removed from the active count.
+- FR-40: An admin may deactivate a skill, setting `status: deactivated` and a required `deactivation_reason` (free text). Deactivated skills are hidden from all consumer-facing views and excluded from search results.
+- FR-41: An admin may reactivate a deactivated skill, clearing the deactivation status and logging the action in the revision history.
+- FR-42: When a skill is deactivated, consumers who visit its direct URL see a tombstone page explaining the reason for deactivation (e.g. "This skill has been deactivated: superseded by <link>") rather than a 404.
 
 > **Resolved OQ-2:** Support path is via SLAC Slack. The footer/troubleshooting page should link to the relevant Slack channel. **Open sub-question: which Slack channel(s)?** (e.g. `#s3df-help`, `#ai-tools`, a dedicated `#agent-skills` channel?)
 
@@ -211,6 +243,9 @@ Skill {
   name: str                  # required
   repo_url: str              # required, unique
   entry_type: enum           # "skill" | "marketplace_ref"
+  status: enum               # "active" | "deactivated"
+  deactivation_reason: str   # set by admin when status=deactivated
+  superseded_by_slug: str    # optional; slug of the replacement skill
   description: str           # optional, submitter-provided or from GitHub
   readme_html: str           # fetched from GitHub at submission
   compatible_platforms: [str]# e.g. ["claude", "openai", "langchain"]
@@ -225,6 +260,34 @@ Skill {
   uses_agent_gateway: bool   # true = shows "Uses SLAC Agent Gateway" badge
   avg_rating: float          # denormalized, updated on each rating write
   rating_count: int          # denormalized
+  flag_count: int            # denormalized count of active unresolved flags
+}
+
+SkillRevision {
+  _id: ObjectId
+  skill_id: ObjectId
+  revision_number: int       # monotonically increasing per skill
+  snapshot: object           # full Skill state at this point in time
+  actor_id: str              # SLAC username who made the change
+  action: enum               # "create" | "edit" | "refetch" | "deactivate" | "reactivate"
+  changelog_note: str        # optional, max 280 chars, author-supplied
+  created_at: datetime
+  # index on (skill_id, revision_number)
+}
+
+SkillFlag {
+  _id: ObjectId
+  skill_id: ObjectId
+  reporter_id: str           # SLAC username
+  reason: enum               # "inappropriate" | "stale" | "superseded" | "broken" | "other"
+  note: str                  # optional free text, max 500 chars
+  superseded_by_slug: str    # optional; populated when reason=superseded
+  status: enum               # "active" | "resolved"
+  resolved_by: str           # admin SLAC username, set on resolution
+  resolution_note: str       # optional admin note
+  created_at: datetime
+  resolved_at: datetime
+  # unique index on (skill_id, reporter_id) where status=active
 }
 
 Rating {
@@ -277,6 +340,10 @@ GET    /api/skills/:slug            # skill detail
 PATCH  /api/skills/:slug            # edit own skill (auth required)
 DELETE /api/skills/:slug            # delete own skill (auth required)
 
+# Skill revisions
+GET    /api/skills/:slug/revisions  # full revision history (actor, timestamp, changelog note)
+GET    /api/skills/:slug/revisions/:n  # snapshot of a specific revision
+
 # Ratings
 PUT    /api/skills/:slug/rating     # upsert rating 1–5 (auth required)
 GET    /api/skills/:slug/rating/me  # fetch caller's own rating
@@ -286,13 +353,21 @@ GET    /api/labels                  # list all labels (name + usage_count)
 POST   /api/skills/:slug/labels     # add label to skill (auth required)
 DELETE /api/skills/:slug/labels/:name  # remove label applied by caller
 
+# Flagging
+POST   /api/skills/:slug/flags      # submit a flag (auth required)
+PATCH  /api/skills/:slug/flags/me   # update or retract caller's own flag (auth required)
+
 # Admin
 GET    /api/admin/labels            # label list with rename/merge/delete tools
 PATCH  /api/admin/labels/:id        # rename label
 POST   /api/admin/labels/:id/merge  # merge label into another
 DELETE /api/admin/labels/:id        # delete label + remove from all skills
 DELETE /api/admin/skills/:slug      # admin force-delete any skill
-GET    /api/admin/skills            # all skills with submitter info + timestamps
+GET    /api/admin/skills            # all skills with submitter info + timestamps (including deactivated)
+POST   /api/admin/skills/:slug/deactivate   # deactivate skill (requires reason)
+POST   /api/admin/skills/:slug/reactivate   # reactivate skill
+GET    /api/admin/flags             # moderation queue: all active flags with skill + reporter info
+PATCH  /api/admin/flags/:id         # resolve a flag (dismiss or act)
 
 # Settings
 GET    /api/admin/settings
@@ -366,12 +441,17 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 | `GitHubFetcher` | Fetch repo metadata + README from GitHub API | `fetch(repo_url) → GitHubSnapshot` | New |
 | `RatingService` | Upsert rating, recompute denormalized avg + count atomically | `upsert(skill_id, user_id, value)`, `get_mine(skill_id, user_id)` | New |
 | `LabelService` | Add/remove labels; admin rename/merge/delete with atomic skill updates | `add(skill_id, label_name, user_id)`, `remove(...)`, `rename(id, new_name)`, `merge(src_id, dst_id)`, `delete(id)` | New |
+| `RevisionService` | Record SkillRevision on every write; list and fetch snapshots | `record(skill_id, actor_id, action, snapshot, note)`, `list(skill_id)`, `get(skill_id, n)` | New |
+| `FlagService` | Submit, update, and retract flags; admin moderation queue and resolution | `flag(skill_id, user_id, reason, note)`, `retract(...)`, `resolve(flag_id, admin_id, note)`, `queue()` | New |
+| `ModerationService` | Deactivate/reactivate skills with reason; tombstone routing | `deactivate(slug, admin_id, reason)`, `reactivate(slug, admin_id)` | New |
+| `SearchService` | Full-text search (MongoDB text index) + semantic/vector search | `search(query, mode)` where mode is `text` or `semantic` | New |
 | `AuthMiddleware` | Extract user identity from VouchProxy header or JWT; attach to request context | FastAPI dependency `get_current_user(request) → User` | New |
 | `AdminGuard` | Check user is in admin allowlist (from SiteSettings) | FastAPI dependency `require_admin(user)` | New |
 | `SkillListPage` | SSR Next.js page: skill cards, search bar, label filter chips, sort dropdown | Props: `skills[]`, `labels[]`, `filters` | New |
-| `SkillDetailPage` | SSR Next.js page: full skill info, README render, rating widget, label editor | Props: `skill`, `userRating` | New |
+| `SkillDetailPage` | SSR Next.js page: full skill info, README render, rating widget, label editor, revision timeline, flag button | Props: `skill`, `userRating`, `revisions[]`, `userFlag` | New |
 | `SubmitForm` | CSR form: repo URL input → auto-fill from GitHub fetch → optional metadata fields | Calls `POST /api/skills` | New |
 | `AdminLabelDashboard` | CSR page: label list, usage counts, rename/merge/delete actions | Calls admin label endpoints | New |
+| `AdminFlagQueue` | CSR page: moderation queue, flag details, resolve/dismiss actions | Calls `GET /api/admin/flags`, `PATCH /api/admin/flags/:id` | New |
 
 ---
 
@@ -403,27 +483,42 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 
 ### Slice 5 — Admin tooling
 - Admin label dashboard (rename, merge, delete)
-- Admin skill list with force-delete
+- Admin skill list with force-delete, deactivate/reactivate
+- Admin flag moderation queue
 - Site settings (template repo URL, admin allowlist)
 
-### Slice 6 — Guides + polish
+### Slice 6 — Provenance & flagging
+- `SkillRevision` recorded on every write (create, edit, refetch, deactivate, reactivate)
+- Revision history timeline on skill detail page
+- Changelog note field on edit form
+- `SkillFlag` submission and retraction by consumers
+- Flag indicator on skill cards and detail pages
+- Admin flag resolution flow
+- Tombstone page for deactivated skills
+
+### Slice 7 — Semantic search
+- Embeddings index on skill name, description, and README
+- `SearchService` with `semantic` mode
+- Search UI toggle (keyword / semantic) on skill list page
+
+### Slice 8 — Guides + polish
 - "How to create a skill" static guide page
 - Template repo link in submission form
 - Empty states, error states, loading skeletons
 - Responsive layout pass
 
-### Slice 7 — Production promotion
+### Slice 9 — Production promotion
 - Staging deploy + smoke tests
 - PVC backup job configured
 - Ingress SSL + VouchProxy wired
 - Prod deploy at `agent-knowledge-hub.slac.stanford.edu`
 
-### Slice 8 — `/slac-skills` agent skill + marketplace manifest
+### Slice 10 — `/agent-knowledge-hub` agent skill + marketplace manifest
 - `GET /api/skills/summary` — lightweight skill list for LLM context
 - `GET /api/marketplace.json` — dynamic Claude Code marketplace manifest
-- `slac-skills` GitHub repo with skill markdown file
-- `/slac-skills` commands: search (LLM-mediated), install, list, update, remove, submit, rate
-- Bootstrap docs: one-time `/plugin marketplace add` + `/plugin install slac-skills@agent-knowledge-hub`
+- `agent-knowledge-hub` GitHub repo with skill markdown file
+- `/agent-knowledge-hub` commands: search (LLM-mediated), install, list, update, remove, submit, rate
+- Bootstrap docs: one-time `/plugin marketplace add` + `/plugin install agent-knowledge-hub`
 - OpenCode agent install path (`~/.config/opencode/agents/`) supported alongside Claude Code
 
 ---
@@ -436,8 +531,10 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 | Denormalized avg_rating on Skill | Consistency on concurrent writes | MongoDB `$inc`/`$set` on upsert is atomic enough at this scale |
 | Free-form labels | Taxonomy consistency | Admin merge/rename tooling compensates |
 | VouchProxy-only auth | Works outside SLAC | Dev-mode env bypass; out-of-SLAC use is not a v1 goal |
-| No pre-publish moderation | Risk of spam/bad content | Trust SLAC auth; post-publish admin removal is sufficient |
-| Text index search only | Semantic relevance | Vector search is explicitly planned for v2 |
+| No pre-publish moderation | Risk of spam/bad content | Trust SLAC auth; post-publish admin removal + flagging system is sufficient |
+| Soft deactivation over hard delete | Avoids broken links for consumers | Tombstone page explains deactivation reason; data preserved for audit |
+| Immutable revision log on every write | Storage overhead | Revisions are compact snapshots; provides full provenance without external VCS dependency |
+| Text index + semantic search both in v1 | Implementation complexity | Semantic search significantly improves discoverability for non-technical consumers; worth the v1 cost |
 
 ---
 
@@ -506,7 +603,7 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 | First-Use Clarity | 6/10 | Guide deferred to Slice 6; submit form lacked live GitHub preview and graceful fetch-failure fallback |
 | Documentation Quality | 5/10 | No troubleshooting/FAQ planned; compatible_platforms was free-form (fragmentation risk) |
 | Error UX | 5/10 | Error message copy unspecified; expired-session and GitHub-unavailable paths unhandled |
-| Workflow Fit | 7/10 | Web-only; no CLI path for terminal-first users — noted as v2 OQ |
+| Workflow Fit | 8/10 | Web browsing + `/agent-knowledge-hub` CLI skill covers terminal-first users |
 | Trust & Reliability | 5/10 | No health endpoint, no status page, no support contact, no freshness signals in requirements |
 | **UX Readiness Score** | **5.5/10** | |
 
@@ -528,7 +625,7 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 |---|---|---|
 | OQ-1 | Canonical URL | ✅ `https://agent-knowledge-hub.slac.stanford.edu` |
 | OQ-2 | Support contact path | ⚠️ Slack — channel name TBD |
-| OQ-3 | v2 CLI client decision | 🔲 Deferred, out of scope for v1 |
+| OQ-3 | CLI client decision | ✅ `/agent-knowledge-hub` skill ships in v1 |
 
 ### Changes Made to PRD by This Review
 
@@ -544,7 +641,7 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 - Added NFR-10: `/health` endpoint
 - Added NFR-11: freshness timestamps on skill detail pages
 - Added NFR-12: footer support contact + availability statement
-- Added OQ-3 to out-of-scope section re: CLI client for v2
+- Added OQ-3 to out-of-scope section re: CLI client for v2 — **superseded: CLI ships in v1 as `/agent-knowledge-hub`**
 
 
 ---
@@ -685,7 +782,7 @@ make -C kubernetes/overlays/dev rollout-restart
 
 ---
 
-## 15. `/slac-skills` — Agent-Native Discovery & Install (v1 feature)
+## 15. `/agent-knowledge-hub` — Agent-Native Discovery & Install (v1 feature)
 
 ### Concept
 
@@ -696,13 +793,13 @@ Inspired by `agentskill.sh/install`, but SLAC-specific and smarter: instead of a
 ### Invocation examples
 
 ```
-/slac-skills install something that allows me to query EPICS
+/agent-knowledge-hub install something that allows me to query EPICS
 
-/slac-skills I have a problem trying to work out what's wrong with my Kubernetes deployment
+/agent-knowledge-hub I have a problem trying to work out what's wrong with my Kubernetes deployment
 
-/slac-skills find me a skill for analysing NeXus files
+/agent-knowledge-hub find me a skill for analysing NeXus files
 
-$slac-skills search --label hdf5
+$agent-knowledge-hub search --label hdf5
 ```
 
 The `$` prefix makes it work identically in OpenCode; `/` prefix is Claude Code.
@@ -710,7 +807,7 @@ The `$` prefix makes it work identically in OpenCode; `/` prefix is Claude Code.
 ### How it works
 
 ```
-User types: /slac-skills <natural language query>
+User types: /agent-knowledge-hub <natural language query>
                 │
                 ▼
         Skill fetches catalog via GET /api/skills (all, or paginated)
@@ -742,13 +839,13 @@ User types: /slac-skills <natural language query>
 | OpenCode (agent) | `~/.config/opencode/agents/<slug>.md` | Write agent markdown file from repo |
 | OpenCode (MCP) | Append entry to `~/.config/opencode/opencode.json` | Patch JSON config with MCP server definition |
 
-The `/slac-skills` installer detects which runtime is calling it and installs into the appropriate target. For `entry_type: marketplace_ref`, no file install occurs — the browser is opened to the reference URL instead.
+The `/agent-knowledge-hub` installer detects which runtime is calling it and installs into the appropriate target. For `entry_type: marketplace_ref`, no file install occurs — the browser is opened to the reference URL instead.
 
 ### Skill file structure (what gets installed)
 
 The catalog entry's `repo_url` points to a GitHub repo. The install step clones or copies it to the appropriate skills directory. No execution happens at install time — the agent runtime picks it up on next invocation.
 
-For Claude Code, a valid skill repo must contain at minimum a skill markdown file (e.g. `skill.md` or `<name>.md`). For OpenCode, a valid agent repo must contain a markdown file with YAML frontmatter (agent name, description, model). The `/slac-skills` skill validates this before installing and warns the user if the repo structure is unrecognised.
+For Claude Code, a valid skill repo must contain at minimum a skill markdown file (e.g. `skill.md` or `<name>.md`). For OpenCode, a valid agent repo must contain a markdown file with YAML frontmatter (agent name, description, model). The `/agent-knowledge-hub` skill validates this before installing and warns the user if the repo structure is unrecognised.
 
 ### Claude-mediated matching
 
@@ -765,22 +862,22 @@ This avoids building a vector index in v2 while still providing semantic matchin
 
 | Command | Behaviour |
 |---|---|
-| `/slac-skills list` | Show all installed skills (from `~/.claude/skills/`) |
-| `/slac-skills search <query>` | Search without installing — show top matches |
-| `/slac-skills install <slug>` | Direct install by slug (no LLM step) |
-| `/slac-skills update <slug>` | Re-pull latest from the skill's repo |
-| `/slac-skills remove <slug>` | Delete from skills directory |
-| `/slac-skills submit` | Guided submission flow — walks user through creating/selecting a GitHub repo, scaffolding skill structure, and registering in the catalog via the API. No browser required. |
-| `/slac-skills rate <slug> <1-5>` | Submit a rating directly from the agent session |
+| `/agent-knowledge-hub list` | Show all installed skills (from `~/.claude/skills/`) |
+| `/agent-knowledge-hub search <query>` | Search without installing — show top matches |
+| `/agent-knowledge-hub install <slug>` | Direct install by slug (no LLM step) |
+| `/agent-knowledge-hub update <slug>` | Re-pull latest from the skill's repo |
+| `/agent-knowledge-hub remove <slug>` | Delete from skills directory |
+| `/agent-knowledge-hub submit` | Guided submission flow — walks user through creating/selecting a GitHub repo, scaffolding skill structure, and registering in the catalog via the API. No browser required. |
+| `/agent-knowledge-hub rate <slug> <1-5>` | Submit a rating directly from the agent session |
 
-### API additions required (v2 backend)
+### API additions required
 
 ```
 GET /api/skills/summary   # lightweight: slug, name, description, labels, avg_rating only
                           # no README HTML — keeps payload small for LLM context
 ```
 
-### `/slac-skills submit` — guided publish flow
+### `/agent-knowledge-hub submit` — guided publish flow
 
 The submit command is a fully in-agent walkthrough. No browser required. Flow:
 
@@ -831,8 +928,8 @@ Users register the SLAC marketplace once via Claude Code's native `/plugin` prot
 # Register the SLAC marketplace (one-time)
 /plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
 
-# Install the /slac-skills discovery tool itself
-/plugin install slac-skills@agent-knowledge-hub
+# Install the /agent-knowledge-hub discovery tool itself
+/plugin install agent-knowledge-hub
 
 # Install any other skill directly
 /plugin install k8s-troubleshooting@agent-knowledge-hub
@@ -854,13 +951,13 @@ The backend serves a dynamically generated Claude Code marketplace manifest at `
   "metadata": { "version": "1.0.0" },
   "plugins": [
     {
-      "name": "slac-skills",
+      "name": "agent-knowledge-hub",
       "description": "Discover and install SLAC agent skills from inside your agent session",
       "version": "1.0.0",
-      "source": { "source": "github", "repo": "slaclab/slac-skills" },
+      "source": { "source": "github", "repo": "slaclab/agent-knowledge-hub" },
       "author": { "name": "SLAC S3DF", "url": "https://agent-knowledge-hub.slac.stanford.edu" },
       "homepage": "https://agent-knowledge-hub.slac.stanford.edu",
-      "repository": "https://github.com/slaclab/slac-skills",
+      "repository": "https://github.com/slaclab/agent-knowledge-hub",
       "license": "MIT",
       "keywords": ["slac", "s3df", "skills", "marketplace"],
       "category": "productivity",

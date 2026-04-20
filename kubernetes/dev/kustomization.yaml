@@ -12,6 +12,14 @@ resources:
   - mongodb-service.yaml
   - mongodb-pvc.yaml
 
+images:
+  - name: agent-knowledge-hub-backend
+    newName: agent-knowledge-hub-backend
+    newTag: dev
+  - name: agent-knowledge-hub-frontend
+    newName: agent-knowledge-hub-frontend
+    newTag: dev
+
 configMapGenerator:
   - name: backend-config
     literals:

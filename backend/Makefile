@@ -4,7 +4,11 @@ PIP      := $(VENV)/bin/pip
 UVICORN  := $(VENV)/bin/uvicorn
 PYTEST   := $(VENV)/bin/pytest
 
-.PHONY: dev test run clean
+REGISTRY ?= localhost:5000
+IMAGE    ?= $(REGISTRY)/agent-knowledge-hub-backend
+TAG      ?= dev
+
+.PHONY: dev test run clean docker-build docker-push
 
 dev: $(VENV)/bin/activate
 
@@ -20,6 +24,12 @@ test: $(VENV)/bin/activate
 
 run: $(VENV)/bin/activate
 	$(UVICORN) app.main:app --reload
+
+docker-build:
+	docker build -t $(IMAGE):$(TAG) .
+
+docker-push: docker-build
+	docker push $(IMAGE):$(TAG)
 
 clean:
 	rm -rf $(VENV) __pycache__ app/__pycache__ .pytest_cache

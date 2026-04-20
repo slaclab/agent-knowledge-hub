@@ -1,7 +1,11 @@
 NODE_MODULES := node_modules
 NEXT         := $(NODE_MODULES)/.bin/next
 
-.PHONY: dev build start lint clean
+REGISTRY ?= localhost:5000
+IMAGE    ?= $(REGISTRY)/agent-knowledge-hub-frontend
+TAG      ?= dev
+
+.PHONY: dev build start lint clean docker-build docker-push
 
 dev: $(NODE_MODULES)
 	$(NEXT) dev
@@ -19,6 +23,12 @@ $(NODE_MODULES): package.json
 
 lint: $(NODE_MODULES)
 	$(NEXT) lint
+
+docker-build:
+	docker build -t $(IMAGE):$(TAG) .
+
+docker-push: docker-build
+	docker push $(IMAGE):$(TAG)
 
 clean:
 	rm -rf $(NODE_MODULES) .next

@@ -6,7 +6,6 @@ namespace: dev
 resources:
   - ../../base
   - namespace.yaml
-  - mongodb/
 
 images:
   - name: agent-knowledge-hub-backend

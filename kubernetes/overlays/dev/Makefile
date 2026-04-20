@@ -10,6 +10,9 @@ CONTAINER_RT ?= sudo podman
 operator-apply:
 	KUBECONFIG=$(KUBECONFIG) kubectl apply --server-side --force-conflicts -k operator/mongo/
 
+mongodb-apply: ensure-context
+	$(MAKE) -C mongodb/ apply KUBECONFIG=$(KUBECONFIG)
+
 apply: ensure-context
 	kubectl apply -k .
 

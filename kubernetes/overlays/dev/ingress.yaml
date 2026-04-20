@@ -13,7 +13,7 @@ metadata:
       auth_request_set $forwarded_user $upstream_http_x_vouch_idp_claims_name;
 spec:
   rules:
-    - host: agent-knowledge-hub-dev.sdf.slac.stanford.edu
+    - host: agent-knowledge-hub-dev.slac.stanford.edu
       http:
         paths:
           - path: /

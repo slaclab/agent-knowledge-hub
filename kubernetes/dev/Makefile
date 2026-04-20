@@ -1,7 +1,7 @@
 CONTEXT      = agent-knowledge-hub-dev
-NAMESPACE    = agent-knowledge-hub-dev
+NAMESPACE    = dev
 KUBECONFIG  ?= $(HOME)/.kube/contexts/s3df/dev
-REGISTRY     ?=
+REGISTRY     ?= docker.io/slaclab
 TAG          ?= dev
 CONTAINER_RT ?= sudo podman
 

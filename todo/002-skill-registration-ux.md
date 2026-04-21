@@ -70,6 +70,7 @@
 - FR-U7: If the scanned directory contains no recognisable skill files (`skill.md`, `CLAUDE.md`, `README.md`, `package.json`, `pyproject.toml`), the endpoint returns a warning (not an error) — user can still submit with manual metadata.
 - FR-U8: The stored `skill_path` is included in the `SkillOut` schema and surfaced on the detail page.
 - FR-U9: `GET /api/skills/:slug` returns `skill_path` so the CLI install command knows which directory to fetch.
+- FR-U10: Duplicate (repo_url + skill_path) submissions return HTTP 409 with a link to the existing entry.
 - FR-U11: When a bare repo URL is submitted (path `/`), the backend additionally scans the repo recursively for skill directories — any directory containing `skill.md` or `CLAUDE.md` is treated as a candidate skill.
 - FR-U12: `GET /api/github-scan?url=<repo_url>&discover=true` returns a list of `SkillSnapshot[]` — one per discovered skill directory — instead of a single snapshot.
 - FR-U13: The submit form has a "Scan entire repo" mode: when a bare repo URL is entered and discovery returns multiple skills, the form renders a checklist of discovered skills with the same auto-populated + editable fields for each. The user selects which ones to submit and can edit each independently before bulk-submitting.
@@ -199,7 +200,9 @@ Checklist of discovered skills:
 
 
 
-Expand-contract: additive only. `skill_path` defaults to `/` for all existing entries. Existing `repo_url` unique index replaced with compound `(repo_url, skill_path)` unique index — existing data is valid (all have path `/`).
+### Migration
+
+Expand-contract: additive only. `skill_path` defaults to `/` for all existing entries. Existing `repo_url` unique index replaced with compound `(repo_url, skill_path)` unique index — existing data is valid (all have path `/`). No data migration required; index creation is safe on an empty or small collection.
 
 ---
 

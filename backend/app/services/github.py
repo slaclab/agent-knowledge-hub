@@ -356,8 +356,14 @@ class GitHubScanner:
         repo_data, repo_status = await repo_task
         contents_data, contents_status = await contents_task
 
-        if repo_status != 200:
+        if repo_status == 403:
+            raise GitHubFetchError("GitHub rate limit reached. Wait a moment and try again.")
+        if repo_status == 404:
             raise GitHubFetchError("Repo not found. Check the URL and your access.")
+        if repo_status != 200:
+            raise GitHubFetchError(f"GitHub API error: {repo_status}")
+        if contents_status == 403:
+            raise GitHubFetchError("GitHub rate limit reached. Wait a moment and try again.")
         if contents_status == 404:
             raise GitHubFetchError(f"Path '{ref.path}' not found in this repo.")
         if contents_status != 200:

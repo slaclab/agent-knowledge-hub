@@ -69,7 +69,9 @@ async def github_scan(
         try:
             results, truncated, capped = await github_scanner.discover(ref, cache_key=cache_key)
         except GitHubFetchError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            detail = str(e)
+            code = status.HTTP_429_TOO_MANY_REQUESTS if "rate limit" in detail.lower() else status.HTTP_404_NOT_FOUND
+            raise HTTPException(status_code=code, detail=detail)
 
         snapshots = []
         for raw in results:
@@ -83,7 +85,12 @@ async def github_scan(
         raw = await github_scanner.scan(ref, cache_key=cache_key)
     except GitHubFetchError as e:
         detail = str(e)
-        code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_422_UNPROCESSABLE_ENTITY
+        if "rate limit" in detail.lower():
+            code = status.HTTP_429_TOO_MANY_REQUESTS
+        elif "not found" in detail.lower():
+            code = status.HTTP_404_NOT_FOUND
+        else:
+            code = status.HTTP_422_UNPROCESSABLE_ENTITY
         raise HTTPException(status_code=code, detail=detail)
 
     snap = metadata_extractor.extract(raw)

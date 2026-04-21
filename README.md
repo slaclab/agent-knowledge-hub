@@ -8,6 +8,8 @@ Your AI coding assistant is only as useful as the knowledge it has access to. Ag
 
 See what the community rates highly, filter by topic, read a description, and decide in seconds whether it's worth trying.
 
+Skills in private SLAC GitHub repos are fully supported. Skills that require SLAC GitHub access are shown with a **SLAC Members Only** badge so you know upfront — and a link explaining how to get access.
+
 ## Share what you've built
 
 Have something useful to share? `/agent-knowledge-hub` walks you through the whole process:

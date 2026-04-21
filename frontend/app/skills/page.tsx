@@ -1,4 +1,4 @@
-import { listSkills } from "@/lib/api";
+import { listSkills, getSettings } from "@/lib/api";
 import { SkillList } from "@/components/skill-list";
 import type { SortOption, VisibilityType } from "@/types/skill";
 import Link from "next/link";
@@ -23,11 +23,14 @@ export default async function SkillsPage({ searchParams }: PageProps) {
   const forkedFrom = searchParams.forked_from;
   const visibility = searchParams.visibility as VisibilityType | "all" | undefined;
 
-  const data = await listSkills({
-    q, labels, sort, page, page_size: 20, server: true,
-    forked_from: forkedFrom,
-    visibility: visibility !== "all" ? visibility : undefined,
-  });
+  const [data, siteSettings] = await Promise.all([
+    listSkills({
+      q, labels, sort, page, page_size: 20, server: true,
+      forked_from: forkedFrom,
+      visibility: visibility !== "all" ? visibility : undefined,
+    }),
+    getSettings(true),
+  ]);
 
   if (!data) {
     return (
@@ -61,6 +64,7 @@ export default async function SkillsPage({ searchParams }: PageProps) {
           labels={labels}
           forkedFrom={forkedFrom}
           visibility={visibility}
+          accessInstructionsUrl={siteSettings.github_access_instructions_url}
         />
       </Suspense>
     </div>

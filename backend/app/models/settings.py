@@ -9,6 +9,7 @@ from pydantic import Field
 
 class SiteSettings(Document):
     skill_template_repo_url: Optional[str] = None
+    github_access_instructions_url: Optional[str] = None
     updated_by: Optional[str] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

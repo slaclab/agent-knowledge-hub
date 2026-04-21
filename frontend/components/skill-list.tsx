@@ -15,6 +15,7 @@ interface SkillListProps {
   labels: string[];
   forkedFrom?: string;
   visibility?: VisibilityType | "all";
+  accessInstructionsUrl?: string;
 }
 
 const VISIBILITY_OPTIONS: { value: VisibilityType | "all"; label: string }[] = [
@@ -23,7 +24,7 @@ const VISIBILITY_OPTIONS: { value: VisibilityType | "all"; label: string }[] = [
   { value: "internal", label: "SLAC Members Only" },
 ];
 
-export function SkillList({ data, sort, q, labels, forkedFrom, visibility }: SkillListProps) {
+export function SkillList({ data, sort, q, labels, forkedFrom, visibility, accessInstructionsUrl }: SkillListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -121,7 +122,7 @@ export function SkillList({ data, sort, q, labels, forkedFrom, visibility }: Ski
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.items.map((skill) => (
-            <SkillCard key={skill.id} skill={skill} />
+            <SkillCard key={skill.id} skill={skill} accessInstructionsUrl={accessInstructionsUrl} />
           ))}
         </div>
       )}

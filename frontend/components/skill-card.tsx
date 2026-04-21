@@ -8,9 +8,10 @@ import { FlagIndicator } from "./flag-indicator";
 
 interface SkillCardProps {
   skill: Skill;
+  accessInstructionsUrl?: string;
 }
 
-export function SkillCard({ skill }: SkillCardProps) {
+export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-access" }: SkillCardProps) {
   const isDeactivated = skill.status === "deactivated";
   const isSuperseded = !!skill.superseded_by_slug;
   const isInternal = skill.visibility === "internal";
@@ -34,7 +35,7 @@ export function SkillCard({ skill }: SkillCardProps) {
             )}
             {isInternal && (
               <a
-                href="/guides/slac-github-access"
+                href={accessInstructionsUrl}
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
                 title="Requires SLAC GitHub access"

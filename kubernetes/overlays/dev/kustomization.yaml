@@ -26,6 +26,8 @@ secretGenerator:
   - name: agent-knowledge-hub-secrets
     files:
       - etc/.secrets/MONGO_URI
+      - etc/.secrets/GITHUB_APP_ID
+      - etc/.secrets/GITHUB_APP_PRIVATE_KEY
     options:
       disableNameSuffixHash: true
   - name: mongodb-secrets

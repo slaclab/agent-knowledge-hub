@@ -1,8 +1,11 @@
 import { AuthGuard } from "@/components/auth-guard";
 import { SubmitForm } from "@/components/submit-form";
+import { getSettings } from "@/lib/api";
 import Link from "next/link";
 
-export default function SubmitPage() {
+export default async function SubmitPage() {
+  const siteSettings = await getSettings(true);
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
@@ -22,7 +25,7 @@ export default function SubmitPage() {
           </div>
         }
       >
-        <SubmitForm />
+        <SubmitForm accessInstructionsUrl={siteSettings.github_access_instructions_url} />
       </AuthGuard>
     </div>
   );

@@ -1,6 +1,6 @@
 # 001 — Private/Internal GitHub Repos, Access Model, and Fork Provenance
 
-**Status:** 🔄 In Progress
+**Status:** 🏁 Implementation Done
 **Depends on:** #002 (Slice 2 requires GitHubScanner from #002 to be in place)
 **Branch:** feat/private-repos-and-forks
 
@@ -284,29 +284,29 @@ A bool `is_private` doesn't capture the distinction between "slaclab internal" (
 
 ## Definition of Done
 
-- [ ] `visibility` and `forked_from_url` fields on Skill, indexed
-- [ ] GitHubFetcher fallback chain tested with mocks (unauth → PAT → App)
+- [x] `visibility` and `forked_from_url` fields on Skill, indexed
+- [x] GitHubFetcher fallback chain tested with mocks (unauth → PAT → App)
 - [ ] GitHubScanner (#002) uses shared GitHubAppClient — fallback chain tested for scan + discovery
-- [ ] App token generation + caching unit tested (including expiry + refresh)
-- [ ] `forked_from` filter on list endpoint tested
-- [ ] "SLAC Members Only" badge shown in frontend for `visibility=internal`
-- [ ] "Forked from" shown on detail page as human-readable `owner/repo` link
-- [ ] Visibility filter exposed on skill listing page (FR-P15)
-- [ ] "Forks in catalog" section on detail page sidebar (FR-P16)
-- [ ] Submit form shows informational banner for internal repos (FR-P17)
-- [ ] `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` added to vault + k8s secrets for dev/stage/prod
-- [ ] SiteSettings `github_access_instructions_url` configurable by admin
-- [ ] No private key in logs or error responses — error handler middleware redacts tracebacks containing PRIVATE_KEY (NFR-P2 enforcement)
-- [ ] `GET /api/github-preview` rate-limited (slowapi or equivalent, 10 req/min per IP)
-- [ ] `forked_from_url` validated as `https://github.com/*` URL in `SkillUpdate` Pydantic schema
-- [ ] `github_access_instructions_url` validated as http/https URL in SiteSettings schema (Pydantic `HttpUrl`)
+- [x] App token generation + caching unit tested (including expiry + refresh)
+- [x] `forked_from` filter on list endpoint tested
+- [x] "SLAC Members Only" badge shown in frontend for `visibility=internal`
+- [x] "Forked from" shown on detail page as human-readable `owner/repo` link
+- [x] Visibility filter exposed on skill listing page (FR-P15)
+- [x] "Forks in catalog" section on detail page sidebar (FR-P16)
+- [x] Submit form shows informational banner for internal repos (FR-P17)
+- [x] `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` added to vault + k8s secrets for dev/stage/prod
+- [x] SiteSettings `github_access_instructions_url` configurable by admin
+- [x] No private key in logs or error responses — error handler middleware redacts tracebacks containing PRIVATE_KEY (NFR-P2 enforcement)
+- [x] `GET /api/github-preview` rate-limited (slowapi or equivalent, 10 req/min per IP)
+- [x] `forked_from_url` validated as `https://github.com/*` URL in `SkillUpdate` Pydantic schema
+- [x] `github_access_instructions_url` validated as http/https URL in SiteSettings schema (Pydantic `HttpUrl`)
 - [ ] Private repo scan via `/api/github-scan` returns `visibility: internal` in SkillSnapshot
 - [ ] Discovery mode (`discover=true`) works on private repos when App is configured
-- [ ] ADRs committed to `docs/adr/`: adr-p01-github-app-over-oauth.md, adr-p02-visibility-enum.md, adr-p03-shared-github-app-client.md
-- [ ] GitHub App setup runbook written to `docs/runbooks/github-app-setup.md` (GitHub Enterprise App creation, vault secrets, k8s secret injection, verification)
-- [ ] `backend/.env.example` updated with `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` (with comments noting they are optional)
-- [ ] `README.md` updated to mention private/internal repo support and the "SLAC Members Only" badge
-- [ ] `SkillOut`, `SkillListOut`, and `SkillUpdate` schemas include `visibility` and `forked_from_url`; router helpers updated
+- [x] ADRs committed to `docs/adr/`: adr-p01-github-app-over-oauth.md, adr-p02-visibility-enum.md, adr-p03-shared-github-app-client.md
+- [x] GitHub App setup runbook written to `docs/runbooks/github-app-setup.md` (GitHub Enterprise App creation, vault secrets, k8s secret injection, verification)
+- [x] `backend/.env.example` updated with `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` (with comments noting they are optional)
+- [x] `README.md` updated to mention private/internal repo support and the "SLAC Members Only" badge
+- [x] `SkillOut`, `SkillListOut`, and `SkillUpdate` schemas include `visibility` and `forked_from_url`; router helpers updated
 
 ---
 

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getSkill, getRevisions, listSkills } from "@/lib/api";
+import { getSkill, getRevisions, listSkills, getSettings } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { ReadmeRender } from "@/components/readme-render";
@@ -31,8 +31,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
   const revisions = await getRevisions(params.slug, true);
 
   // Fetch forks of this skill in the catalog (FR-P16)
-  const forksData = await listSkills({ forked_from: skill.repo_url, page_size: 3, server: true });
+  const [forksData, siteSettings] = await Promise.all([
+    listSkills({ forked_from: skill.repo_url, page_size: 3, server: true }),
+    getSettings(true),
+  ]);
   const forkCount = forksData?.total ?? 0;
+  const accessInstructionsUrl = siteSettings.github_access_instructions_url;
 
   const isInternal = skill.visibility === "internal";
 
@@ -53,7 +57,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
             )}
             {isInternal && (
               <a
-                href="/guides/slac-github-access"
+                href={accessInstructionsUrl}
                 className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
                 title="Requires SLAC GitHub access"
               >
@@ -94,7 +98,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
       {isInternal && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <strong>SLAC Members Only</strong> — This repo requires SLAC GitHub access to clone.{" "}
-          <a href="/guides/slac-github-access" className="underline">
+          <a href={accessInstructionsUrl} className="underline">
             Learn how to get access.
           </a>
         </div>

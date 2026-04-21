@@ -110,6 +110,14 @@ export async function getRevisions(slug: string, server = false): Promise<SkillR
   return data ?? [];
 }
 
+export async function getSettings(server = false): Promise<{ github_access_instructions_url: string }> {
+  const { data } = await request<{ github_access_instructions_url: string }>(
+    apiBase(server),
+    "/settings",
+  );
+  return data ?? { github_access_instructions_url: "/guides/slac-github-access" };
+}
+
 export async function getGithubPreview(
   repoUrl: string,
 ): Promise<{ data: GitHubPreview | null; error: string | null }> {

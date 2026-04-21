@@ -1,6 +1,7 @@
 # 001 — Private/Internal GitHub Repos, Access Model, and Fork Provenance
 
 **Status:** ⬜ Open
+**Depends on:** #002 (Slice 2 requires GitHubScanner from #002 to be in place)
 
 ---
 
@@ -57,6 +58,8 @@
 - FR-P10: `PATCH /api/skills/:slug` allows owner/admin to set/override `forked_from_url`.
 - FR-P11: Submit form shows a live preview for internal repos (same as public) when the GitHub App has access. No special UI needed.
 - FR-P12: SiteSettings stores `github_access_instructions_url` (configurable by admin); used in the SLAC Internal badge link.
+- FR-P13: `GET /api/github-scan` (from #002) uses the same App token fallback chain as `GitHubFetcher`. `GitHubScanner` shares the `GitHubAppClient` helper — same token, same cache. If the App token is required to fetch the repo, the returned `SkillSnapshot` includes `visibility: internal`.
+- FR-P14: Discovery mode (`discover=true`) also uses the App token when scanning private repos. The recursive tree walk (`GET /repos/{owner}/{repo}/git/trees/{branch}?recursive=1`) and all per-directory scans use the installation token. Discovery on a private repo is only available if the App is installed and configured.
 
 ### Non-Functional
 
@@ -78,20 +81,22 @@
 
 ### GitHub App Token Flow
 
+The same fallback chain applies to both `GitHubFetcher` (submission/refetch) and `GitHubScanner` (scan endpoint from #002). Both share a single `GitHubAppClient` instance with a cached installation token (1h TTL).
+
 ```
-Submission request
+Any GitHub API call (fetch, scan, or discover)
   │
   ▼
-GitHubFetcher.fetch(repo_url)
+GitHubAppClient.get_token()   ← shared, cached per installation
   │  1. Try unauthenticated
-  │     → 200: return snapshot (visibility=public)
+  │     → 200: return result (visibility=public)
   │     → 404: continue
   │  2. Try GITHUB_TOKEN (PAT) if set
-  │     → 200: return snapshot (visibility=public, token used for rate limit)
+  │     → 200: return result (visibility=public, token used for rate limit)
   │     → 404: continue
   │  3. Try GitHub App installation token
   │     → generate JWT → GET /app/installations → POST /installations/{id}/access_tokens
-  │     → 200: return snapshot (visibility=internal)
+  │     → 200: return result (visibility=internal)
   │     → 404: raise GitHubFetchError("not found")
 ```
 
@@ -144,15 +149,30 @@ PATCH /api/skills/:slug                  # forked_from_url now patchable
 
 A bool `is_private` doesn't capture the distinction between "slaclab internal" (accessible via App) and "truly private" (manually submitted, no fetch). Three-value enum `public/internal/private` allows correct badge display and fetch strategy selection.
 
----
+### ADR-P03: Shared GitHubAppClient between GitHubFetcher and GitHubScanner
 
-## Modules
+**Status:** Accepted
+
+**Context:** todo/002 introduces `GitHubScanner` in `backend/app/services/github.py` alongside the existing `GitHubFetcher`. Both need to make authenticated GitHub API calls. If each creates its own token, we get double token generation and potentially double rate-limit consumption.
+
+| Option | Pros | Cons |
+|---|---|---|
+| Shared singleton `GitHubAppClient` | One token generated, one cache, consistent fallback logic | Slight coupling between two services |
+| Independent token per class | Fully decoupled | Double token requests, two caches to invalidate |
+
+**Decision:** Shared singleton. `GitHubAppClient` is instantiated once at module level in `backend/app/services/github.py` and imported by both `GitHubFetcher` and `GitHubScanner`. Installation token cached with 1h TTL; both services benefit from the same warm cache.
 
 **GitHubFetcher (modify `backend/app/services/github.py`)**
 - Add fallback chain: unauth → PAT → App token
 - Add `GitHubAppClient` helper: generates installation JWT, caches access token (1h TTL)
 - Returns `GitHubSnapshot` + `visibility` field
 - Testable in isolation: Yes (respx mocks)
+
+**GitHubAppClient (new, `backend/app/services/github.py`)**
+- Responsibility: Generate GitHub App installation JWT, exchange for access token, cache with 1h TTL
+- Interface: `async get_token() → str | None` — returns token or None if App not configured
+- Shared singleton used by both `GitHubFetcher` and `GitHubScanner` (#002)
+- Testable in isolation: Yes (mock JWT generation + HTTP exchange)
 
 **Skill model (modify `backend/app/models/skill.py`)**
 - Add `visibility: VisibilityEnum`
@@ -184,9 +204,10 @@ A bool `is_private` doesn't capture the distinction between "slaclab internal" (
 
 **Slice 2 — GitHub App integration**
 - `GitHubAppClient`: JWT generation, installation token fetch, 1h cache
-- Fallback chain in `GitHubFetcher`
-- `visibility: internal` set when App token used
+- Fallback chain in both `GitHubFetcher` (submission/refetch) and `GitHubScanner` (scan/discovery from #002) — shared `GitHubAppClient` singleton
+- `visibility: internal` set in `SkillSnapshot` when App token was required
 - Vault secrets + k8s secret for `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY`
+- Note: #002 must ship before or alongside this slice for the scanner integration to be testable
 
 **Slice 3 — Frontend badges + instructions**
 - "SLAC Internal" badge on card and detail
@@ -210,10 +231,13 @@ A bool `is_private` doesn't capture the distinction between "slaclab internal" (
 
 - [ ] `visibility` and `forked_from_url` fields on Skill, indexed
 - [ ] GitHubFetcher fallback chain tested with mocks (unauth → PAT → App)
-- [ ] App token generation + caching unit tested
+- [ ] GitHubScanner (#002) uses shared GitHubAppClient — fallback chain tested for scan + discovery
+- [ ] App token generation + caching unit tested (including expiry + refresh)
 - [ ] `forked_from` filter on list endpoint tested
 - [ ] "SLAC Internal" badge shown in frontend for `visibility=internal`
 - [ ] "Forked from" shown on detail page
 - [ ] `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` added to vault + k8s secrets for dev/stage/prod
 - [ ] SiteSettings `github_access_instructions_url` configurable by admin
 - [ ] No private key in logs or error responses (security check)
+- [ ] Private repo scan via `/api/github-scan` returns `visibility: internal` in SkillSnapshot
+- [ ] Discovery mode (`discover=true`) works on private repos when App is configured

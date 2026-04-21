@@ -378,6 +378,8 @@ GitHub supports `sparse-checkout` but it requires a local git operation. Simpler
 - [ ] `skill_path` returned in `SkillOut` and visible on detail page
 - [ ] CLI install validates `skill_path` before file write (no `..` escape)
 - [ ] Existing bare-repo submissions unaffected (path defaults to `/`)
+- [ ] `MetadataExtractor` has no imports from GitHub-specific modules — it receives a generic `RawScanResult` (files dict + repo_meta dict) so it works with any future source type
+- [ ] `GitHubScanner` and `GitHubURLParser` are not referenced directly from the API router — the router calls them via an interface that a `LocalScanner` or `GitLabScanner` could satisfy (see #004)
 - [ ] `python-frontmatter` added to `requirements.txt`
 - [ ] Guides page and README updated with new submission instructions
 

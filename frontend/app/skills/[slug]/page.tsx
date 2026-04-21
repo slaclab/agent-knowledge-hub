@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getSkill, getRevisions } from "@/lib/api";
+import { getSkill, getRevisions, listSkills } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { ReadmeRender } from "@/components/readme-render";
@@ -9,7 +9,7 @@ import { StarRating } from "@/components/star-rating";
 import { FlagIndicator } from "@/components/flag-indicator";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
-import { ExternalLink, GitFork, RefreshCw } from "lucide-react";
+import { ExternalLink, GitFork, Lock } from "lucide-react";
 
 interface PageProps {
   params: { slug: string };
@@ -30,6 +30,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
 
   const revisions = await getRevisions(params.slug, true);
 
+  // Fetch forks of this skill in the catalog (FR-P16)
+  const forksData = await listSkills({ forked_from: skill.repo_url, page_size: 3, server: true });
+  const forkCount = forksData?.total ?? 0;
+
+  const isInternal = skill.visibility === "internal";
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Superseded notice */}
@@ -44,6 +50,16 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold">{skill.name}</h1>
             {skill.entry_type === "marketplace_ref" && (
               <span className="rounded-full border px-2 py-0.5 text-xs">ref</span>
+            )}
+            {isInternal && (
+              <a
+                href="/guides/slac-github-access"
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
+                title="Requires SLAC GitHub access"
+              >
+                <Lock className="h-3 w-3" />
+                SLAC Members Only
+              </a>
             )}
             <FlagIndicator count={skill.flag_count} />
           </div>
@@ -65,7 +81,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <ExternalLink className="h-4 w-4" />
             View on GitHub
           </a>
-          {/* Edit button (shown to all; auth check is client-side in edit page) */}
           <Link
             href={`/skills/${skill.slug}/edit`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
@@ -75,10 +90,19 @@ export default async function SkillDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {/* SLAC Members Only info banner */}
+      {isInternal && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>SLAC Members Only</strong> — This repo requires SLAC GitHub access to clone.{" "}
+          <a href="/guides/slac-github-access" className="underline">
+            Learn how to get access.
+          </a>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Tabs: Overview / Revisions */}
           <div className="space-y-4">
             {skill.readme_html ? (
               <div className="rounded-lg border p-6">
@@ -147,6 +171,40 @@ export default async function SkillDetailPage({ params }: PageProps) {
               </div>
             </dl>
           </div>
+
+          {/* Fork provenance (FR-P8) */}
+          {skill.forked_from_url && (
+            <div className="rounded-lg border p-4 space-y-1">
+              <h3 className="text-sm font-semibold">Fork Provenance</h3>
+              <p className="text-sm text-muted-foreground">
+                Forked from{" "}
+                <a
+                  href={skill.forked_from_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-foreground underline"
+                >
+                  {skill.forked_from_url.replace("https://github.com/", "")}
+                </a>
+              </p>
+            </div>
+          )}
+
+          {/* Forks in catalog (FR-P16) */}
+          {forkCount > 0 && (
+            <div className="rounded-lg border p-4 space-y-1">
+              <h3 className="text-sm font-semibold">Forks in Catalog</h3>
+              <p className="text-sm text-muted-foreground">
+                {forkCount} fork{forkCount !== 1 ? "s" : ""} in the catalog.{" "}
+                <Link
+                  href={`/skills?forked_from=${encodeURIComponent(skill.repo_url)}`}
+                  className="text-primary underline"
+                >
+                  View all
+                </Link>
+              </p>
+            </div>
+          )}
 
           {/* Platforms */}
           {skill.compatible_platforms.length > 0 && (

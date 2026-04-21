@@ -1,5 +1,6 @@
 export type EntryType = "skill" | "marketplace_ref";
 export type SkillStatus = "active" | "deactivated";
+export type VisibilityType = "public" | "internal" | "private";
 
 export interface Skill {
   id: string;
@@ -24,6 +25,8 @@ export interface Skill {
   rating_count: number;
   flag_count: number;
   uses_agent_gateway: boolean;
+  visibility: VisibilityType;
+  forked_from_url: string | null;
 }
 
 export interface PaginatedSkills {
@@ -61,6 +64,7 @@ export interface SkillUpdate {
   version?: string;
   license?: string;
   changelog_note?: string;
+  forked_from_url?: string;
 }
 
 export interface User {
@@ -74,6 +78,7 @@ export interface GitHubPreview {
   stars: number;
   license: string | null;
   last_commit_at: string | null;
+  visibility: VisibilityType;
 }
 
 export type SortOption = "newest" | "highest_rated" | "most_rated" | "most_stars";
@@ -84,4 +89,6 @@ export interface SkillListParams {
   sort?: SortOption;
   page?: number;
   page_size?: number;
+  forked_from?: string;
+  visibility?: VisibilityType | "all";
 }

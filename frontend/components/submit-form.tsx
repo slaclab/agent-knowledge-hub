@@ -112,6 +112,16 @@ export function SubmitForm() {
             )}
           </div>
         )}
+        {/* Internal repo warning banner (FR-P17) */}
+        {preview?.visibility === "internal" && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            This repo requires SLAC GitHub access. Users without access will see a{" "}
+            <strong>SLAC Members Only</strong> badge with instructions on how to get access.{" "}
+            <a href="/guides/slac-github-access" className="underline" target="_blank">
+              Learn more
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Name */}

@@ -51,6 +51,8 @@ export async function listSkills(
   if (rest.sort) qs.set("sort", rest.sort);
   if (rest.page) qs.set("page", String(rest.page));
   if (rest.page_size) qs.set("page_size", String(rest.page_size));
+  if (rest.forked_from) qs.set("forked_from", rest.forked_from);
+  if (rest.visibility) qs.set("visibility", rest.visibility);
   const { data } = await request<PaginatedSkills>(apiBase(server), `/skills?${qs}`);
   return data;
 }

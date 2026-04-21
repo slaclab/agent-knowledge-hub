@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.auth import User, get_current_user
 from app.models.revision import SkillRevision
 from app.models.skill import SkillStatus
 from app.schemas.skill import (
+    GitHubPreviewOut,
     PaginatedSkills,
     RevisionOut,
     SkillCreate,
@@ -18,6 +19,7 @@ from app.schemas.skill import (
 from app.services.skill import SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
+github_router = APIRouter(prefix="/api")
 
 
 def _skill_to_out(skill) -> SkillOut:
@@ -39,6 +41,8 @@ def _skill_to_out(skill) -> SkillOut:
         last_commit_at=skill.last_commit_at,
         readme_fetched_at=skill.readme_fetched_at,
         uses_agent_gateway=skill.uses_agent_gateway,
+        visibility=skill.visibility,
+        forked_from_url=skill.forked_from_url,
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
@@ -61,6 +65,8 @@ def _skill_to_list_out(skill) -> SkillListOut:
         avg_rating=skill.avg_rating,
         rating_count=skill.rating_count,
         flag_count=skill.flag_count,
+        visibility=skill.visibility,
+        forked_from_url=skill.forked_from_url,
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
@@ -73,8 +79,13 @@ async def list_skills(
     sort: SortField = Query("newest"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    forked_from: Optional[str] = Query(None, description="Filter by upstream fork URL"),
+    visibility: Optional[str] = Query(None, description="Filter by visibility: public, internal, all"),
 ):
-    items, total = await skill_repository.list(q=q, sort=sort, page=page, page_size=page_size)
+    items, total = await skill_repository.list(
+        q=q, sort=sort, page=page, page_size=page_size,
+        forked_from=forked_from, visibility=visibility,
+    )
     return PaginatedSkills(
         items=[_skill_to_list_out(s) for s in items],
         total=total,
@@ -194,4 +205,28 @@ async def get_revision(slug: str, n: int):
         changelog_note=rev.changelog_note,
         created_at=rev.created_at,
         snapshot=rev.snapshot,
+    )
+
+
+@github_router.get("/github-preview", response_model=GitHubPreviewOut)
+async def github_preview(
+    repo_url: str = Query(..., description="GitHub repo URL to preview"),
+    request: Request = None,
+):
+    """Preview GitHub repo metadata using the shared fallback chain (unauth → PAT → App token).
+
+    Rate limited to 10 req/min per IP by the rate-limiter middleware.
+    """
+    from app.services.github import GitHubFetchError, github_fetcher
+    try:
+        snapshot = await github_fetcher.fetch(repo_url)
+    except GitHubFetchError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return GitHubPreviewOut(
+        name=snapshot.name,
+        description=snapshot.description,
+        stars=snapshot.stars,
+        license=snapshot.license,
+        last_commit_at=snapshot.last_commit_at,
+        visibility=snapshot.visibility,
     )

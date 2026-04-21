@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from beanie import Document, Indexed
+from pymongo import IndexModel, ASCENDING, DESCENDING
 from pydantic import Field
 
 
@@ -16,6 +17,12 @@ class EntryType(str, enum.Enum):
 class SkillStatus(str, enum.Enum):
     active = "active"
     deactivated = "deactivated"
+
+
+class VisibilityEnum(str, enum.Enum):
+    public = "public"
+    internal = "internal"   # fetched via GitHub App (slaclab private)
+    private = "private"     # manually submitted, no fetch possible
 
 
 class Skill(Document):
@@ -37,9 +44,12 @@ class Skill(Document):
     readme_fetched_at: Optional[datetime] = None
     uses_agent_gateway: bool = False
 
+    visibility: VisibilityEnum = VisibilityEnum.public
+    forked_from_url: Optional[str] = None
+
     submitter_id: str
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Denormalized community aggregates
     avg_rating: float = 0.0
@@ -50,4 +60,6 @@ class Skill(Document):
         name = "skills"
         indexes = [
             [("name", "text"), ("description", "text")],
+            IndexModel([("forked_from_url", ASCENDING)], sparse=True),
+            IndexModel([("visibility", ASCENDING), ("submitted_at", DESCENDING)]),
         ]

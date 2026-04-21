@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(me.router)
     app.include_router(skills.router)
+    app.include_router(skills.github_router)
 
     return app
 

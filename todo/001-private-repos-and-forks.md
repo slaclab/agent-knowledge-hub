@@ -1,7 +1,8 @@
 # 001 — Private/Internal GitHub Repos, Access Model, and Fork Provenance
 
-**Status:** 🔍 Reviewed
+**Status:** 🔄 In Progress
 **Depends on:** #002 (Slice 2 requires GitHubScanner from #002 to be in place)
+**Branch:** feat/private-repos-and-forks
 
 ---
 

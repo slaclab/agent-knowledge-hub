@@ -1,6 +1,6 @@
 import { listSkills } from "@/lib/api";
 import { SkillList } from "@/components/skill-list";
-import type { SortOption } from "@/types/skill";
+import type { SortOption, VisibilityType } from "@/types/skill";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -10,6 +10,8 @@ interface PageProps {
     labels?: string;
     sort?: string;
     page?: string;
+    forked_from?: string;
+    visibility?: string;
   };
 }
 
@@ -18,8 +20,14 @@ export default async function SkillsPage({ searchParams }: PageProps) {
   const labels = searchParams.labels ? searchParams.labels.split(",").filter(Boolean) : [];
   const sort = (searchParams.sort as SortOption) ?? "newest";
   const page = Number(searchParams.page ?? 1);
+  const forkedFrom = searchParams.forked_from;
+  const visibility = searchParams.visibility as VisibilityType | "all" | undefined;
 
-  const data = await listSkills({ q, labels, sort, page, page_size: 20, server: true });
+  const data = await listSkills({
+    q, labels, sort, page, page_size: 20, server: true,
+    forked_from: forkedFrom,
+    visibility: visibility !== "all" ? visibility : undefined,
+  });
 
   if (!data) {
     return (
@@ -46,7 +54,14 @@ export default async function SkillsPage({ searchParams }: PageProps) {
         </Link>
       </div>
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
-        <SkillList data={data} sort={sort} q={q} labels={labels} />
+        <SkillList
+          data={data}
+          sort={sort}
+          q={q}
+          labels={labels}
+          forkedFrom={forkedFrom}
+          visibility={visibility}
+        />
       </Suspense>
     </div>
   );

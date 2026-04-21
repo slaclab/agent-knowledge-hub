@@ -479,10 +479,9 @@ export function SubmitForm({
 }
 
 function DiscoveryCard({
-  draft, index, onToggleSelect, onToggleExpand, onUpdate, onTogglePlatform,
+  draft, onToggleSelect, onToggleExpand, onUpdate, onTogglePlatform,
 }: {
   draft: SkillDraft;
-  index: number;
   onToggleSelect: () => void;
   onToggleExpand: () => void;
   onUpdate: (patch: Partial<SkillDraft>) => void;

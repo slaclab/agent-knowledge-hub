@@ -5,7 +5,7 @@ import { useCallback, Suspense } from "react";
 import Link from "next/link";
 import { SkillCard } from "./skill-card";
 import { SortSelect } from "./sort-select";
-import type { PaginatedSkills, SortOption } from "@/types/skill";
+import type { PaginatedSkills, SortOption, VisibilityType } from "@/types/skill";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface SkillListProps {
@@ -13,9 +13,18 @@ interface SkillListProps {
   sort: SortOption;
   q: string;
   labels: string[];
+  forkedFrom?: string;
+  visibility?: VisibilityType | "all";
+  accessInstructionsUrl?: string;
 }
 
-export function SkillList({ data, sort, q, labels }: SkillListProps) {
+const VISIBILITY_OPTIONS: { value: VisibilityType | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "public", label: "Public only" },
+  { value: "internal", label: "SLAC Only" },
+];
+
+export function SkillList({ data, sort, q, labels, forkedFrom, visibility, accessInstructionsUrl }: SkillListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -24,6 +33,17 @@ export function SkillList({ data, sort, q, labels }: SkillListProps) {
     (page: number) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(page));
+      router.push(`${pathname}?${params}`);
+    },
+    [router, searchParams, pathname],
+  );
+
+  const setVisibility = useCallback(
+    (v: VisibilityType | "all") => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (v === "all") params.delete("visibility");
+      else params.set("visibility", v);
+      params.delete("page");
       router.push(`${pathname}?${params}`);
     },
     [router, searchParams, pathname],
@@ -42,6 +62,8 @@ export function SkillList({ data, sort, q, labels }: SkillListProps) {
     [router, searchParams, pathname],
   );
 
+  const currentVisibility = visibility ?? "all";
+
   return (
     <div className="space-y-4">
       {/* Controls */}
@@ -49,8 +71,29 @@ export function SkillList({ data, sort, q, labels }: SkillListProps) {
         <span className="text-sm text-muted-foreground">
           {data.total} skill{data.total !== 1 ? "s" : ""}
           {q && <> matching &ldquo;{q}&rdquo;</>}
+          {forkedFrom && (
+            <> forked from{" "}
+              <span className="font-medium">{forkedFrom.replace("https://github.com/", "")}</span>
+            </>
+          )}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {/* Visibility filter (FR-P15) */}
+          <div className="flex items-center rounded-md border overflow-hidden text-xs">
+            {VISIBILITY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setVisibility(opt.value)}
+                className={`px-2.5 py-1 transition-colors ${
+                  currentVisibility === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           {labels.map((l) => (
             <button
               key={l}
@@ -79,7 +122,7 @@ export function SkillList({ data, sort, q, labels }: SkillListProps) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.items.map((skill) => (
-            <SkillCard key={skill.id} skill={skill} />
+            <SkillCard key={skill.id} skill={skill} accessInstructionsUrl={accessInstructionsUrl} />
           ))}
         </div>
       )}

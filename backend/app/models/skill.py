@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from beanie import Document, Indexed
-from pydantic import Field
+from pymongo import IndexModel, ASCENDING, DESCENDING
+from pydantic import Field, field_validator
 
 
 class EntryType(str, enum.Enum):
@@ -18,10 +19,16 @@ class SkillStatus(str, enum.Enum):
     deactivated = "deactivated"
 
 
+class VisibilityEnum(str, enum.Enum):
+    public = "public"
+    internal = "internal"   # fetched via GitHub App (slaclab private)
+    private = "private"     # manually submitted, no fetch possible
+
+
 class Skill(Document):
     slug: Indexed(str, unique=True)  # type: ignore[valid-type]
     name: str
-    repo_url: Indexed(str, unique=True)  # type: ignore[valid-type]
+    repo_url: str
     entry_type: EntryType = EntryType.skill
     status: SkillStatus = SkillStatus.active
     deactivation_reason: Optional[str] = None
@@ -37,9 +44,25 @@ class Skill(Document):
     readme_fetched_at: Optional[datetime] = None
     uses_agent_gateway: bool = False
 
+    visibility: VisibilityEnum = VisibilityEnum.public
+    forked_from_url: Optional[str] = None
+    skill_path: str = "/"
+
+    @field_validator("skill_path")
+    @classmethod
+    def validate_skill_path(cls, v: str) -> str:
+        if not v.startswith("/"):
+            v = "/" + v
+        parts = v.strip("/").split("/") if v.strip("/") else []
+        if any(p == ".." for p in parts):
+            raise ValueError("skill_path must not contain '..' components")
+        if len(v) > 500:
+            raise ValueError("skill_path must be <= 500 characters")
+        return v
+
     submitter_id: str
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Denormalized community aggregates
     avg_rating: float = 0.0
@@ -50,4 +73,7 @@ class Skill(Document):
         name = "skills"
         indexes = [
             [("name", "text"), ("description", "text")],
+            IndexModel([("forked_from_url", ASCENDING)], sparse=True, name="forked_from_url_sparse"),
+            IndexModel([("visibility", ASCENDING), ("submitted_at", DESCENDING)], name="visibility_submitted_at"),
+            IndexModel([("repo_url", ASCENDING), ("skill_path", ASCENDING)], unique=True, name="repo_url_skill_path_unique"),
         ]

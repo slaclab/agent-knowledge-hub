@@ -5,6 +5,7 @@ REGISTRY         ?= docker.io/slaclab
 TAG              ?= dev
 CONTAINER_RT     ?= sudo podman
 MONGO_SECRET_PATH ?= secret/tid/agent-knowledge-hub-dev/mongo
+APP_SECRET_PATH   ?= secret/tid/agent-knowledge-hub-dev/app
 
 .PHONY: apply diff destroy rollout-restart dump operator-apply secrets clean-secrets create-db-user docker-build docker-push
 
@@ -23,6 +24,9 @@ secrets:
 	 MONGO_PASS=$$(vault kv get --field=MONGODB_APP_PASSWORD $(MONGO_SECRET_PATH)) && \
 	 echo -n "mongodb://$${MONGO_USER}:$${MONGO_PASS}@mongodb-mongos.$(NAMESPACE).svc.cluster.local/agent-skills?authSource=agent-skills" \
 	   > etc/.secrets/MONGO_URI
+	@set -e; for i in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do \
+	  vault kv get --field=$$i $(APP_SECRET_PATH) > etc/.secrets/$$i; \
+	done
 
 create-db-user: ensure-context
 	@APP_USER=$$(vault kv get --field=MONGODB_APP_USER $(MONGO_SECRET_PATH)) && \

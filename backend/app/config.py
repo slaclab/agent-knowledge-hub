@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     # Comma-separated list of SLAC usernames with admin rights
     admin_users: str = ""
 
+    # GitHub App credentials (optional; enables private/internal repo support)
+    github_app_id: Optional[str] = None
+    github_app_private_key: Optional[str] = None
+
+    # Comma-separated GitHub orgs known to be private (skip unauthenticated fallback)
+    github_private_orgs: str = "slaclab"
+
+    # URL shown in "SLAC Members Only" badge; configurable by admin
+    github_access_instructions_url: str = "/guides/slac-github-access"
+
     @property
     def admin_user_set(self) -> set[str]:
         return {u.strip() for u in self.admin_users.split(",") if u.strip()}

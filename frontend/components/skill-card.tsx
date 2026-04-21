@@ -1,18 +1,20 @@
 import { cn } from "@/lib/utils";
 import type { Skill } from "@/types/skill";
 import Link from "next/link";
-import { Star, GitFork, AlertTriangle, ArrowRight } from "lucide-react";
+import { GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
 import { PlatformBadges } from "./platform-badges";
 import { StarRating } from "./star-rating";
 import { FlagIndicator } from "./flag-indicator";
 
 interface SkillCardProps {
   skill: Skill;
+  accessInstructionsUrl?: string;
 }
 
-export function SkillCard({ skill }: SkillCardProps) {
+export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-access" }: SkillCardProps) {
   const isDeactivated = skill.status === "deactivated";
   const isSuperseded = !!skill.superseded_by_slug;
+  const isInternal = skill.visibility === "internal";
 
   return (
     <Link
@@ -31,6 +33,17 @@ export function SkillCard({ skill }: SkillCardProps) {
                 ref
               </span>
             )}
+            {isInternal && (
+              <a
+                href={accessInstructionsUrl}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
+                title="Requires SLAC GitHub access"
+              >
+                <Lock className="h-3 w-3" />
+                SLAC Only
+              </a>
+            )}
             {isDeactivated && (
               <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
                 deactivated
@@ -47,14 +60,22 @@ export function SkillCard({ skill }: SkillCardProps) {
           {skill.description && (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{skill.description}</p>
           )}
+          {skill.forked_from_url && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Fork of{" "}
+              <a
+                href={skill.forked_from_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="underline hover:text-foreground"
+              >
+                {skill.forked_from_url.replace("https://github.com/", "")}
+              </a>
+            </p>
+          )}
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          {skill.github_stars !== null && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Star className="h-3 w-3" />
-              {skill.github_stars.toLocaleString()}
-            </span>
-          )}
           <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
         </div>
       </div>

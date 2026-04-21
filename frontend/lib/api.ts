@@ -7,6 +7,8 @@ import type {
   User,
   GitHubPreview,
   SkillListParams,
+  SkillScanSnapshot,
+  DiscoverResult,
 } from "@/types/skill";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
@@ -25,6 +27,7 @@ async function request<T>(
 ): Promise<{ data: T | null; error: string | null; status: number }> {
   const res = await fetch(`${b}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
     ...init,
   });
   if (res.status === 204) return { data: null, error: null, status: 204 };
@@ -51,6 +54,8 @@ export async function listSkills(
   if (rest.sort) qs.set("sort", rest.sort);
   if (rest.page) qs.set("page", String(rest.page));
   if (rest.page_size) qs.set("page_size", String(rest.page_size));
+  if (rest.forked_from) qs.set("forked_from", rest.forked_from);
+  if (rest.visibility) qs.set("visibility", rest.visibility);
   const { data } = await request<PaginatedSkills>(apiBase(server), `/skills?${qs}`);
   return data;
 }
@@ -108,10 +113,40 @@ export async function getRevisions(slug: string, server = false): Promise<SkillR
   return data ?? [];
 }
 
+export async function getSettings(server = false): Promise<{ github_access_instructions_url: string }> {
+  const fallback = { github_access_instructions_url: "/guides/slac-github-access" };
+  try {
+    const { data } = await request<{ github_access_instructions_url: string }>(
+      apiBase(server),
+      "/settings",
+    );
+    return data ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getGithubPreview(
   repoUrl: string,
 ): Promise<{ data: GitHubPreview | null; error: string | null }> {
   const qs = new URLSearchParams({ repo_url: repoUrl });
   const r = await request<GitHubPreview>(CLIENT_BASE, `/github-preview?${qs}`);
+  return { data: r.data, error: r.error };
+}
+
+export async function getGithubScan(
+  url: string,
+  discover = false,
+): Promise<{ data: SkillScanSnapshot | null; error: string | null; status: number }> {
+  const qs = new URLSearchParams({ url, discover: String(discover) });
+  const r = await request<SkillScanSnapshot>(CLIENT_BASE, `/github-scan?${qs}`);
+  return { data: r.data, error: r.error, status: r.status };
+}
+
+export async function getGithubDiscover(
+  url: string,
+): Promise<{ data: DiscoverResult | null; error: string | null }> {
+  const qs = new URLSearchParams({ url, discover: "true" });
+  const r = await request<DiscoverResult>(CLIENT_BASE, `/github-scan?${qs}`);
   return { data: r.data, error: r.error };
 }

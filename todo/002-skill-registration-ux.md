@@ -1,6 +1,6 @@
 # 002 — Improved Skill Registration UX: Directory-Aware Submission
 
-**Status:** 🔍 Reviewed
+**Status:** 🏁 Implementation Done
 
 ---
 
@@ -357,31 +357,31 @@ GitHub supports `sparse-checkout` but it requires a local git operation. Simpler
 
 ## Definition of Done
 
-- [ ] `skill_path` field on Skill model, compound unique index on (repo_url, skill_path)
-- [ ] Old `repo_url_1` unique index explicitly dropped in startup lifespan before compound index created
-- [ ] `skill_path` validated at write time: leading `/` stripped, `..` components rejected
-- [ ] `GitHubURLParser` handles bare repo + tree/branch/path URLs, validates github.com, unit tested
-- [ ] `GitHubURLParser` documents limitation: branch names with slashes not supported
-- [ ] `MetadataExtractor` priority rules unit tested for all field extraction paths
-- [ ] `GitHubScanner` constructs all outbound URLs from parsed components (never raw user URL)
-- [ ] `GET /api/github-scan` FastAPI endpoint (auth-gated) + Next.js proxy route
-- [ ] `GET /api/github-scan` returns full snapshot in < 3s for a 10-file directory
-- [ ] Discovery detects `truncated: true` and returns warning + fallback guidance
-- [ ] Discovery capped at 20 concurrent scans; returns `capped: true` if exceeded
-- [ ] Submit form: explicit "Scan" button as primary trigger; Submit disabled during scan
-- [ ] Submit form: placeholder and helper text show both URL formats
-- [ ] Duplicate check surfaced at scan time (warning + link); enforced at submit (409)
-- [ ] Distinct error UX for: no-files (yellow), 404 (red), 409 (amber), rate-limit (amber)
-- [ ] Client-side timeout: 10s single scan, 30s discovery, with retry prompt
-- [ ] Discovery mode: collapsed cards by default, select-all toggle, count on submit button
-- [ ] 409 on duplicate (repo_url + skill_path) with link to existing entry
-- [ ] `skill_path` returned in `SkillOut` and visible on detail page
-- [ ] CLI install validates `skill_path` before file write (no `..` escape)
-- [ ] Existing bare-repo submissions unaffected (path defaults to `/`)
-- [ ] `MetadataExtractor` has no imports from GitHub-specific modules — it receives a generic `RawScanResult` (files dict + repo_meta dict) so it works with any future source type
-- [ ] `GitHubScanner` and `GitHubURLParser` are not referenced directly from the API router — the router calls them via an interface that a `LocalScanner` or `GitLabScanner` could satisfy (see #004)
-- [ ] `python-frontmatter` added to `requirements.txt`
-- [ ] Guides page and README updated with new submission instructions
+- [x] `skill_path` field on Skill model, compound unique index on (repo_url, skill_path)
+- [x] Old `repo_url_1` unique index explicitly dropped in startup lifespan before compound index created
+- [x] `skill_path` validated at write time: leading `/` stripped, `..` components rejected
+- [x] `GitHubURLParser` handles bare repo + tree/branch/path URLs, validates github.com, unit tested
+- [x] `GitHubURLParser` documents limitation: branch names with slashes not supported
+- [x] `MetadataExtractor` priority rules unit tested for all field extraction paths
+- [x] `GitHubScanner` constructs all outbound URLs from parsed components (never raw user URL)
+- [x] `GET /api/github-scan` FastAPI endpoint (auth-gated) + Next.js proxy route
+- [x] `GET /api/github-scan` returns full snapshot in < 3s for a 10-file directory
+- [x] Discovery detects `truncated: true` and returns warning + fallback guidance
+- [x] Discovery capped at 20 concurrent scans; returns `capped: true` if exceeded
+- [x] Submit form: explicit "Scan" button as primary trigger; Submit disabled during scan
+- [x] Submit form: placeholder and helper text show both URL formats
+- [x] Duplicate check surfaced at scan time (warning + link); enforced at submit (409)
+- [x] Distinct error UX for: no-files (yellow), 404 (red), 409 (amber), rate-limit (amber)
+- [x] Client-side timeout: 10s single scan, 30s discovery, with retry prompt
+- [x] Discovery mode: collapsed cards by default, select-all toggle, count on submit button
+- [x] 409 on duplicate (repo_url + skill_path) with link to existing entry
+- [x] `skill_path` returned in `SkillOut` and visible on detail page
+- [x] CLI install validates `skill_path` before file write (no `..` escape)
+- [x] Existing bare-repo submissions unaffected (path defaults to `/`)
+- [x] `MetadataExtractor` has no imports from GitHub-specific modules — it receives a generic `RawScanResult` (files dict + repo_meta dict) so it works with any future source type
+- [x] `GitHubScanner` and `GitHubURLParser` are not referenced directly from the API router — the router calls them via an interface that a `LocalScanner` or `GitLabScanner` could satisfy (see #004)
+- [x] `python-frontmatter` added to `requirements.txt`
+- [x] Guides page and README updated with new submission instructions
 
 ---
 

@@ -3,4 +3,5 @@
 | # | Title | Status |
 |---|-------|--------|
 | [001](todo/001-private-repos-and-forks.md) | Private/internal GitHub repos, access model, and fork provenance | ⬜ Open |
+| [002](todo/002-skill-registration-ux.md) | Improved Skill Registration UX: Directory-Aware Submission | 🔍 Reviewed |
 | [003](todo/003-label-ux.md) | Label UX: community tagging, filter, admin rename/merge/delete | ⬜ Open |

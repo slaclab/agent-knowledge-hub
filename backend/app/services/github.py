@@ -257,7 +257,7 @@ github_url_parser = GitHubURLParser()
 # RawScanResult
 # ---------------------------------------------------------------------------
 
-_SKILL_FILES = {"skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml"}
+_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml"}
 
 
 class RawScanResult(BaseModel):
@@ -465,7 +465,7 @@ class GitHubScanner:
             if item.get("type") == "blob":
                 path = item.get("path", "")
                 fname = path.rsplit("/", 1)[-1] if "/" in path else ""
-                if fname in ("skill.md", "CLAUDE.md"):
+                if fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
                     dirpath = path.rsplit("/", 1)[0] if "/" in path else "/"
                     skill_file_dirs.add(dirpath)
 
@@ -549,7 +549,7 @@ class MetadataExtractor:
             return {}, content
 
     def _extract_name(self, files: dict, repo: dict, ref: GitHubRef) -> Optional[str]:
-        for fname in ("skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("name"):
@@ -572,7 +572,7 @@ class MetadataExtractor:
         return repo.get("name")
 
     def _extract_description(self, files: dict, repo: dict) -> Optional[str]:
-        for fname in ("skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, content = self._frontmatter(files[fname])
                 if meta.get("description"):
@@ -584,13 +584,13 @@ class MetadataExtractor:
         return repo.get("description")
 
     def _extract_platforms(self, files: dict) -> List[str]:
-        for fname in ("skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("platforms"):
                     return [str(p) for p in meta["platforms"]]
         platforms: List[str] = []
-        if "CLAUDE.md" in files:
+        if "CLAUDE.md" in files or "SKILL.md" in files or "skill.md" in files:
             platforms.append("claude-code")
         if "package.json" in files:
             try:
@@ -605,7 +605,7 @@ class MetadataExtractor:
         return platforms
 
     def _extract_version(self, files: dict) -> Optional[str]:
-        for fname in ("skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("version"):

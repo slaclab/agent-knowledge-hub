@@ -23,7 +23,11 @@ def get_current_user(request: Request) -> User:
                 detail="AUTH_MODE=dev but DEV_USER is not set",
             )
     else:
-        user_id = request.headers.get("X-Forwarded-User")
+        user_id = (
+            request.headers.get("X-Vouch-Idp-Claims-Name")
+            or request.headers.get("X-Vouch-User")
+            or request.headers.get("X-Forwarded-User")
+        )
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

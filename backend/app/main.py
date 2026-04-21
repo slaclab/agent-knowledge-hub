@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import asyncio
+import logging
 
 import beanie
 from fastapi import FastAPI, Request
@@ -15,19 +17,24 @@ from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
 from app.routers import github_scan
 
+logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Connecting to MongoDB...")
     client = AsyncIOMotorClient(settings.mongo_uri)
     db = client.get_default_database()
-    # Drop old repo_url single-column unique index before Beanie creates the new compound one
+    logger.info("Dropping legacy repo_url_1 index (if present)...")
     try:
-        await db["skills"].drop_index("repo_url_1")
-    except Exception:
-        pass
+        await asyncio.wait_for(db["skills"].drop_index("repo_url_1"), timeout=5.0)
+        logger.info("Dropped repo_url_1 index")
+    except Exception as e:
+        logger.info("drop_index repo_url_1 skipped: %s", e)
+    logger.info("Initialising Beanie...")
     await beanie.init_beanie(database=db, document_models=ALL_MODELS)
+    logger.info("Beanie ready.")
     yield
     client.close()
 

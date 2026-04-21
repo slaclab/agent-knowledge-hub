@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { Skill } from "@/types/skill";
 import Link from "next/link";
-import { Star, GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
+import { GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
 import { PlatformBadges } from "./platform-badges";
 import { StarRating } from "./star-rating";
 import { FlagIndicator } from "./flag-indicator";
@@ -76,12 +76,6 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
           )}
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          {skill.github_stars !== null && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Star className="h-3 w-3" />
-              {skill.github_stars.toLocaleString()}
-            </span>
-          )}
           <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
         </div>
       </div>

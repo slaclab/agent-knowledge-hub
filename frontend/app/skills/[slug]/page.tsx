@@ -9,7 +9,7 @@ import { StarRating } from "@/components/star-rating";
 import { FlagIndicator } from "@/components/flag-indicator";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
-import { ExternalLink, GitFork, Lock } from "lucide-react";
+import { GitFork, Lock } from "lucide-react";
 
 interface PageProps {
   params: { slug: string };
@@ -76,15 +76,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <a
-            href={skill.skill_path && skill.skill_path !== "/" ? `${skill.repo_url}/tree/HEAD${skill.skill_path}` : skill.repo_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
-            <ExternalLink className="h-4 w-4" />
-            View on GitHub
-          </a>
           <Link
             href={`/skills/${skill.slug}/edit`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
@@ -169,12 +160,22 @@ export default async function SkillDetailPage({ params }: PageProps) {
                   <dd>{formatDate(skill.last_commit_at)}</dd>
                 </div>
               )}
-              {skill.skill_path && skill.skill_path !== "/" && (
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground shrink-0">Directory</dt>
-                  <dd className="font-mono text-xs truncate">{skill.skill_path}</dd>
-                </div>
-              )}
+              <div className="space-y-1">
+                <dt className="text-muted-foreground">Repository</dt>
+                <dd>
+                  <a
+                    href={skill.skill_path && skill.skill_path !== "/"
+                      ? `${skill.repo_url}/tree/HEAD${skill.skill_path}`
+                      : skill.repo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs break-all hover:underline"
+                  >
+                    {skill.repo_url.replace("https://github.com/", "")}
+                    {skill.skill_path && skill.skill_path !== "/" ? skill.skill_path : ""}
+                  </a>
+                </dd>
+              </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Updated</dt>
                 <dd>{formatDate(skill.updated_at)}</dd>

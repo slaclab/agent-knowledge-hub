@@ -16,9 +16,8 @@ configMapGenerator:
   - name: backend-config
     literals:
       - GITHUB_API_URL=https://api.github.com
-      - AUTH_MODE=dev
-      - DEV_USER=devuser
-      - ADMIN_USERS=devuser
+      - AUTH_MODE=vouchproxy
+      - ADMIN_USERS=ytl
     options:
       disableNameSuffixHash: true
 

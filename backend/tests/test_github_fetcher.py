@@ -2,7 +2,7 @@ import pytest
 import respx
 import httpx
 
-from app.services.github import GitHubFetcher, GitHubFetchError
+from app.services.github import GitHubFetcher, GitHubFetchError, github_url_parser
 
 
 FAKE_REPO_RESPONSE = {
@@ -66,3 +66,39 @@ async def test_fetch_no_readme():
     fetcher = GitHubFetcher()
     snap = await fetcher.fetch("https://github.com/slaclab/no-readme")
     assert snap.readme_html is None
+
+
+def test_url_parser_tree():
+    ref = github_url_parser.parse("https://github.com/owner/repo/tree/main/some/path")
+    assert ref.owner == "owner"
+    assert ref.repo == "repo"
+    assert ref.branch == "main"
+    assert ref.path == "/some/path"
+
+
+def test_url_parser_blob_nested():
+    ref = github_url_parser.parse(
+        "https://github.com/alirezarezvani/claude-skills/blob/main/engineering/SKILL.md"
+    )
+    assert ref.owner == "alirezarezvani"
+    assert ref.repo == "claude-skills"
+    assert ref.branch == "main"
+    assert ref.path == "/engineering"
+
+
+def test_url_parser_blob_root():
+    ref = github_url_parser.parse(
+        "https://github.com/owner/repo/blob/main/SKILL.md"
+    )
+    assert ref.owner == "owner"
+    assert ref.repo == "repo"
+    assert ref.branch == "main"
+    assert ref.path == "/"
+
+
+def test_url_parser_root():
+    ref = github_url_parser.parse("https://github.com/owner/repo")
+    assert ref.owner == "owner"
+    assert ref.repo == "repo"
+    assert ref.branch is None
+    assert ref.path == "/"

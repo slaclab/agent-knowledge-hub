@@ -21,7 +21,7 @@ interface SkillListProps {
 const VISIBILITY_OPTIONS: { value: VisibilityType | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "public", label: "Public only" },
-  { value: "internal", label: "SLAC Members Only" },
+  { value: "internal", label: "SLAC Only" },
 ];
 
 export function SkillList({ data, sort, q, labels, forkedFrom, visibility, accessInstructionsUrl }: SkillListProps) {

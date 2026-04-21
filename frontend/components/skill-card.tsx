@@ -41,7 +41,7 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
                 title="Requires SLAC GitHub access"
               >
                 <Lock className="h-3 w-3" />
-                SLAC Members Only
+                SLAC Only
               </a>
             )}
             {isDeactivated && (

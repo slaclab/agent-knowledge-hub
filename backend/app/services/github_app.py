@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubAppClient:
@@ -60,6 +63,7 @@ class GitHubAppClient:
         try:
             import jwt
         except ImportError:
+            logger.error("PyJWT not installed — cannot generate GitHub App token")
             return None
 
         now = int(datetime.now(timezone.utc).timestamp())
@@ -70,7 +74,8 @@ class GitHubAppClient:
         }
         try:
             app_jwt = jwt.encode(payload, settings.github_app_private_key, algorithm="RS256")
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to sign GitHub App JWT: %s", e)
             return None
 
         async with httpx.AsyncClient(timeout=10) as client:
@@ -83,10 +88,18 @@ class GitHubAppClient:
                 },
             )
             if installations_resp.status_code != 200:
+                logger.error(
+                    "GitHub App installations request failed: %s %s",
+                    installations_resp.status_code, installations_resp.text[:200],
+                )
                 return None
 
             installations = installations_resp.json()
             if not installations:
+                logger.error(
+                    "GitHub App (id=%s) has no installations — install it on the target org",
+                    settings.github_app_id,
+                )
                 return None
             installation_id = installations[0]["id"]
 
@@ -99,11 +112,14 @@ class GitHubAppClient:
                 },
             )
             if token_resp.status_code != 201:
+                logger.error(
+                    "GitHub App access token request failed: %s %s",
+                    token_resp.status_code, token_resp.text[:200],
+                )
                 return None
 
             token_data = token_resp.json()
             self._token = token_data["token"]
-            # Use expires_at from response minus 60s safety margin
             raw_expires = token_data.get("expires_at", "")
             try:
                 expires = datetime.fromisoformat(raw_expires.replace("Z", "+00:00"))
@@ -113,6 +129,7 @@ class GitHubAppClient:
                 from datetime import timedelta
                 self._token_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
+            logger.info("GitHub App installation token refreshed (installation %s)", installation_id)
             return self._token
 
 

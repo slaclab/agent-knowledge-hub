@@ -6,3 +6,4 @@
 | [002](todo/002-skill-registration-ux.md) | Improved Skill Registration UX: Directory-Aware Submission | 🏁 Implementation Done |
 | [003](todo/003-label-ux.md) | Label UX: community tagging, filter, admin rename/merge/delete | ⬜ Open |
 | [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ⬜ Open |
+| [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ⬜ Open |

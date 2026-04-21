@@ -27,6 +27,7 @@ async function request<T>(
 ): Promise<{ data: T | null; error: string | null; status: number }> {
   const res = await fetch(`${b}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
     ...init,
   });
   if (res.status === 204) return { data: null, error: null, status: 204 };

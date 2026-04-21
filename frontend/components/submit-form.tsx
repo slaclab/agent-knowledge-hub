@@ -309,8 +309,10 @@ export function SubmitForm({
 
         {snapshot?.visibility === "internal" && !inDiscoveryMode && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            This repo requires SLAC GitHub access.{" "}
-            <a href={accessInstructionsUrl} className="underline" target="_blank">Learn more</a>
+            This repo requires SLAC GitHub access.
+            {accessInstructionsUrl?.startsWith("http") && (
+              <>{" "}<a href={accessInstructionsUrl} className="underline" target="_blank">Learn more</a></>
+            )}
           </div>
         )}
 

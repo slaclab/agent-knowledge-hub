@@ -28,7 +28,7 @@ class VisibilityEnum(str, enum.Enum):
 class Skill(Document):
     slug: Indexed(str, unique=True)  # type: ignore[valid-type]
     name: str
-    repo_url: Indexed(str, unique=True)  # type: ignore[valid-type]
+    repo_url: str
     entry_type: EntryType = EntryType.skill
     status: SkillStatus = SkillStatus.active
     deactivation_reason: Optional[str] = None

@@ -62,7 +62,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 title="Requires SLAC GitHub access"
               >
                 <Lock className="h-3 w-3" />
-                SLAC Members Only
+                SLAC Only
               </a>
             )}
             <FlagIndicator count={skill.flag_count} />
@@ -94,10 +94,10 @@ export default async function SkillDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* SLAC Members Only info banner */}
+      {/* SLAC Only info banner */}
       {isInternal && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>SLAC Members Only</strong> — This repo requires SLAC GitHub access to clone.{" "}
+          <strong>SLAC Only</strong> — This repo requires SLAC GitHub access to clone.{" "}
           <a href={accessInstructionsUrl} className="underline">
             Learn how to get access.
           </a>

@@ -211,6 +211,9 @@ class GitHubRef(BaseModel):
 _TREE_RE = re.compile(
     r"https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)(?:/(.+?))?/?$"
 )
+_BLOB_RE = re.compile(
+    r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)"
+)
 _ROOT_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?[/?#]?$")
 
 
@@ -239,6 +242,17 @@ class GitHubURLParser:
             branch = m.group(3)
             raw_path = m.group(4) or ""
             path = "/" + unquote(raw_path) if raw_path else "/"
+            return GitHubRef(owner=owner, repo=repo, branch=branch, path=path)
+
+        mb = _BLOB_RE.match(url.strip())
+        if mb:
+            owner = mb.group(1).lower()
+            repo = mb.group(2).lower()
+            branch = mb.group(3)
+            file_path = unquote(mb.group(4))
+            # Point at the parent directory so the scanner fetches the directory listing
+            parent = file_path.rsplit("/", 1)[0] if "/" in file_path else ""
+            path = "/" + parent if parent else "/"
             return GitHubRef(owner=owner, repo=repo, branch=branch, path=path)
 
         m2 = _ROOT_RE.match(clean)
@@ -554,12 +568,15 @@ class MetadataExtractor:
         except Exception:
             return {}, content
 
+    _GENERIC_NAMES = {"skill", "skills", "your-skill-name", "your_skill_name", "skill-name", "plugin", "tool"}
+
     def _extract_name(self, files: dict, repo: dict, ref: GitHubRef) -> Optional[str]:
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
-                if meta.get("name"):
-                    return str(meta["name"])
+                candidate = str(meta["name"]) if meta.get("name") else None
+                if candidate and candidate.lower() not in self._GENERIC_NAMES:
+                    return candidate
         if "package.json" in files:
             try:
                 data = json.loads(files["package.json"])

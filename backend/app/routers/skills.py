@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.auth import User, get_current_user
 from app.models.revision import SkillRevision
@@ -20,6 +22,8 @@ from app.services.skill import SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
 github_router = APIRouter(prefix="/api")
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _skill_to_out(skill) -> SkillOut:
@@ -209,6 +213,7 @@ async def get_revision(slug: str, n: int):
 
 
 @github_router.get("/github-preview", response_model=GitHubPreviewOut)
+@limiter.limit("10/minute")
 async def github_preview(
     repo_url: str = Query(..., description="GitHub repo URL to preview"),
     request: Request = None,

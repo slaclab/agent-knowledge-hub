@@ -3,7 +3,7 @@ NEXT         := $(NODE_MODULES)/.bin/next
 
 REGISTRY     ?= docker.io/slaclab
 IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-frontend
-TAG          ?= dev
+TAG          ?= $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || echo dev)
 CONTAINER_RT ?= sudo podman
 
 .PHONY: dev build start lint clean docker-build docker-push

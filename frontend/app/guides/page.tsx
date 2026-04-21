@@ -28,7 +28,9 @@ export default function GuidesPage() {
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
             <span>
-              Create a public GitHub repository for your skill. The repo should contain a{" "}
+              Create a GitHub repository for your skill — it can be public or under the{" "}
+              <a href="https://github.com/slaclab" target="_blank" rel="noopener noreferrer" className="text-primary underline">SLACLAB</a>{" "}
+              organisation. The repo should contain a{" "}
               <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">skill.md</code> or{" "}
               <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">CLAUDE.md</code> file.
             </span>
@@ -48,14 +50,21 @@ export default function GuidesPage() {
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">4</span>
-            <span>Your skill will appear in the catalog within seconds.</span>
+            <span>Your skill will appear in the catalog.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">5</span>
+            <span>
+              Share your skill with colleagues — paste the skill&apos;s catalog URL into Slack,
+              a wiki page, or a team README so others can discover and install it.
+            </span>
           </li>
         </ol>
 
         <div className="rounded-lg border border-green-300 bg-green-50 p-4 space-y-1 text-sm">
           <p className="font-semibold text-green-800">Does it work? Verification checklist</p>
           <ul className="list-disc list-inside text-green-700 space-y-1">
-            <li>Your repo is public on GitHub</li>
+            <li>Your repo is accessible on GitHub (public or SLACLAB org)</li>
             <li>The repo has a README.md (appears on skill detail page)</li>
             <li>Skill appears in search results</li>
             <li>Other users can rate and label your skill</li>

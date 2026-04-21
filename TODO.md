@@ -7,3 +7,4 @@
 | [003](todo/003-label-ux.md) | Label UX: community tagging, filter, admin rename/merge/delete | ⬜ Open |
 | [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ⬜ Open |
 | [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ⬜ Open |
+| [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | 📋 Preparing |

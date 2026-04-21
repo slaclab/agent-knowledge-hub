@@ -6,7 +6,7 @@ PYTEST   := $(VENV)/bin/pytest
 
 REGISTRY     ?= docker.io/slaclab
 IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
-TAG          ?= dev
+TAG          ?= $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || echo dev)
 CONTAINER_RT ?= sudo podman
 
 .PHONY: dev test run clean docker-build docker-push

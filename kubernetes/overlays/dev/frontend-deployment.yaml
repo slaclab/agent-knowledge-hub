@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: slaclab/agent-knowledge-hub-frontend:dev
+          image: slaclab/agent-knowledge-hub-frontend:0.1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

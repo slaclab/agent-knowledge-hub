@@ -13,6 +13,7 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
+from app.routers import github_scan
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -20,7 +21,13 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     client = AsyncIOMotorClient(settings.mongo_uri)
-    await beanie.init_beanie(database=client.get_default_database(), document_models=ALL_MODELS)
+    db = client.get_default_database()
+    # Drop old repo_url single-column unique index before Beanie creates the new compound one
+    try:
+        await db["skills"].drop_index("repo_url_1")
+    except Exception:
+        pass
+    await beanie.init_beanie(database=db, document_models=ALL_MODELS)
     yield
     client.close()
 
@@ -64,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(site_settings.router)
     app.include_router(skills.router)
     app.include_router(skills.github_router)
+    app.include_router(github_scan.router)
 
     return app
 

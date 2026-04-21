@@ -7,6 +7,7 @@ export interface Skill {
   slug: string;
   name: string;
   repo_url: string;
+  skill_path: string;
   entry_type: EntryType;
   status: SkillStatus;
   deactivation_reason: string | null;
@@ -50,6 +51,7 @@ export interface SkillRevision {
 
 export interface SkillCreate {
   repo_url: string;
+  skill_path?: string;
   name?: string;
   description?: string;
   compatible_platforms?: string[];
@@ -91,4 +93,34 @@ export interface SkillListParams {
   page_size?: number;
   forked_from?: string;
   visibility?: VisibilityType | "all";
+}
+
+export interface GitHubRef {
+  owner: string;
+  repo: string;
+  branch: string | null;
+  path: string;
+}
+
+export interface SkillScanSnapshot {
+  ref: GitHubRef;
+  name: string | null;
+  description: string | null;
+  compatible_platforms: string[];
+  version: string | null;
+  license: string | null;
+  readme_html: string | null;
+  stars: number;
+  last_commit_at: string | null;
+  visibility: VisibilityType;
+  forked_from_url: string | null;
+  fetched_at: string;
+  no_skill_files: boolean;
+  existing_slug: string | null;
+}
+
+export interface DiscoverResult {
+  skills: SkillScanSnapshot[];
+  tree_truncated: boolean;
+  capped: boolean;
 }

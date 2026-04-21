@@ -18,7 +18,7 @@ from app.schemas.skill import (
     SkillOut,
     SkillUpdate,
 )
-from app.services.skill import SortField, skill_repository
+from app.services.skill import DuplicateSkillError, SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
 github_router = APIRouter(prefix="/api")
@@ -32,6 +32,7 @@ def _skill_to_out(skill) -> SkillOut:
         slug=skill.slug,
         name=skill.name,
         repo_url=skill.repo_url,
+        skill_path=skill.skill_path,
         entry_type=skill.entry_type,
         status=skill.status,
         deactivation_reason=skill.deactivation_reason,
@@ -103,7 +104,13 @@ async def create_skill(
     body: SkillCreate,
     user: User = Depends(get_current_user),
 ):
-    skill = await skill_repository.create(body, submitter_id=user.user_id)
+    try:
+        skill = await skill_repository.create(body, submitter_id=user.user_id)
+    except DuplicateSkillError as e:
+        detail = "A skill with this repo URL and path already exists."
+        if e.existing_slug:
+            detail += f" See /skills/{e.existing_slug}"
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return _skill_to_out(skill)
 
 

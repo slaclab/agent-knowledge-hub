@@ -24,7 +24,7 @@ async def test_get_current_user_dev_mode():
     import app.config as cfg
     with patch.object(cfg.settings, "auth_mode", "dev"), \
          patch.object(cfg.settings, "dev_user", "alice"), \
-         patch.object(cfg.settings, "admin_user_set", set()):
+         patch.object(cfg.settings, "admin_users", ""):
         from starlette.testclient import TestClient
         from starlette.requests import Request
         from app.auth import get_current_user
@@ -40,7 +40,7 @@ async def test_get_current_user_dev_mode():
 async def test_get_current_user_vouchproxy():
     import app.config as cfg
     with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-         patch.object(cfg.settings, "admin_user_set", set()):
+         patch.object(cfg.settings, "admin_users", ""):
         from starlette.requests import Request
         from app.auth import get_current_user
         scope = {
@@ -73,7 +73,7 @@ async def test_admin_flag():
     import app.config as cfg
     with patch.object(cfg.settings, "auth_mode", "dev"), \
          patch.object(cfg.settings, "dev_user", "carol"), \
-         patch.object(cfg.settings, "admin_user_set", {"carol"}):
+         patch.object(cfg.settings, "admin_users", "carol"):
         from starlette.requests import Request
         from app.auth import get_current_user
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}

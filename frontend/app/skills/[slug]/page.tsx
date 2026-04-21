@@ -77,7 +77,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <a
-            href={skill.repo_url}
+            href={skill.skill_path && skill.skill_path !== "/" ? `${skill.repo_url}/tree/HEAD${skill.skill_path}` : skill.repo_url}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
@@ -167,6 +167,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Last Commit</dt>
                   <dd>{formatDate(skill.last_commit_at)}</dd>
+                </div>
+              )}
+              {skill.skill_path && skill.skill_path !== "/" && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted-foreground shrink-0">Directory</dt>
+                  <dd className="font-mono text-xs truncate">{skill.skill_path}</dd>
                 </div>
               )}
               <div className="flex justify-between">

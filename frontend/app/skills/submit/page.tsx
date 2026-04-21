@@ -3,6 +3,8 @@ import { SubmitForm } from "@/components/submit-form";
 import { getSettings } from "@/lib/api";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function SubmitPage() {
   const siteSettings = await getSettings(true);
 

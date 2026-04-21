@@ -42,7 +42,7 @@ async def test_fetch_not_found():
     )
 
     fetcher = GitHubFetcher()
-    with pytest.raises(GitHubFetchError, match="not found or is private"):
+    with pytest.raises(GitHubFetchError, match="couldn't be found"):
         await fetcher.fetch("https://github.com/bad/repo")
 
 

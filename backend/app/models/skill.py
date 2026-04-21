@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from beanie import Document, Indexed
 from pymongo import IndexModel, ASCENDING, DESCENDING
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class EntryType(str, enum.Enum):
@@ -46,6 +46,19 @@ class Skill(Document):
 
     visibility: VisibilityEnum = VisibilityEnum.public
     forked_from_url: Optional[str] = None
+    skill_path: str = "/"
+
+    @field_validator("skill_path")
+    @classmethod
+    def validate_skill_path(cls, v: str) -> str:
+        if not v.startswith("/"):
+            v = "/" + v
+        parts = v.strip("/").split("/") if v.strip("/") else []
+        if any(p == ".." for p in parts):
+            raise ValueError("skill_path must not contain '..' components")
+        if len(v) > 500:
+            raise ValueError("skill_path must be <= 500 characters")
+        return v
 
     submitter_id: str
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -60,6 +73,7 @@ class Skill(Document):
         name = "skills"
         indexes = [
             [("name", "text"), ("description", "text")],
-            IndexModel([("forked_from_url", ASCENDING)], sparse=True),
-            IndexModel([("visibility", ASCENDING), ("submitted_at", DESCENDING)]),
+            IndexModel([("forked_from_url", ASCENDING)], sparse=True, name="forked_from_url_sparse"),
+            IndexModel([("visibility", ASCENDING), ("submitted_at", DESCENDING)], name="visibility_submitted_at"),
+            IndexModel([("repo_url", ASCENDING), ("skill_path", ASCENDING)], unique=True, name="repo_url_skill_path_unique"),
         ]

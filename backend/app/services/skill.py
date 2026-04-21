@@ -5,16 +5,23 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional, Tuple
 
 from beanie.operators import In, Text
+from pymongo.errors import DuplicateKeyError
 from slugify import slugify
 
 from app.models.skill import Skill, SkillStatus, VisibilityEnum
 from app.schemas.skill import SkillCreate, SkillUpdate
-from app.services.github import GitHubFetchError, _normalize_github_url, github_fetcher
+from app.services.github import GitHubFetchError, _normalize_github_url, extract_repo_root_url, github_fetcher
 from app.services.revision import revision_service
 from app.models.revision import RevisionAction
 
 
 SortField = Literal["newest", "highest_rated", "most_rated", "most_stars"]
+
+
+class DuplicateSkillError(Exception):
+    def __init__(self, existing_slug: Optional[str] = None):
+        self.existing_slug = existing_slug
+        super().__init__("Skill already exists")
 
 
 async def _unique_slug(base: str) -> str:
@@ -78,19 +85,27 @@ class SkillRepository:
         return skill
 
     async def create(self, data: SkillCreate, submitter_id: str) -> Skill:
+        repo_url = extract_repo_root_url(data.repo_url) or data.repo_url
+        skill_path = data.skill_path or "/"
+
+        # Validate skill_path (also enforced by model validator on save)
+        if ".." in skill_path.split("/"):
+            raise ValueError("skill_path must not contain '..' components")
+
         github_data = None
         try:
-            github_data = await github_fetcher.fetch(data.repo_url)
+            github_data = await github_fetcher.fetch(repo_url)
         except GitHubFetchError:
             pass
 
-        name = data.name or (github_data.name if github_data else data.repo_url.split("/")[-1])
+        name = data.name or (github_data.name if github_data else repo_url.split("/")[-1])
         slug = await _unique_slug(name)
 
         skill = Skill(
             slug=slug,
             name=name,
-            repo_url=data.repo_url,
+            repo_url=repo_url,
+            skill_path=skill_path,
             entry_type=data.entry_type,
             description=data.description or (github_data.description if github_data else None),
             readme_html=github_data.readme_html if github_data else None,
@@ -105,7 +120,15 @@ class SkillRepository:
             forked_from_url=github_data.forked_from_url if github_data else None,
             submitter_id=submitter_id,
         )
-        await skill.insert()
+        try:
+            await skill.insert()
+        except DuplicateKeyError:
+            existing = await Skill.find_one(
+                Skill.repo_url == repo_url,
+                Skill.skill_path == skill_path,
+            )
+            existing_slug = existing.slug if existing else None
+            raise DuplicateSkillError(existing_slug)
         await revision_service.record(
             skill_id=str(skill.id),
             actor_id=submitter_id,

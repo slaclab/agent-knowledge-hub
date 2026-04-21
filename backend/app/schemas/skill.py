@@ -14,6 +14,7 @@ _GITHUB_URL_RE = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
 
 class SkillCreate(BaseModel):
     repo_url: str
+    skill_path: str = "/"
     name: Optional[str] = None
     description: Optional[str] = None
     compatible_platforms: List[str] = []
@@ -51,6 +52,7 @@ class SkillOut(BaseModel):
     slug: str
     name: str
     repo_url: str
+    skill_path: str
     entry_type: EntryType
     status: SkillStatus
     deactivation_reason: Optional[str]
@@ -122,3 +124,33 @@ class GitHubPreviewOut(BaseModel):
     license: Optional[str]
     last_commit_at: Optional[datetime]
     visibility: VisibilityEnum
+
+
+class GitHubRefOut(BaseModel):
+    owner: str
+    repo: str
+    branch: Optional[str]
+    path: str
+
+
+class SkillScanSnapshotOut(BaseModel):
+    ref: GitHubRefOut
+    name: Optional[str]
+    description: Optional[str]
+    compatible_platforms: List[str]
+    version: Optional[str]
+    license: Optional[str]
+    readme_html: Optional[str]
+    stars: int
+    last_commit_at: Optional[datetime]
+    visibility: VisibilityEnum
+    forked_from_url: Optional[str]
+    fetched_at: datetime
+    no_skill_files: bool
+    existing_slug: Optional[str]
+
+
+class DiscoverOut(BaseModel):
+    skills: List[SkillScanSnapshotOut]
+    tree_truncated: bool = False
+    capped: bool = False

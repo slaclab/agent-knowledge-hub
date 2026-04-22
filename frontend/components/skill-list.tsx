@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useCallback, Suspense } from "react";
+import { useCallback, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { SkillCard } from "./skill-card";
 import { SortSelect } from "./sort-select";
@@ -29,6 +29,16 @@ export function SkillList({ data, sort, q, labels, forkedFrom, visibility, acces
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  useEffect(() => {
+    router.refresh();
+
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) router.refresh();
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [router]);
 
   const setPage = useCallback(
     (page: number) => {

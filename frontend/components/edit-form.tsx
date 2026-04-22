@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { updateSkill } from "@/lib/api";
 import type { Skill } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
+import { platformPillClass } from "@/components/platform-badges";
+import { LabelSection } from "@/components/label-section";
 
 interface EditFormProps {
   skill: Skill;
@@ -81,11 +83,7 @@ export function EditForm({ skill }: EditFormProps) {
               key={p}
               type="button"
               onClick={() => togglePlatform(p)}
-              className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-                platforms.includes(p)
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-foreground border-input hover:bg-muted"
-              }`}
+              className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${platformPillClass(p, platforms.includes(p))}`}
             >
               {p}
             </button>
@@ -97,7 +95,7 @@ export function EditForm({ skill }: EditFormProps) {
                 key={p}
                 type="button"
                 onClick={() => togglePlatform(p)}
-                className="rounded-full px-3 py-1 text-xs font-medium border bg-primary text-primary-foreground border-primary"
+                className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${platformPillClass(p, true)}`}
               >
                 {p} ×
               </button>
@@ -119,6 +117,11 @@ export function EditForm({ skill }: EditFormProps) {
             Add
           </button>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Labels</label>
+        <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">

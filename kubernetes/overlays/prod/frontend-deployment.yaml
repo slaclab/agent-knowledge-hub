@@ -21,6 +21,11 @@ spec:
           env:
             - name: BACKEND_URL
               value: "http://agent-knowledge-hub-backend:8000"
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: agent-knowledge-hub-secrets
+                  key: INTERNAL_API_SECRET
           livenessProbe:
             httpGet:
               path: /

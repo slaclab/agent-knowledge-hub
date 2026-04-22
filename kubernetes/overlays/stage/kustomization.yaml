@@ -9,6 +9,7 @@ resources:
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
+  - network-policy-backend.yaml
 
 configMapGenerator:
   - name: backend-config
@@ -24,5 +25,6 @@ secretGenerator:
       - etc/.secrets/MONGO_URI
       - etc/.secrets/GITHUB_TOKEN
       - etc/.secrets/ADMIN_USERS
+      - etc/.secrets/INTERNAL_API_SECRET
     options:
       disableNameSuffixHash: true

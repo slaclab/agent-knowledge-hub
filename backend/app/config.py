@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,17 @@ class Settings(BaseSettings):
 
     # URL shown in "SLAC Members Only" badge; configurable by admin
     github_access_instructions_url: str = "/guides/slac-github-access"
+
+    # Shared secret for Next.js → backend trust; None disables the proxy auth path entirely
+    internal_api_secret: Optional[str] = None
+
+    @field_validator("internal_api_secret", mode="before")
+    @classmethod
+    def _strip_internal_api_secret(cls, v: object) -> Optional[str]:
+        if v is None:
+            return None
+        stripped = str(v).strip()
+        return stripped if stripped else None
 
     @property
     def admin_user_set(self) -> set[str]:

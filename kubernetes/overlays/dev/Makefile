@@ -24,7 +24,7 @@ secrets:
 	 MONGO_PASS=$$(vault kv get --field=MONGODB_APP_PASSWORD $(MONGO_SECRET_PATH)) && \
 	 echo -n "mongodb://$${MONGO_USER}:$${MONGO_PASS}@mongodb-mongos.$(NAMESPACE).svc.cluster.local/agent-skills?authSource=agent-skills" \
 	   > etc/.secrets/MONGO_URI
-	@set -e; for i in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do \
+	@set -e; for i in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY INTERNAL_API_SECRET; do \
 	  vault kv get --field=$$i $(APP_SECRET_PATH) > etc/.secrets/$$i; \
 	done
 

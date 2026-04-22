@@ -27,7 +27,7 @@ destroy: ensure-context
 
 secrets:
 	mkdir -p etc/.secrets
-	set -e; for i in GITHUB_TOKEN ADMIN_USERS MONGO_ROOT_USERNAME MONGO_ROOT_PASSWORD; do \
+	set -e; for i in GITHUB_TOKEN ADMIN_USERS MONGO_ROOT_USERNAME MONGO_ROOT_PASSWORD INTERNAL_API_SECRET; do \
 	  vault kv get --field=$$i $(SECRET_PATH) > etc/.secrets/$$i; \
 	done
 	kubectl create secret generic agent-knowledge-hub-secrets \

@@ -41,6 +41,13 @@ export interface Skill {
   visibility: VisibilityType;
   forked_from_url: string | null;
   labels: LabelOut[];
+  my_rating: number | null;
+}
+
+export interface RateSkillOut {
+  avg_rating: number;
+  rating_count: number;
+  my_rating: number;
 }
 
 export interface PaginatedSkills {

@@ -162,7 +162,7 @@ export default function GuidesPage() {
             </summary>
             <div className="mt-3 text-sm text-muted-foreground">
               <p>
-                Reach out in the <strong>#ai-tools</strong> Slack channel on the SLAC workspace,
+                Reach out in the <strong>#comp-sdf</strong> Slack channel on the SLAC workspace,
                 or open an issue on the project GitHub repository.
               </p>
             </div>

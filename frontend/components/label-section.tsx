@@ -166,7 +166,7 @@ export function LabelSection({ slug, initialLabels }: LabelSectionProps) {
           {showSuggestions && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md"
+              className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg"
             >
               {suggestions.map((s) => (
                 <button

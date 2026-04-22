@@ -230,7 +230,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <div className="rounded-lg border p-4">
               <span className="inline-flex items-center gap-1.5 text-sm text-blue-800">
                 <GitFork className="h-4 w-4" />
-                Uses SLAC Agent Gateway
+                Uses S3DF AI Gateway for Experimentalists
               </span>
             </div>
           )}

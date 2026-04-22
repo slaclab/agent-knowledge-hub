@@ -21,7 +21,7 @@ interface SkillListProps {
 
 const VISIBILITY_OPTIONS: { value: VisibilityType | "all"; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "public", label: "Public only" },
+  { value: "public", label: "Public Only" },
   { value: "internal", label: "SLAC Only" },
 ];
 

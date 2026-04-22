@@ -526,7 +526,7 @@ export function SubmitForm({
                 className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {showLabelSuggestions && labelSuggestions.length > 0 && (
-                <div ref={labelSuggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+                <div ref={labelSuggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
                   {labelSuggestions.filter((s) => !pendingLabels.find((l) => l.name === s.name)).map((s) => (
                     <button key={s.name} type="button"
                       onMouseDown={(e) => {
@@ -683,7 +683,7 @@ function DiscoveryCard({
                 className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {showLabelSuggestions && labelSuggestions.length > 0 && (
-                <div className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+                <div className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
                   {labelSuggestions.filter((s) => !draft.labels.includes(s.name)).map((s) => (
                     <button key={s.name} type="button"
                       onMouseDown={(e) => { e.preventDefault(); addDraftLabel(s.name); }}
@@ -799,7 +799,7 @@ function SuccessPanel({ slug, onDone }: { slug: string; onDone: () => void }) {
             className="w-full rounded-md border border-input bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
           {showSuggestions && suggestions.length > 0 && (
-            <div ref={suggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+            <div ref={suggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
               {suggestions.map((s) => (
                 <button key={s.name} type="button"
                   onMouseDown={(e) => { e.preventDefault(); handleAdd(s.name); }}

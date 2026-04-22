@@ -2,7 +2,7 @@ export function Footer() {
   return (
     <footer className="border-t bg-background mt-auto">
       <div className="container flex h-12 items-center justify-between text-xs text-muted-foreground">
-        <span>Agent Knowledge Hub — S3DF / SLAC</span>
+        <span>Agent Knowledge Hub - S3DF AI Gateway for Experimentalists</span>
         <div className="flex items-center gap-4">
           <a
             href="/guides"

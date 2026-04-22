@@ -24,7 +24,7 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
     <Link
       href={`/skills/${skill.slug}`}
       className={cn(
-        "block rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow p-5",
+        "block rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow p-3.5",
         isDeactivated && "opacity-60",
       )}
     >
@@ -80,24 +80,26 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
           )}
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
+          {skill.rating_count > 0 && (
+            <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
+          )}
         </div>
       </div>
       {skill.compatible_platforms.length > 0 && (
-        <div className="mt-3">
+        <div className="mt-2">
           <PlatformBadges platforms={skill.compatible_platforms} />
         </div>
       )}
       {skill.uses_agent_gateway && (
-        <div className="mt-2">
+        <div className="mt-1.5">
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
             <GitFork className="h-3 w-3" />
-            Uses SLAC Agent Gateway
+            Uses S3DF AI Gateway for Experimentalists
           </span>
         </div>
       )}
       {visibleLabels.length > 0 && (
-        <div className="mt-2 flex items-center gap-1 flex-nowrap overflow-hidden">
+        <div className="mt-1.5 flex items-center gap-1 flex-nowrap overflow-hidden">
           {visibleLabels.map((label) => (
             <Link
               key={label.name}

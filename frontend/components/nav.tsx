@@ -71,7 +71,7 @@ export function Nav() {
           {!loading && user?.is_admin && (
             <Link
               href="/admin/labels"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
             >
               Admin
             </Link>

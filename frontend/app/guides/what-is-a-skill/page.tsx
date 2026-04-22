@@ -214,7 +214,7 @@ export default function WhatIsASkillPage() {
             href="/skills/submit"
             className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
           >
-            Submit a skill
+            Submit Skill
           </Link>
         </div>
       </div>

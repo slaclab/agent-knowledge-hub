@@ -45,7 +45,7 @@ export default async function SkillsPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold">Skill Catalog</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Discover agent skills and plugins built by the SLAC community.
+            Discover agent skills and plugins curated by the SLAC community.
           </p>
         </div>
       </div>

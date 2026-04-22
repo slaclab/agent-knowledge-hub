@@ -8,7 +8,7 @@
 | [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ⬜ Open |
 | [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ✅ Merged |
 | [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | 📋 Preparing |
-| [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | 📋 Preparing |
+| [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | ⬜ Open |
 | [008](todo/008-auth-header-hardening.md) | Auth header hardening: prevent identity spoofing via ingress/cluster/proxy | 🏁 Implementation Done |
 | [009](todo/009-duplicate-skill-detection.md) | Duplicate & similar skill detection: near-duplicate warnings in discovery and submit flows | ⬜ Open |
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |
@@ -17,3 +17,4 @@
 | [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | 📋 Preparing |
 | [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 📋 Preparing |
 | [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 📋 Preparing |
+| [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | ⬜ Open |

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { Skill } from "@/types/skill";
 import Link from "next/link";
-import { GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
+import { GitFork, ArrowRight, Lock } from "lucide-react";
 import { PlatformBadges } from "./platform-badges";
 import { labelColor } from "@/lib/label-color";
 import { StarRating } from "./star-rating";
@@ -28,93 +28,89 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
         isDeactivated && "opacity-60",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-base leading-tight truncate">{skill.name}</h3>
-            {skill.entry_type === "marketplace_ref" && (
-              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
-                ref
-              </span>
-            )}
-            {isInternal && (
-              <a
-                href={accessInstructionsUrl}
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
-                title="Requires SLAC GitHub access"
-              >
-                <Lock className="h-3 w-3" />
-                SLAC Only
-              </a>
-            )}
-            {isDeactivated && (
-              <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
-                deactivated
-              </span>
-            )}
-            {isSuperseded && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
-                <ArrowRight className="h-3 w-3" />
-                superseded
-              </span>
-            )}
-            <FlagIndicator count={skill.flag_count} />
-          </div>
-          {skill.description && (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{skill.description}</p>
-          )}
-          {skill.forked_from_url && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Fork of{" "}
-              <a
-                href={skill.forked_from_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="underline hover:text-foreground"
-              >
-                {skill.forked_from_url.replace("https://github.com/", "")}
-              </a>
-            </p>
-          )}
-        </div>
-        <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          {skill.rating_count > 0 && (
-            <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
-          )}
-        </div>
-      </div>
-      {skill.compatible_platforms.length > 0 && (
-        <div className="mt-2">
-          <PlatformBadges platforms={skill.compatible_platforms} />
-        </div>
-      )}
-      {skill.uses_agent_gateway && (
-        <div className="mt-1.5">
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
-            <GitFork className="h-3 w-3" />
-            Uses S3DF AI Gateway for Experimentalists
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="font-semibold text-base leading-tight truncate">{skill.name}</h3>
+        {skill.entry_type === "marketplace_ref" && (
+          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
+            ref
           </span>
-        </div>
+        )}
+        {isInternal && (
+          <a
+            href={accessInstructionsUrl}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
+            title="Requires SLAC GitHub access"
+          >
+            <Lock className="h-3 w-3" />
+            SLAC Only
+          </a>
+        )}
+        {isDeactivated && (
+          <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
+            deactivated
+          </span>
+        )}
+        {isSuperseded && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
+            <ArrowRight className="h-3 w-3" />
+            superseded
+          </span>
+        )}
+        <FlagIndicator count={skill.flag_count} />
+        {skill.rating_count > 0 && (
+          <span className="ml-auto">
+            <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />
+          </span>
+        )}
+      </div>
+      {skill.description && (
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-3">{skill.description}</p>
       )}
-      {visibleLabels.length > 0 && (
+      {skill.forked_from_url && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Fork of{" "}
+          <a
+            href={skill.forked_from_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="underline hover:text-foreground"
+          >
+            {skill.forked_from_url.replace("https://github.com/", "")}
+          </a>
+        </p>
+      )}
+      {(visibleLabels.length > 0 || skill.compatible_platforms.length > 0 || skill.uses_agent_gateway) && (
         <div className="mt-1.5 flex items-center gap-1 flex-nowrap overflow-hidden">
-          {visibleLabels.map((label) => (
-            <Link
-              key={label.name}
-              href={`/skills?labels=${encodeURIComponent(label.name)}`}
-              onClick={(e) => e.stopPropagation()}
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 ${labelColor(label.name)}`}
-            >
-              {label.name}
-            </Link>
-          ))}
-          {overflowCount > 0 && (
-            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs text-muted-foreground flex-shrink-0">
-              +{overflowCount} more
-            </span>
-          )}
+          <div className="flex items-center gap-1 flex-nowrap overflow-hidden flex-1 min-w-0">
+            {visibleLabels.map((label) => (
+              <Link
+                key={label.name}
+                href={`/skills?labels=${encodeURIComponent(label.name)}`}
+                onClick={(e) => e.stopPropagation()}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 ${labelColor(label.name)}`}
+              >
+                {label.name}
+              </Link>
+            ))}
+            {overflowCount > 0 && (
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs text-muted-foreground flex-shrink-0">
+                +{overflowCount} more
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+            {skill.uses_agent_gateway && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
+                <GitFork className="h-3 w-3" />
+                AI Gateway
+              </span>
+            )}
+            {skill.compatible_platforms.length > 0 && (
+              <PlatformBadges platforms={skill.compatible_platforms} />
+            )}
+          </div>
         </div>
       )}
     </Link>

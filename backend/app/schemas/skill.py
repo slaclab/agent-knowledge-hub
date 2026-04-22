@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from app.models.skill import EntryType, SkillStatus, VisibilityEnum
 
@@ -59,6 +59,16 @@ class SkillUpdate(BaseModel):
         return normalized
 
 
+class RateSkillIn(BaseModel):
+    value: int = Field(..., ge=1, le=5)
+
+
+class RateSkillOut(BaseModel):
+    avg_rating: float
+    rating_count: int
+    my_rating: int
+
+
 class SkillOut(BaseModel):
     id: str
     slug: str
@@ -87,6 +97,7 @@ class SkillOut(BaseModel):
     rating_count: int
     flag_count: int
     labels: List[LabelOut] = []
+    my_rating: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

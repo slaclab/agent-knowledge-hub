@@ -1,7 +1,7 @@
 # 005 — Skill Ratings
 
-**Status:** 🔍 Reviewed
-**Branch:** —
+**Status:** 🏁 Implementation Done
+**Branch:** feat/skill-ratings
 **PR:** —
 
 ---
@@ -418,23 +418,23 @@ Slice 4 — Polish, tests & docs (0.5d)
 
 ## Definition of Done
 
-- [ ] `POST /api/skills/{slug}/rate` returns correct `avg_rating` and `rating_count` after upsert
-- [ ] Re-rating the same skill updates the existing `Rating` doc (no duplicates)
-- [ ] Unauthenticated request returns `401`; invalid value returns `422`
-- [ ] `StarRating` `readonly` bug fixed; `onRate` prop works with hover + click
-- [ ] `RatingWidget` renders interactive picker for authed users, read-only + "Sign in to rate." for unauthed
-- [ ] Authenticated user's previous rating is pre-filled and visually distinguished on revisit (via client-side fetch through proxy) _(added by UX review; clarified by UX review round 2)_
-- [ ] Inline error message shown below stars on API failure _(added by UX review)_
-- [ ] Interactive stars are keyboard-accessible with `aria-label` attributes _(added by UX review)_
-- [ ] Interactive stars render at `h-5 w-5` (20px) for adequate click targets _(added by UX review)_
-- [ ] Optimistic update reverts cleanly on API error
-- [ ] `SkillCard` read-only usage visually unaffected
-- [ ] Unit tests: `rate_skill` service (upsert, re-rate, aggregation)
-- [ ] Unit tests: `StarRating` (readonly vs interactive), `RatingWidget` (optimistic/revert)
-- [ ] "Rating submission coming soon." placeholder removed from detail page
-- [ ] `CHANGELOG.md` entry written for the ratings feature
-- [ ] `docs/runbooks/internal-api-secret.md` verification table updated with rate endpoint
-- [ ] `README.md` updated to mention rating capability
+- [x] `POST /api/skills/{slug}/rate` returns correct `avg_rating` and `rating_count` after upsert
+- [x] Re-rating the same skill updates the existing `Rating` doc (no duplicates)
+- [x] Unauthenticated request returns `401`; invalid value returns `422`
+- [x] `StarRating` `readonly` bug fixed; `onRate` prop works with hover + click
+- [x] `RatingWidget` renders interactive picker for authed users, read-only + "Sign in to rate." for unauthed
+- [x] Authenticated user's previous rating is pre-filled and visually distinguished on revisit (via client-side fetch through proxy) _(added by UX review; clarified by UX review round 2)_
+- [x] Inline error message shown below stars on API failure _(added by UX review)_
+- [x] Interactive stars are keyboard-accessible with `aria-label` attributes _(added by UX review)_
+- [x] Interactive stars render at `h-5 w-5` (20px) for adequate click targets _(added by UX review)_
+- [x] Optimistic update reverts cleanly on API error
+- [x] `SkillCard` read-only usage visually unaffected
+- [x] Unit tests: `rate_skill` service (upsert, re-rate, aggregation)
+- [ ] Unit tests: `StarRating` (readonly vs interactive), `RatingWidget` (optimistic/revert) — deferred (no frontend test infra)
+- [x] "Rating submission coming soon." placeholder removed from detail page
+- [x] `CHANGELOG.md` entry written for the ratings feature
+- [x] `docs/runbooks/internal-api-secret.md` verification table updated with rate endpoint
+- [x] `README.md` updated to mention rating capability
 
 ---
 

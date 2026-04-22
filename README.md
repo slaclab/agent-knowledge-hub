@@ -6,7 +6,7 @@ A marketplace where the SLAC community discovers, shares, and installs knowledge
 
 Your AI coding assistant is only as useful as the knowledge it has access to. Agent Knowledge Hub is the place to find capabilities built by your colleagues for problems you actually have — querying accelerator systems, diagnosing cluster issues, analysing scientific data.
 
-See what the community rates highly, filter by topic, read a description, and decide in seconds whether it's worth trying.
+See what the community rates highly, filter by topic, read a description, and decide in seconds whether it's worth trying. Authenticated users can rate any skill 1–5 stars directly from the detail page — your vote updates the live average instantly.
 
 Browse all community labels at [/labels](https://agent-knowledge-hub.slac.stanford.edu/labels), or click any label chip on a skill card to filter the catalog to that topic. On a skill's detail page, authenticated users can add free-form labels using an inline typeahead combobox.
 

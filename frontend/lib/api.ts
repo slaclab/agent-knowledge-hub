@@ -10,6 +10,7 @@ import type {
   SkillScanSnapshot,
   DiscoverResult,
   LabelOut,
+  RateSkillOut,
 } from "@/types/skill";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
@@ -185,4 +186,15 @@ export async function removeLabel(
 export async function listSkillLabels(slug: string): Promise<LabelOut[]> {
   const { data } = await request<LabelOut[]>(CLIENT_BASE, `/skills/${slug}/labels`);
   return data ?? [];
+}
+
+export async function rateSkill(
+  slug: string,
+  value: number,
+): Promise<{ data: RateSkillOut | null; error: string | null }> {
+  const r = await request<RateSkillOut>(CLIENT_BASE, `/skills/${slug}/rate`, {
+    method: "POST",
+    body: JSON.stringify({ value }),
+  });
+  return { data: r.data, error: r.error };
 }

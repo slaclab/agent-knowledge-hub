@@ -59,7 +59,7 @@ kubectl rollout status deployment/agent-knowledge-hub-frontend -n <namespace>
 
 ---
 
-## 5. Verify all 7 auth routes
+## 5. Verify all 8 auth routes
 
 After both rollouts complete, verify the authenticated flow works end-to-end:
 
@@ -70,6 +70,7 @@ After both rollouts complete, verify the authenticated flow works end-to-end:
 | `/api/skills` | POST | 200/201 (as authenticated user) |
 | `/api/skills/[slug]` | GET | 200 |
 | `/api/skills/[slug]` | PATCH/DELETE | 200/204 |
+| `/api/skills/[slug]/rate` | POST `{"value":3}` | 200 with avg_rating, rating_count, my_rating |
 | `/api/skills/[slug]/refetch` | POST | 200 |
 | `/api/skills/[slug]/revisions` | GET | 200 |
 | `/api/skills/[slug]/revisions/[n]` | GET | 200 |

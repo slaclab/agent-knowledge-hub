@@ -5,9 +5,9 @@ import { SupersededNotice } from "@/components/superseded-notice";
 import { ReadmeRender } from "@/components/readme-render";
 import { RevisionTimeline } from "@/components/revision-timeline";
 import { PlatformBadges } from "@/components/platform-badges";
-import { StarRating } from "@/components/star-rating";
 import { FlagIndicator } from "@/components/flag-indicator";
 import { LabelSection } from "@/components/label-section";
+import { RatingWidget } from "@/components/rating-widget";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
@@ -126,10 +126,11 @@ export default async function SkillDetailPage({ params }: PageProps) {
           {/* Ratings */}
           <div className="rounded-lg border p-4 space-y-2">
             <h3 className="text-sm font-semibold">Rating</h3>
-            <StarRating value={skill.avg_rating} count={skill.rating_count} />
-            <p className="text-xs text-muted-foreground">
-              Rating submission coming soon.
-            </p>
+            <RatingWidget
+              slug={skill.slug}
+              initialAvgRating={skill.avg_rating}
+              initialRatingCount={skill.rating_count}
+            />
           </div>
 
           {/* Labels */}

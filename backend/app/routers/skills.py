@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.auth import User, get_current_user
+from app.auth import User, get_current_user, get_optional_user
+from app.models.rating import Rating
 from app.models.revision import SkillRevision
 from app.models.skill import SkillStatus
 from app.schemas.skill import (
     GitHubPreviewOut,
     LabelOut,
     PaginatedSkills,
+    RateSkillIn,
+    RateSkillOut,
     RevisionOut,
     SkillCreate,
     SkillListOut,
@@ -20,6 +23,7 @@ from app.schemas.skill import (
     SkillUpdate,
 )
 from app.services.label import label_service
+from app.services.rating import rate_skill
 from app.services.skill import DuplicateSkillError, SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
@@ -28,7 +32,7 @@ github_router = APIRouter(prefix="/api")
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillOut:
+def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None) -> SkillOut:
     return SkillOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -57,6 +61,7 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillOut:
         rating_count=skill.rating_count,
         flag_count=skill.flag_count,
         labels=labels or [],
+        my_rating=my_rating,
     )
 
 
@@ -123,7 +128,7 @@ async def create_skill(
 
 
 @router.get("/{slug}", response_model=SkillOut)
-async def get_skill(slug: str):
+async def get_skill(slug: str, viewer: Optional[User] = Depends(get_optional_user)):
     skill = await skill_repository.get(slug)
     if not skill:
         # Check if it's deactivated (for tombstone response)
@@ -140,7 +145,29 @@ async def get_skill(slug: str):
             )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     skill_labels = await label_service.list_for_skill(str(skill.id))
-    return _skill_to_out(skill, labels=skill_labels)
+    my_rating = None
+    if viewer:
+        rating = await Rating.find_one(
+            Rating.skill_id == str(skill.id),
+            Rating.user_id == viewer.user_id,
+        )
+        my_rating = rating.value if rating else None
+    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating)
+
+
+@router.post("/{slug}/rate", response_model=RateSkillOut)
+@limiter.limit("30/minute")
+async def rate_skill_route(
+    slug: str,
+    body: RateSkillIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    skill = await skill_repository.get(slug)
+    if not skill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    avg, count = await rate_skill(str(skill.id), user.user_id, body.value)
+    return RateSkillOut(avg_rating=avg, rating_count=count, my_rating=body.value)
 
 
 @router.patch("/{slug}", response_model=SkillOut)

@@ -66,12 +66,13 @@
 - FR-L11: Admin — `GET /api/admin/labels` — all labels with usage counts (same as public but includes zero-usage labels).
 
 **Frontend**
-- FR-L12: Skill cards show up to 5 label chips; "+N more" if > 5.
+- FR-L12: Skill cards show up to 5 label chips in a single row; "+N more" badge if > 5 (no wrapping).
 - FR-L13: Clicking a label chip on a card or detail page navigates to `/skills?labels=<name>`.
-- FR-L14: Skill detail page: label section shows all labels. Authenticated users see an "Add label" input with typeahead from `GET /api/labels?q=`. Authenticated users can remove labels they applied (× button).
-- FR-L15: Label filter on list page (`label-filter.tsx`) is wired to real data from `GET /api/labels`; selected labels reflected in URL `?labels=`.
+- FR-L14: Skill detail page: label section shows all labels. Authenticated users see an inline combobox (type-and-select tag input, visible by default) with typeahead from `GET /api/labels?q=`. Authenticated users can remove labels they applied (× button on chip).
+- FR-L15: Label filter on list page (`label-filter.tsx`) is wired to real data from `GET /api/labels`; selected labels reflected in URL `?labels=`; multiple labels use AND semantics (skill must carry all selected labels).
 - FR-L16: `/labels` page — lists all labels sorted by usage count; click navigates to filtered skill list.
-- FR-L17: Unauthenticated users see label chips read-only; "Add label" input shows tooltip "Log in to add labels".
+- FR-L17: Unauthenticated users see label chips read-only; combobox input shows tooltip "Log in to add labels" and is disabled.
+- FR-L18: Admin label management lives at `/admin/labels` (new admin area, new Next.js route group).
 
 ### Non-Functional
 
@@ -223,23 +224,77 @@ Migration: additive — `labels: []` default for all existing skills. No data mi
 
 ---
 
+## ADRs
+
+### ADR-001: Label chips — single row, no wrap
+
+**Status:** Accepted
+
+**Context:** Cards have limited vertical space; unlimited tag wrapping makes the list page inconsistent and visually noisy.
+
+**Decision:** Render up to 5 chips in a single row; show "+N more" badge for overflow. Detail page shows all chips (no cap).
+
+**Consequences:** Users won't see all labels at a glance on cards. Acceptable — detail page is one click away.
+
+---
+
+### ADR-002: Inline combobox for label input (always visible when authed)
+
+**Status:** Accepted
+
+**Context:** Two options: (a) hidden behind "+ Add label" click, (b) always-visible combobox at bottom of label section.
+
+**Decision:** Always-visible inline combobox (Radix `Command` or similar). Reduces clicks for power users who label frequently.
+
+**Consequences:** Adds ~40px height to detail page for all authenticated users even when they don't want to label. Acceptable tradeoff.
+
+---
+
+### ADR-003: AND semantics for multi-label filter
+
+**Status:** Accepted
+
+**Context:** OR semantics would widen results (any skill with any selected label). AND semantics narrow results (skill must have all selected labels).
+
+**Decision:** AND — more useful for discovery ("show me skills tagged both `python` AND `data-viz`").
+
+**Consequences:** With many labels selected, result set may be empty. Mitigated by showing result count live as labels are added.
+
+---
+
+### ADR-004: All slices ship in one PR
+
+**Status:** Accepted
+
+**Context:** Backend-only or frontend-only slices would be non-functional in staging; reviewers can't verify the feature end-to-end.
+
+**Decision:** Ship backend + frontend + admin as one branch/PR. Delivery slices are development ordering, not separate PRs.
+
+**Consequences:** Larger PR. Acceptable — the feature is cohesive and the slices are clearly separable in commits.
+
+---
+
 ## Delivery Slices
 
-**Slice 1 — Backend endpoints**
-- `LabelService` with add/remove/list/search
-- `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels`
-- `labels` field in `SkillOut` / `SkillListOut`
-- Unit tests
+All slices ship in one branch (`feat/label-ux`), one PR. Order of implementation:
 
-**Slice 2 — Frontend: cards + detail**
-- Label chips on `SkillCard`
-- `LabelSection` component on skill detail (add/remove, typeahead)
-- Wire `label-filter.tsx` to real API data
-- `/labels` browse page
+**Slice 1 — Backend**
+- `LabelOut` schema; `labels` field in `SkillOut` / `SkillListOut`
+- `LabelService`: add / remove / list_for_skill / search / rename / merge / delete
+- Labels router: `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels`
+- Admin router: `GET/PATCH/DELETE /api/admin/labels`, `POST /api/admin/labels/:id/merge`
+- Fix `SkillService.list()` to apply AND label filter
+- Unit tests (mongomock)
 
-**Slice 3 — Admin**
-- Admin label management endpoints (rename/merge/delete)
-- Admin UI: `/admin/labels` page with table + actions
+**Slice 2 — Frontend: read path**
+- Add `labels: LabelOut[]` to frontend `Skill` type
+- Label chips on `SkillCard` (single row, 5 max + overflow badge)
+- `/labels` browse page (SSR)
+- Wire `label-filter.tsx` to `GET /api/labels`; AND filter; `?labels=` URL param
+
+**Slice 3 — Frontend: write path + admin**
+- `LabelSection` component on detail page (inline combobox, remove own, read-only for anon)
+- `/admin/labels` page: table of all labels + rename/merge/delete actions
 
 ---
 
@@ -256,12 +311,15 @@ Migration: additive — `labels: []` default for all existing skills. No data mi
 
 ## Definition of Done
 
+- [ ] `LabelOut` schema; `labels` in `SkillOut` + `SkillListOut`
+- [ ] `LabelService` — add/remove/list_for_skill/search/rename/merge/delete, unit tested
 - [ ] `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels` implemented and tested
-- [ ] Admin rename/merge/delete endpoints implemented with atomicity tests
-- [ ] `SkillOut` + `SkillListOut` include `labels` field
-- [ ] Label chips on skill cards (up to 5 + overflow)
-- [ ] `LabelSection` on detail page: view, add (typeahead), remove own
-- [ ] `label-filter.tsx` wired to real API; `?labels=` URL param functional
-- [ ] `/labels` browse page live
-- [ ] Unauthenticated users see labels read-only with tooltip on add
+- [ ] Admin rename/merge/delete endpoints with atomicity tests
+- [ ] `SkillService.list()` applies AND label filter via `?labels=`
+- [ ] Frontend `Skill` type includes `labels: LabelOut[]`
+- [ ] Label chips on skill cards (single row, up to 5 + "+N more" badge)
+- [ ] `/labels` browse page live (SSR, sorted by usage_count)
+- [ ] `label-filter.tsx` wired to real API; AND multi-select; `?labels=` URL param
+- [ ] `LabelSection` on detail page: inline combobox (always visible when authed), remove own, disabled with tooltip for anon
+- [ ] `/admin/labels` page: table + rename/merge/delete actions
 - [ ] AC-L1 through AC-L7 pass in staging

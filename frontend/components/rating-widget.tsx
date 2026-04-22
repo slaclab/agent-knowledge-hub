@@ -78,9 +78,6 @@ export function RatingWidget({ slug, initialAvgRating, initialRatingCount }: Rat
   return (
     <div className="space-y-1">
       <StarRating value={pickerValue} count={ratingCount} onRate={handleRate} />
-      {avgRating > 0 && (
-        <p className="text-xs text-muted-foreground">avg {avgRating.toFixed(1)}</p>
-      )}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );

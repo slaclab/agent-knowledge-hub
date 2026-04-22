@@ -28,6 +28,7 @@ secretGenerator:
       - etc/.secrets/MONGO_URI
       - etc/.secrets/GITHUB_APP_ID
       - etc/.secrets/GITHUB_APP_PRIVATE_KEY
+      - etc/.secrets/GITHUB_TOKEN
       - etc/.secrets/INTERNAL_API_SECRET
     options:
       disableNameSuffixHash: true

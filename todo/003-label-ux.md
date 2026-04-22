@@ -351,27 +351,27 @@ All slices ship in one branch (`feat/label-ux`), one PR. Order of implementation
 
 ## Definition of Done
 
-- [ ] `Label.name` unique index; `SkillLabel` compound unique index
-- [ ] `Label` model `@field_validator` enforcing name regex + max 50 chars
-- [ ] `get_optional_user` dependency in `auth.py`
-- [ ] `LabelOut` schema; `labels` in `SkillOut` + `SkillListOut` (batch hydration)
-- [ ] `LabelService` — add (rate-limit)/remove/list_for_skill/search(re.escape)/rename/merge(recount)/delete, unit tested
-- [ ] `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels` implemented and tested
-- [ ] Admin rename/merge/delete endpoints with MongoDB transaction tests
-- [ ] `SkillService.list()` AND label filter via aggregation; `(label_id, skill_id)` index added
-- [ ] Labels and admin routers registered in `main.py`
-- [ ] Frontend `Skill` type and `LabelOut` interface updated
-- [ ] Next.js proxy route handlers for all new endpoints
-- [ ] `cmdk` added to `package.json`
-- [ ] Label chips on skill cards (single row, up to 5 + non-interactive "+N more" badge, interactive style)
-- [ ] `/labels` browse page live (SSR, sorted by usage_count, with counts); "Labels" nav link
-- [ ] `label-filter.tsx` (new): multi-select popover in list page controls bar; AND filter; `?labels=` URL param; label-specific empty state
-- [ ] `LabelSection` on detail page: inline combobox (cmdk), usage counts, remove own, optimistic UI, auth tooltip
-- [ ] `(admin)` route group + guard; "Admin" nav link when `user.is_admin`
-- [ ] `/admin/labels` page: table + rename/merge/delete with AlertDialog confirmations
-- [ ] ADRs 001–004 filed in `docs/adr/` as `adr-u07` through `adr-u10`
-- [ ] CHANGELOG.md created with label UX entry
-- [ ] README updated to mention `/labels`, label combobox, `/admin/labels`
+- [x] `Label.name` unique index; `SkillLabel` compound unique index
+- [x] `Label` model `@field_validator` enforcing name regex + max 50 chars
+- [x] `get_optional_user` dependency in `auth.py`
+- [x] `LabelOut` schema; `labels` in `SkillOut` + `SkillListOut` (batch hydration)
+- [x] `LabelService` — add (rate-limit)/remove/list_for_skill/search(re.escape)/rename/merge(recount)/delete, unit tested
+- [x] `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels` implemented and tested
+- [x] Admin rename/merge/delete endpoints with MongoDB transaction tests
+- [x] `SkillService.list()` AND label filter via aggregation; `(label_id, skill_id)` index added
+- [x] Labels and admin routers registered in `main.py`
+- [x] Frontend `Skill` type and `LabelOut` interface updated
+- [x] Next.js proxy route handlers for all new endpoints
+- [x] `cmdk` added to `package.json`
+- [x] Label chips on skill cards (single row, up to 5 + non-interactive "+N more" badge, interactive style)
+- [x] `/labels` browse page live (SSR, sorted by usage_count, with counts); "Labels" nav link
+- [x] `label-filter.tsx` (new): multi-select popover in list page controls bar; AND filter; `?labels=` URL param; label-specific empty state
+- [x] `LabelSection` on detail page: inline combobox (cmdk), usage counts, remove own, optimistic UI, auth tooltip
+- [x] `(admin)` route group + guard; "Admin" nav link when `user.is_admin`
+- [x] `/admin/labels` page: table + rename/merge/delete with AlertDialog confirmations
+- [x] ADRs 001–004 filed in `docs/adr/` as `adr-u07` through `adr-u10`
+- [x] CHANGELOG.md created with label UX entry
+- [x] README updated to mention `/labels`, label combobox, `/admin/labels`
 - [ ] AC-L1 through AC-L7 pass in staging
 
 ---

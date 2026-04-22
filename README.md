@@ -8,6 +8,8 @@ Your AI coding assistant is only as useful as the knowledge it has access to. Ag
 
 See what the community rates highly, filter by topic, read a description, and decide in seconds whether it's worth trying.
 
+Browse all community labels at [/labels](https://agent-knowledge-hub.slac.stanford.edu/labels), or click any label chip on a skill card to filter the catalog to that topic. On a skill's detail page, authenticated users can add free-form labels using an inline typeahead combobox.
+
 Skills in private SLAC GitHub repos are fully supported. Skills that require SLAC GitHub access are shown with a **SLAC Members Only** badge so you know upfront — and a link explaining how to get access.
 
 ## Share what you've built

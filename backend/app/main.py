@@ -16,6 +16,9 @@ from app.config import settings
 from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
 from app.routers import github_scan
+from app.routers.labels import admin_router as labels_admin_router
+from app.routers.labels import router as labels_router
+from app.routers.labels import skills_labels_router
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -84,6 +87,9 @@ def create_app() -> FastAPI:
     app.include_router(skills.router)
     app.include_router(skills.github_router)
     app.include_router(github_scan.router)
+    app.include_router(labels_router)
+    app.include_router(skills_labels_router)
+    app.include_router(labels_admin_router)
 
     return app
 

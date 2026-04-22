@@ -54,6 +54,14 @@ def get_current_user(request: Request) -> User:
     )
 
 
+def get_optional_user(request: Request) -> User | None:
+    """FastAPI dependency — returns User if authenticated, None otherwise."""
+    try:
+        return get_current_user(request)
+    except HTTPException:
+        return None
+
+
 def require_admin(user: User) -> User:
     """FastAPI dependency — requires the caller to have admin rights."""
     if not user.is_admin:

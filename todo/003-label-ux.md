@@ -1,6 +1,7 @@
 # 003 — Label UX: Community Tagging System
 
-**Status:** 🔍 Reviewed
+**Status:** 🔄 In Progress
+**Branch:** feat/label-ux
 
 ---
 

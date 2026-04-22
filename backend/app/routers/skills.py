@@ -11,6 +11,7 @@ from app.models.revision import SkillRevision
 from app.models.skill import SkillStatus
 from app.schemas.skill import (
     GitHubPreviewOut,
+    LabelOut,
     PaginatedSkills,
     RevisionOut,
     SkillCreate,
@@ -18,6 +19,7 @@ from app.schemas.skill import (
     SkillOut,
     SkillUpdate,
 )
+from app.services.label import label_service
 from app.services.skill import DuplicateSkillError, SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
@@ -26,7 +28,7 @@ github_router = APIRouter(prefix="/api")
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _skill_to_out(skill) -> SkillOut:
+def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillOut:
     return SkillOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -54,10 +56,11 @@ def _skill_to_out(skill) -> SkillOut:
         avg_rating=skill.avg_rating,
         rating_count=skill.rating_count,
         flag_count=skill.flag_count,
+        labels=labels or [],
     )
 
 
-def _skill_to_list_out(skill) -> SkillListOut:
+def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillListOut:
     return SkillListOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -75,6 +78,7 @@ def _skill_to_list_out(skill) -> SkillListOut:
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
+        labels=labels or [],
     )
 
 
@@ -86,13 +90,17 @@ async def list_skills(
     page_size: int = Query(20, ge=1, le=100),
     forked_from: Optional[str] = Query(None, description="Filter by upstream fork URL"),
     visibility: Optional[str] = Query(None, description="Filter by visibility: public, internal, all"),
+    labels: Optional[str] = Query(None, description="Comma-separated label names (AND filter)"),
 ):
+    label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else None
     items, total = await skill_repository.list(
         q=q, sort=sort, page=page, page_size=page_size,
-        forked_from=forked_from, visibility=visibility,
+        forked_from=forked_from, visibility=visibility, labels=label_list,
     )
+    skill_ids = [str(s.id) for s in items]
+    labels_by_skill = await label_service.batch_labels_for_skills(skill_ids)
     return PaginatedSkills(
-        items=[_skill_to_list_out(s) for s in items],
+        items=[_skill_to_list_out(s, labels=labels_by_skill.get(str(s.id), [])) for s in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -131,7 +139,8 @@ async def get_skill(slug: str):
                 },
             )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
-    return _skill_to_out(skill)
+    skill_labels = await label_service.list_for_skill(str(skill.id))
+    return _skill_to_out(skill, labels=skill_labels)
 
 
 @router.patch("/{slug}", response_model=SkillOut)
@@ -146,7 +155,8 @@ async def update_skill(
     if skill.submitter_id != user.user_id and not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
     skill = await skill_repository.update(skill, body, actor_id=user.user_id)
-    return _skill_to_out(skill)
+    skill_labels = await label_service.list_for_skill(str(skill.id))
+    return _skill_to_out(skill, labels=skill_labels)
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -170,7 +180,8 @@ async def refetch_skill(slug: str, user: User = Depends(get_current_user)):
     if skill.submitter_id != user.user_id and not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
     skill = await skill_repository.refetch(skill, actor_id=user.user_id)
-    return _skill_to_out(skill)
+    skill_labels = await label_service.list_for_skill(str(skill.id))
+    return _skill_to_out(skill, labels=skill_labels)
 
 
 @router.get("/{slug}/revisions", response_model=List[RevisionOut])

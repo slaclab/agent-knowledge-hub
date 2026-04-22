@@ -8,6 +8,7 @@ from beanie.operators import In, Text
 from pymongo.errors import DuplicateKeyError
 from slugify import slugify
 
+from app.models.label import Label, SkillLabel
 from app.models.skill import Skill, SkillStatus, VisibilityEnum
 from app.schemas.skill import SkillCreate, SkillUpdate
 from app.services.github import GitHubFetchError, _normalize_github_url, extract_repo_root_url, github_fetcher
@@ -59,6 +60,28 @@ class SkillRepository:
 
         if visibility and visibility != "all":
             query_parts.append(Skill.visibility == VisibilityEnum(visibility))
+
+        # AND label filter: find skills that carry ALL requested labels
+        if labels:
+            label_names = [n.strip().lower() for n in labels if n.strip()]
+            label_docs = await Label.find(In(Label.name, label_names)).to_list()
+            if len(label_docs) < len(label_names):
+                # At least one label doesn't exist → zero results
+                return [], 0
+            label_ids = [str(l.id) for l in label_docs]
+            collection = SkillLabel.get_motor_collection()
+            pipeline = [
+                {"$match": {"label_id": {"$in": label_ids}}},
+                {"$group": {"_id": "$skill_id", "cnt": {"$sum": 1}}},
+                {"$match": {"cnt": len(label_ids)}},
+            ]
+            cursor = collection.aggregate(pipeline)
+            matching_skill_ids = [doc["_id"] async for doc in cursor]
+            if not matching_skill_ids:
+                return [], 0
+            query_parts.append(In(Skill.id, [
+                __import__("bson").ObjectId(sid) for sid in matching_skill_ids
+            ]))
 
         base_query = Skill.find(*query_parts) if query_parts else Skill.find()
 

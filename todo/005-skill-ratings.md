@@ -1,8 +1,8 @@
 # 005 — Skill Ratings
 
-**Status:** 🏁 Implementation Done
+**Status:** ✅ Merged
 **Branch:** feat/skill-ratings
-**PR:** —
+**Shipped:** 2026-04-22
 
 ---
 

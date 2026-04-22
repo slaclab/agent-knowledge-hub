@@ -39,6 +39,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
   const forkCount = forksData?.total ?? 0;
   const accessInstructionsUrl = siteSettings.github_access_instructions_url;
 
+  // Unique contributors in order of first appearance; submitter always first
+  const contributors = [
+    skill.submitter_id,
+    ...revisions.map((r) => r.actor_id).filter((id) => id !== skill.submitter_id),
+  ].filter((id, i, arr) => arr.indexOf(id) === i);
+
   const isInternal = skill.visibility === "internal";
 
   return (
@@ -72,7 +78,7 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <p className="text-muted-foreground">{skill.description}</p>
           )}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>by {skill.submitter_id}</span>
+            <span>by {contributors.join(", ")}</span>
             <span>submitted {formatDate(skill.submitted_at)}</span>
           </div>
         </div>

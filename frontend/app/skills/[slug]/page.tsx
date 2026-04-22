@@ -7,6 +7,7 @@ import { RevisionTimeline } from "@/components/revision-timeline";
 import { PlatformBadges } from "@/components/platform-badges";
 import { StarRating } from "@/components/star-rating";
 import { FlagIndicator } from "@/components/flag-indicator";
+import { LabelSection } from "@/components/label-section";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
@@ -228,10 +229,10 @@ export default async function SkillDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Labels (stub) */}
+          {/* Labels */}
           <div className="rounded-lg border p-4 space-y-2">
             <h3 className="text-sm font-semibold">Labels</h3>
-            <p className="text-xs text-muted-foreground">Label support coming soon.</p>
+            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
           </div>
 
           {/* Revision History */}

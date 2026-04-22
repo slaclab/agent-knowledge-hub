@@ -18,6 +18,12 @@ class LabelOut(BaseModel):
     applied_by_me: bool = False
 
 
+class AdminLabelOut(BaseModel):
+    id: str
+    name: str
+    usage_count: int
+
+
 class SkillCreate(BaseModel):
     repo_url: str
     skill_path: str = "/"

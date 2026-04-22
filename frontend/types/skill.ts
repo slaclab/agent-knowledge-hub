@@ -8,6 +8,12 @@ export interface LabelOut {
   applied_by_me: boolean;
 }
 
+export interface AdminLabelOut {
+  id: string;
+  name: string;
+  usage_count: number;
+}
+
 export interface Skill {
   id: string;
   slug: string;

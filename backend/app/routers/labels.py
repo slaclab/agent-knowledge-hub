@@ -8,7 +8,7 @@ from slowapi.util import get_remote_address
 
 from app.auth import User, get_current_user, get_optional_user, require_admin
 from app.models.skill import Skill, SkillStatus
-from app.schemas.skill import LabelOut
+from app.schemas.skill import AdminLabelOut, LabelOut
 from app.services.label import (
     InvalidObjectIdError,
     LabelAlreadyAppliedError,
@@ -113,12 +113,13 @@ async def remove_label_from_skill(
 
 # Admin endpoints
 
-@admin_router.get("", response_model=List[LabelOut])
+@admin_router.get("", response_model=List[AdminLabelOut])
 async def admin_list_labels(
     user: User = Depends(get_current_user),
     _admin: User = Depends(require_admin),
 ):
-    return await label_service.list_all(include_zero=True)
+    labels = await label_service.list_all_with_ids(include_zero=True)
+    return labels
 
 
 @admin_router.patch("/{label_id}", response_model=LabelOut)

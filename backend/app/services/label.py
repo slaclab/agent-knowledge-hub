@@ -122,6 +122,12 @@ class LabelService:
         labels = await query.sort([("usage_count", -1)]).to_list()
         return [LabelOut(name=l.name, usage_count=l.usage_count) for l in labels]
 
+    async def list_all_with_ids(self, include_zero: bool = False) -> List[dict]:
+        from app.schemas.skill import AdminLabelOut
+        query = Label.find() if include_zero else Label.find(Label.usage_count > 0)
+        labels = await query.sort([("usage_count", -1)]).to_list()
+        return [AdminLabelOut(id=str(l.id), name=l.name, usage_count=l.usage_count) for l in labels]
+
     async def rename(self, label_id: str, new_name: str, actor_id: str) -> LabelOut:
         oid = _to_oid(label_id)
         new_name = new_name.strip().lower()

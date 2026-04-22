@@ -2,6 +2,7 @@ import { listLabels } from "@/lib/api";
 import Link from "next/link";
 import { Tag } from "lucide-react";
 import { labelColor } from "@/lib/label-color";
+import { BfcacheRefresh } from "@/components/bfcache-refresh";
 
 export const metadata = { title: "Labels — Agent Knowledge Hub" };
 
@@ -10,6 +11,7 @@ export default async function LabelsPage() {
 
   return (
     <div className="space-y-6">
+      <BfcacheRefresh />
       <div>
         <h1 className="text-2xl font-bold">Labels</h1>
         <p className="text-sm text-muted-foreground mt-1">

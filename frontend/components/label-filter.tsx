@@ -74,7 +74,7 @@ export function LabelFilter({ activeLabels }: { activeLabels: string[] }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-20 w-56 rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
+        <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
           <div className="p-2 border-b">
             <input
               autoFocus

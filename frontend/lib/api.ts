@@ -66,7 +66,7 @@ export async function getSkill(
   server = false,
 ): Promise<{ skill: Skill | null; deactivated: boolean; reason: string | null }> {
   const b = apiBase(server);
-  const res = await fetch(`${b}/skills/${slug}`);
+  const res = await fetch(`${b}/skills/${slug}`, { cache: "no-store" });
   if (res.status === 410) {
     const json = await res.json().catch(() => ({}));
     return { skill: null, deactivated: true, reason: (json as { detail?: string }).detail ?? null };

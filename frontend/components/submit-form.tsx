@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { getGithubScan, getGithubDiscover, createSkill, addLabel, removeLabel, listSkillLabels } from "@/lib/api";
+import { getGithubScan, getGithubDiscover, createSkill, addLabel } from "@/lib/api";
 import type { SkillScanSnapshot, DiscoverResult, LabelOut } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
-import { labelColor } from "@/lib/label-color";
-import { Star, AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight, X } from "lucide-react";
+import { AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { LabelPicker } from "@/components/label-picker";
+import { platformPillClass } from "@/components/platform-badges";
 
 const SCAN_TIMEOUT_MS = 10_000;
 const DISCOVER_TIMEOUT_MS = 30_000;
@@ -34,42 +34,19 @@ interface SkillDraft {
   license: string;
   platforms: string[];
   labels: string[];
+  result?: { slug?: string; error?: string };
 }
-
-type BulkResult = { path: string; slug?: string; error?: string };
 
 export function SubmitForm({
   accessInstructionsUrl = "/guides/slac-github-access",
 }: {
   accessInstructionsUrl?: string;
 }) {
-  const router = useRouter();
   const [url, setUrl] = useState("");
   const [scanState, setScanState] = useState<ScanState>({ status: "idle" });
   const [discoverState, setDiscoverState] = useState<DiscoverState>({ status: "idle" });
   const [drafts, setDrafts] = useState<SkillDraft[]>([]);
-  const [bulkResults, setBulkResults] = useState<BulkResult[]>([]);
-
-  // Single-skill form fields
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [version, setVersion] = useState("");
-  const [license, setLicense] = useState("");
-  const [platforms, setPlatforms] = useState<string[]>([]);
-  const [platformInput, setPlatformInput] = useState("");
-  const [skillPath, setSkillPath] = useState("/");
-
-  const [pendingLabels, setPendingLabels] = useState<LabelOut[]>([]);
-  const [labelInput, setLabelInput] = useState("");
-  const [labelSuggestions, setLabelSuggestions] = useState<LabelOut[]>([]);
-  const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
-  const labelInputRef = useRef<HTMLInputElement>(null);
-  const labelSuggestionsRef = useRef<HTMLDivElement>(null);
-
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [duplicateSlug, setDuplicateSlug] = useState<string | null>(null);
-  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -79,7 +56,6 @@ export function SubmitForm({
     abortRef.current = ac;
 
     setDiscoverState({ status: "discovering" });
-    setBulkResults([]);
 
     const timer = setTimeout(() => {
       ac.abort();
@@ -120,9 +96,6 @@ export function SubmitForm({
     setScanState({ status: "scanning" });
     setDiscoverState({ status: "idle" });
     setDrafts([]);
-    setBulkResults([]);
-    setSubmitError(null);
-    setDuplicateSlug(null);
 
     const timer = setTimeout(() => {
       ac.abort();
@@ -143,34 +116,11 @@ export function SubmitForm({
     }
 
     setScanState({ status: "done", snapshot: data });
-
-    const isSubdir = data.ref.path && data.ref.path !== "/" && data.ref.path !== "";
-    if (isSubdir) {
-      runDiscover(scanUrl);
-      return;
-    }
-
-    if (!name && data.name) setName(data.name);
-    if (!description && data.description) setDescription(data.description);
-    if (!version && data.version) setVersion(data.version);
-    if (!license && data.license) setLicense(data.license);
-    if (platforms.length === 0 && data.compatible_platforms.length)
-      setPlatforms(data.compatible_platforms);
-    setSkillPath(data.ref.path === "" ? "/" : data.ref.path);
-    if (data.existing_slug) setDuplicateSlug(data.existing_slug);
-  }, [name, description, version, license, platforms, runDiscover]);
+    runDiscover(scanUrl);
+  }, [runDiscover]);
 
   const handleBlur = () => {
     if (scanState.status === "idle") runScan(url);
-  };
-
-  const togglePlatform = (p: string) =>
-    setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
-
-  const addCustomPlatform = () => {
-    const p = platformInput.trim().toLowerCase();
-    if (p && !platforms.includes(p)) setPlatforms((prev) => [...prev, p]);
-    setPlatformInput("");
   };
 
   const updateDraft = (i: number, patch: Partial<SkillDraft>) =>
@@ -198,9 +148,8 @@ export function SubmitForm({
   const handleBulkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setBulkResults([]);
+    setDrafts((prev) => prev.map((d) => ({ ...d, result: undefined })));
     const selected = drafts.filter((d) => d.selected);
-    const results: BulkResult[] = [];
     for (const draft of selected) {
       const snap = draft.snapshot;
       const { data, error } = await createSkill({
@@ -212,55 +161,21 @@ export function SubmitForm({
         version: draft.version || undefined,
         license: draft.license || undefined,
       });
-      results.push({ path: snap.ref.path || "/", slug: data?.slug, error: error ?? undefined });
       if (data?.slug && draft.labels.length > 0) {
         await Promise.all(draft.labels.map((l) => addLabel(data.slug, l)));
       }
+      const result = { slug: data?.slug, error: error ?? undefined };
+      setDrafts((prev) =>
+        prev.map((d) => (d.snapshot.ref.path === snap.ref.path ? { ...d, result } : d))
+      );
     }
-    setBulkResults(results);
     setSubmitting(false);
-  };
-
-  const handleSingleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setSubmitError(null);
-    setDuplicateSlug(null);
-
-    const snapshot = scanState.status === "done" ? scanState.snapshot : null;
-    const { data, error } = await createSkill({
-      repo_url: snapshot
-        ? `https://github.com/${snapshot.ref.owner}/${snapshot.ref.repo}`
-        : url,
-      skill_path: skillPath,
-      name: name || undefined,
-      description: description || undefined,
-      compatible_platforms: platforms.length ? platforms : undefined,
-      version: version || undefined,
-      license: license || undefined,
-    });
-
-    setSubmitting(false);
-    if (error) {
-      if (error.includes("already exists") || error.includes("409")) {
-        const match = error.match(/\/skills\/([a-z0-9-]+)/);
-        if (match) setDuplicateSlug(match[1]);
-      }
-      setSubmitError(error);
-      return;
-    }
-    if (data) {
-      // Apply any labels added before submission
-      await Promise.all(pendingLabels.map((l) => addLabel(data.slug, l.name)));
-      setCreatedSlug(data.slug);
-    }
   };
 
   const snapshot = scanState.status === "done" ? scanState.snapshot : null;
   const scanning = scanState.status === "scanning";
   const discovering = discoverState.status === "discovering";
   const inDiscoveryMode = discoverState.status === "done" && drafts.length > 0;
-  const isRootScan = snapshot?.ref.path === "/" || snapshot?.ref.path === "";
 
   return (
     <div className="space-y-6">
@@ -303,55 +218,13 @@ export function SubmitForm({
           <ScanErrorBanner kind={scanState.kind} message={scanState.message} onRetry={() => runScan(url)} />
         )}
 
-        {duplicateSlug && !inDiscoveryMode && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            This skill is already in the catalog.{" "}
-            <Link href={`/skills/${duplicateSlug}`} className="underline font-medium">View existing entry →</Link>
-          </div>
-        )}
-
-        {snapshot?.no_skill_files && !inDiscoveryMode && (
-          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>No skill files found in this directory. You can still submit with manual metadata below.</span>
-          </div>
-        )}
-
-        {snapshot && !inDiscoveryMode && (
-          <div className="rounded-md border bg-muted px-3 py-2 space-y-0.5">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-sm">{snapshot.ref.owner}/{snapshot.ref.repo}</span>
-              {snapshot.stars > 0 && (
-                <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                  <Star className="h-3 w-3" />{snapshot.stars}
-                </span>
-              )}
-            </div>
-            {snapshot.ref.path && snapshot.ref.path !== "/" && (
-              <p className="text-xs text-muted-foreground font-mono">{snapshot.ref.path}</p>
-            )}
-          </div>
-        )}
-
-        {snapshot?.visibility === "internal" && !inDiscoveryMode && (
+        {snapshot?.visibility === "internal" && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             This repo requires SLAC GitHub access.
             {accessInstructionsUrl?.startsWith("http") && (
               <>{" "}<a href={accessInstructionsUrl} className="underline" target="_blank">Learn more</a></>
             )}
           </div>
-        )}
-
-        {/* Discover button — shown after a root-level scan */}
-        {snapshot && discoverState.status === "idle" && (
-          <button
-            type="button"
-            disabled={discovering}
-            onClick={() => runDiscover(url)}
-            className="text-sm text-primary underline hover:no-underline disabled:opacity-50"
-          >
-            {isRootScan ? "Scan entire repo for skills" : "Scan directory for more skills"}
-          </button>
         )}
 
         {discovering && (
@@ -406,168 +279,12 @@ export function SubmitForm({
             ))}
           </div>
 
-          {bulkResults.length > 0 && (
-            <div className="space-y-1">
-              {bulkResults.map((r) => (
-                <div
-                  key={r.path}
-                  className={`rounded-md px-3 py-2 text-sm flex items-center justify-between ${
-                    r.error
-                      ? "border border-destructive/30 bg-destructive/5 text-destructive"
-                      : "border border-green-300 bg-green-50 text-green-800"
-                  }`}
-                >
-                  <span className="font-mono text-xs">{r.path}</span>
-                  {r.slug ? (
-                    <Link href={`/skills/${r.slug}`} className="underline text-xs">View →</Link>
-                  ) : (
-                    <span className="text-xs">{r.error}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={submitting || selectedCount === 0}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? "Submitting…" : `Submit ${selectedCount} of ${drafts.length} skill${drafts.length !== 1 ? "s" : ""}`}
-          </button>
-        </form>
-      )}
-
-      {/* Success: label tagging step */}
-      {createdSlug && (
-        <SuccessPanel slug={createdSlug} onDone={() => router.push(`/skills/${createdSlug}`)} />
-      )}
-
-      {/* Single-skill form — shown only after a successful scan (non-discovery mode) */}
-      {!inDiscoveryMode && !createdSlug && scanState.status === "done" && (
-        <form onSubmit={handleSingleSubmit} className="space-y-6">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto-filled from scan"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Auto-filled from scan" rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Compatible Platforms</label>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORM_SUGGESTIONS.map((p) => (
-                <button key={p} type="button" onClick={() => togglePlatform(p)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-                    platforms.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-muted"
-                  }`}>{p}</button>
-              ))}
-              {platforms.filter((p) => !PLATFORM_SUGGESTIONS.includes(p as (typeof PLATFORM_SUGGESTIONS)[number])).map((p) => (
-                <button key={p} type="button" onClick={() => togglePlatform(p)}
-                  className="rounded-full px-3 py-1 text-xs font-medium border bg-primary text-primary-foreground border-primary">{p} ×</button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input value={platformInput} onChange={(e) => setPlatformInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomPlatform())}
-                placeholder="Add custom platform…"
-                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-              <button type="button" onClick={addCustomPlatform}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors">Add</button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Labels</label>
-            <div className="flex flex-wrap gap-1.5">
-              {pendingLabels.map((l) => (
-                <span key={l.name} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(l.name)}`}>
-                  {l.name}
-                  <button type="button" onClick={() => setPendingLabels((prev) => prev.filter((x) => x.name !== l.name))}
-                    className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors" aria-label={`Remove ${l.name}`}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="relative">
-              <input
-                ref={labelInputRef}
-                value={labelInput}
-                onChange={(e) => {
-                  setLabelInput(e.target.value);
-                  setShowLabelSuggestions(true);
-                  if (e.target.value.trim()) {
-                    fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=10`)
-                      .then((r) => r.json()).then((d: LabelOut[]) => setLabelSuggestions(d)).catch(() => {});
-                  } else {
-                    setLabelSuggestions([]);
-                  }
-                }}
-                onFocus={() => setShowLabelSuggestions(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const trimmed = labelInput.trim().toLowerCase();
-                    if (trimmed && !pendingLabels.find((l) => l.name === trimmed)) {
-                      setPendingLabels((prev) => [...prev, { name: trimmed, usage_count: 0, applied_by_me: true }]);
-                    }
-                    setLabelInput("");
-                    setShowLabelSuggestions(false);
-                  }
-                }}
-                onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
-                placeholder="Add a label…"
-                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {showLabelSuggestions && labelSuggestions.length > 0 && (
-                <div ref={labelSuggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
-                  {labelSuggestions.filter((s) => !pendingLabels.find((l) => l.name === s.name)).map((s) => (
-                    <button key={s.name} type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setPendingLabels((prev) => [...prev, { name: s.name, usage_count: s.usage_count, applied_by_me: true }]);
-                        setLabelInput("");
-                        setShowLabelSuggestions(false);
-                      }}
-                      className="flex w-full items-center justify-between px-2.5 py-1 text-xs hover:bg-muted transition-colors"
-                    >
-                      <span>{s.name}</span>
-                      <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Version</label>
-              <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.0"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">License</label>
-              <input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="MIT"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-          </div>
-
-          {submitError && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {submitError}
-            </div>
-          )}
-
-          <button type="submit" disabled={submitting || !url.trim() || scanning}
-            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {submitting ? "Submitting…" : "Submit Skill"}
           </button>
         </form>
       )}
@@ -585,39 +302,42 @@ function DiscoveryCard({
   onTogglePlatform: (p: string) => void;
 }) {
   const isRegistered = !!draft.snapshot.existing_slug;
-  const [labelInput, setLabelInput] = useState("");
-  const [labelSuggestions, setLabelSuggestions] = useState<LabelOut[]>([]);
-  const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
+  const succeeded = draft.result && !draft.result.error;
+  const failed = draft.result && !!draft.result.error;
 
   const addDraftLabel = (name: string) => {
-    const trimmed = name.trim().toLowerCase();
-    if (trimmed && !draft.labels.includes(trimmed)) {
-      onUpdate({ labels: [...draft.labels, trimmed] });
-    }
-    setLabelInput("");
-    setShowLabelSuggestions(false);
+    if (!draft.labels.includes(name)) onUpdate({ labels: [...draft.labels, name] });
   };
-
   const removeDraftLabel = (name: string) =>
     onUpdate({ labels: draft.labels.filter((l) => l !== name) });
 
   return (
-    <div className={`rounded-md border ${isRegistered ? "opacity-60 bg-muted" : "bg-background"}`}>
+    <div className={`rounded-md border ${
+      succeeded ? "border-green-300 bg-green-50" :
+      failed ? "border-destructive/30 bg-destructive/5" :
+      isRegistered ? "opacity-60 bg-muted" : "bg-background"
+    }`}>
       {/* Header row */}
       <div className="flex items-center gap-2 px-3 py-2">
         <input
           type="checkbox"
           checked={draft.selected}
-          disabled={isRegistered}
+          disabled={isRegistered || !!draft.result}
           onChange={onToggleSelect}
           className="h-4 w-4 rounded border-input accent-primary"
         />
         <button type="button" onClick={onToggleExpand} className="flex-1 flex items-center gap-1.5 text-left min-w-0">
           {draft.expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-          <span className="font-mono text-xs text-muted-foreground truncate">{draft.snapshot.ref.path || "/"}</span>
-          {draft.name && <span className="text-sm font-medium truncate">{draft.name}</span>}
+          <span className={`font-mono text-xs truncate ${succeeded ? "text-green-700" : failed ? "text-destructive" : "text-muted-foreground"}`}>{draft.snapshot.ref.path || "/"}</span>
+          {draft.name && <span className={`text-sm font-medium truncate ${succeeded ? "text-green-800" : failed ? "text-destructive" : ""}`}>{draft.name}</span>}
         </button>
-        {isRegistered && (
+        {succeeded && draft.result?.slug && (
+          <Link href={`/skills/${draft.result.slug}`} className="text-xs text-green-700 underline shrink-0">View →</Link>
+        )}
+        {failed && (
+          <span className="text-xs text-destructive shrink-0">{draft.result?.error}</span>
+        )}
+        {!draft.result && isRegistered && (
           <span className="text-xs text-muted-foreground shrink-0">
             Already in catalog —{" "}
             <Link href={`/skills/${draft.snapshot.existing_slug}`} className="underline">view →</Link>
@@ -645,57 +365,19 @@ function DiscoveryCard({
             <div className="flex flex-wrap gap-1.5">
               {PLATFORM_SUGGESTIONS.map((p) => (
                 <button key={p} type="button" onClick={() => onTogglePlatform(p)}
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium border transition-colors ${
-                    draft.platforms.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-muted"
-                  }`}>{p}</button>
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium border transition-colors ${platformPillClass(p, draft.platforms.includes(p))}`}>{p}</button>
               ))}
             </div>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Labels</label>
-            <div className="flex flex-wrap gap-1">
-              {draft.labels.map((l) => (
-                <span key={l} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(l)}`}>
-                  {l}
-                  <button type="button" onClick={() => removeDraftLabel(l)} className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors" aria-label={`Remove ${l}`}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="relative">
-              <input
-                value={labelInput}
-                onChange={(e) => {
-                  setLabelInput(e.target.value);
-                  setShowLabelSuggestions(true);
-                  if (e.target.value.trim()) {
-                    fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=8`)
-                      .then((r) => r.json()).then((d: LabelOut[]) => setLabelSuggestions(d)).catch(() => {});
-                  } else {
-                    setLabelSuggestions([]);
-                  }
-                }}
-                onFocus={() => setShowLabelSuggestions(true)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDraftLabel(labelInput); } }}
-                onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
-                placeholder="Add a label…"
-                className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {showLabelSuggestions && labelSuggestions.length > 0 && (
-                <div className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
-                  {labelSuggestions.filter((s) => !draft.labels.includes(s.name)).map((s) => (
-                    <button key={s.name} type="button"
-                      onMouseDown={(e) => { e.preventDefault(); addDraftLabel(s.name); }}
-                      className="flex w-full items-center justify-between px-2 py-1 text-xs hover:bg-muted transition-colors"
-                    >
-                      <span>{s.name}</span>
-                      <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LabelPicker
+              labels={draft.labels}
+              onAdd={addDraftLabel}
+              onRemove={removeDraftLabel}
+              canRemoveAll
+              suggestionLimit={8}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -711,124 +393,6 @@ function DiscoveryCard({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function SuccessPanel({ slug, onDone }: { slug: string; onDone: () => void }) {
-  const [labels, setLabels] = useState<LabelOut[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const [suggestions, setSuggestions] = useState<LabelOut[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [pending, setPending] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-
-  const handleAdd = useCallback(async (name: string) => {
-    const trimmed = name.trim().toLowerCase();
-    if (!trimmed) return;
-    setError(null);
-    setInputValue("");
-    setShowSuggestions(false);
-    setPending(trimmed);
-    const optimistic: LabelOut = { name: trimmed, usage_count: 0, applied_by_me: true };
-    setLabels((prev) => (prev.find((l) => l.name === trimmed) ? prev : [...prev, optimistic]));
-    const { data, error: err, status } = await addLabel(slug, trimmed);
-    setPending(null);
-    if (err || !data) {
-      setLabels((prev) => prev.filter((l) => l !== optimistic));
-      if (status === 409) setError("Already applied.");
-      else if (status === 429) setError("Max 5 labels reached.");
-      else setError(err ?? "Failed to add label.");
-      return;
-    }
-    const fresh = await listSkillLabels(slug);
-    setLabels(fresh);
-  }, [slug]);
-
-  const handleRemove = useCallback(async (name: string) => {
-    setLabels((prev) => prev.filter((l) => l.name !== name));
-    await removeLabel(slug, name);
-    const fresh = await listSkillLabels(slug);
-    setLabels(fresh);
-  }, [slug]);
-
-  return (
-    <div className="rounded-lg border border-green-300 bg-green-50 p-5 space-y-4">
-      <div className="space-y-1">
-        <p className="font-semibold text-green-800">Skill submitted!</p>
-        <p className="text-sm text-green-700">Add labels to help others discover it, or skip and go straight to the skill page.</p>
-      </div>
-
-      <div className="space-y-2">
-        {labels.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {labels.map((label) => (
-              <span
-                key={label.name}
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(label.name)}`}
-              >
-                {label.name}
-                <button
-                  type="button"
-                  onClick={() => handleRemove(label.name)}
-                  className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
-                  aria-label={`Remove ${label.name}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="relative">
-          <input
-            ref={inputRef}
-            value={inputValue}
-            disabled={pending !== null}
-            onChange={(e) => { setInputValue(e.target.value); setShowSuggestions(true); setError(null);
-              fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=8`)
-                .then((r) => r.json()).then((d: LabelOut[]) => setSuggestions(d)).catch(() => {});
-            }}
-            onFocus={() => setShowSuggestions(true)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(inputValue); } }}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            placeholder="Type a label and press Enter…"
-            className="w-full rounded-md border border-input bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-          />
-          {showSuggestions && suggestions.length > 0 && (
-            <div ref={suggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-white dark:bg-zinc-900 shadow-lg">
-              {suggestions.map((s) => (
-                <button key={s.name} type="button"
-                  onMouseDown={(e) => { e.preventDefault(); handleAdd(s.name); }}
-                  className="flex w-full items-center justify-between px-2.5 py-1 text-xs hover:bg-muted transition-colors"
-                >
-                  <span>{s.name}</span>
-                  <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 pt-1">
-        <button
-          type="button"
-          onClick={onDone}
-          className="rounded-md bg-green-700 text-white px-4 py-1.5 text-sm font-medium hover:bg-green-800 transition-colors"
-        >
-          Go to skill →
-        </button>
-        {labels.length === 0 && (
-          <button type="button" onClick={onDone} className="text-sm text-green-700 underline hover:no-underline">
-            Skip
-          </button>
-        )}
-      </div>
     </div>
   );
 }

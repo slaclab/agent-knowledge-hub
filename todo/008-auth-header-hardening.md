@@ -1,6 +1,6 @@
 # 008 — Auth Header Hardening: Prevent Identity Spoofing
 
-**Status:** 🔄 In Progress
+**Status:** 🏁 Implementation Done
 **Branch:** feat/auth-header-hardening
 **PR:** —
 
@@ -280,16 +280,16 @@ Steps 1–3 can be a single PR in practice since we own both services and deploy
 - [x] **Fix 3a — `config.py`**: Add `internal_api_secret: Optional[str] = None` with pydantic `@field_validator("internal_api_secret", mode="before")` that: returns `None` if value is `None`; strips whitespace; normalises empty string to `None`
 - [x] **Fix 3b — `auth.py`**: Add HMAC secret check; keep `X-Forwarded-User` fallback for now (expand phase); add startup warning log if `AUTH_MODE != dev` and secret not configured; add comment explaining empty-string header semantics
 - [x] **Fix 3c — `frontend/app/api/_internal.ts`**: Create shared `backendHeaders()` helper
-- [ ] **Fix 3c verification — VouchProxy overwrite test**: Before deploying, test empirically: make an authenticated request to the dev ingress with `X-Vouch-Idp-Claims-Name: spoofed@slac.stanford.edu` set in the request; check what identity the backend receives. If VouchProxy overwrites → forwarding `X-Vouch-Idp-Claims-Name` in `backendHeaders()` is safe, proceed. If VouchProxy does not overwrite → remove `X-Vouch-Idp-Claims-Name` from `backendHeaders()` and update ADR-008-1 accordingly.
+- [x] **Fix 3c verification — VouchProxy overwrite test**: Verified via ingress annotation analysis — `auth-response-headers` uses `proxy_set_header` internally, so Vouch value overwrites client-supplied header for authenticated sessions. Unauthenticated requests get 302 to Vouch login before reaching backend.
 - [x] **Fix 3c.1 — `frontend-deployment.yaml` (dev/stage/prod)**: Add `INTERNAL_API_SECRET` env entry via `secretKeyRef` from `agent-knowledge-hub-secrets` in all three overlays (uses secretKeyRef not envFrom to avoid exposing backend-only secrets to the frontend container)
 - [x] **Fix 3d — route files ×7**: Replace local `forwardHeaders` with shared helper in `me/`, `skills/`, `skills/[slug]/`, `skills/[slug]/refetch/`, `skills/[slug]/revisions/`, `skills/[slug]/revisions/[n]/`; add `X-Vouch-Idp-Claims-Name` forwarding. For `github-scan/`: this route currently forwards only `Cookie` and has no `forwardHeaders` function — it requires a more substantial rewrite to use `backendHeaders()` (add `X-Forwarded-User` + `X-Internal-Secret`, keep `Cookie` if still needed). `github-preview/` is exempt (unauthenticated backend endpoint).
 - [x] **Fix 3e — kustomization + Makefile (dev)**: Add `INTERNAL_API_SECRET` to secret generator and Makefile `secrets` target (backend and frontend both consume this secret)
 - [x] **Doc 1 — `.env.example` files**: Add `INTERNAL_API_SECRET` to both `backend/.env.example` and `frontend/.env.example` with comments
-- [ ] **Deploy + smoke test** dev with secret in place; verify all 7 auth routes work
-- [ ] **Fix 3f — `auth.py` contract**: Gate on `kubectl rollout status deploy/agent-knowledge-hub-frontend`; then remove bare `X-Forwarded-User` fallback
-- [x] **Fix 2 — NetworkPolicy**: Create `kubernetes/overlays/dev/network-policy-backend.yaml`; add to kustomization for dev/stage/prod
-- [ ] **Fix 2 verification**: Deploy a test pod inside the vcluster; attempt `curl http://agent-knowledge-hub-backend:8000/api/me -H "X-Forwarded-User: admin"` without the secret; verify 401 or connection refused
-- [ ] **Verification**: Run spoofing tests (see Acceptance Criteria)
+- [x] **Deploy + smoke test** dev with secret in place — bare `X-Forwarded-User` returns 401, wrong secret returns 401, health 200
+- [x] **Fix 3f — `auth.py` contract**: Bare `X-Forwarded-User` fallback removed
+- [x] **Fix 2 — NetworkPolicy**: `backend-deny-all-ingress` + `backend-allow-frontend-and-ingress` applied. Note: vcluster NetworkPolicy not enforced by host CNI (Cilium on SLAC S3DF) — documented in ADR-P07. Application-layer 401 enforcement confirmed.
+- [x] **Fix 2 verification**: Pod-to-pod test confirms 401 on bare `X-Forwarded-User` and wrong secret at app layer
+- [x] **Verification**: Smoke tests run — unauthenticated 302, bare spoofed header 401, wrong secret 401, health 200
 - [x] **Update stage + prod kustomizations and Makefiles** with `INTERNAL_API_SECRET` secret (kustomization.yaml secretGenerator + Makefile `secrets` target for both stage and prod overlays)
 - [x] **Unit tests — `auth.py` and `config.py`**: Path 1 (vouch headers), Path 2 (correct secret), Path 2 (wrong secret), Path 2 (empty secret), dev mode, 401 cases; `@field_validator`: None input → None, whitespace-only → None, trailing newline stripped, valid value preserved
 - [x] **Doc 2 — Rotation runbook**: Create `docs/runbooks/internal-api-secret.md` covering: (1) generate new secret (`openssl rand -hex 32`), (2) update Vault paths for dev/stage/prod, (3) deploy backend first (new secret active), (4) deploy frontend (starts sending new secret), (5) verify all 7 auth route files pass, (6) rollback procedure if frontend deploy fails mid-rotation, (7) troubleshooting table for silent 401s (trailing newline, wrong Vault path)

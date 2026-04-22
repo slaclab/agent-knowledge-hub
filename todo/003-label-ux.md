@@ -1,6 +1,6 @@
 # 003 — Label UX: Community Tagging System
 
-**Status:** ⬜ Open
+**Status:** 🔍 Reviewed
 
 ---
 
@@ -53,32 +53,42 @@
 ### Functional
 
 **Backend**
-- FR-L1: `GET /api/labels` — list all labels ordered by `usage_count` desc; supports `?q=<prefix>` for typeahead.
+- FR-L1: `GET /api/labels` — list all labels ordered by `usage_count` desc; supports `?q=<prefix>` for typeahead. `q` must be `re.escape()`d before use in `$regex` query to prevent ReDoS.
 - FR-L2: `GET /api/labels/:name` — single label detail with `usage_count`.
-- FR-L3: `POST /api/skills/:slug/labels` — add a label to a skill (auth required). Body: `{ "name": "<label>" }`. Label name normalised to lowercase hyphens. Creates `Label` document if it doesn't exist; increments `usage_count`; creates `SkillLabel`. Returns 409 if caller already applied this label.
-- FR-L4: `DELETE /api/skills/:slug/labels/:name` — remove a label the caller applied (auth required). Decrements `usage_count`. Returns 404 if label not applied by caller.
-- FR-L5: `GET /api/skills/:slug/labels` — list all labels on a skill with `applied_by` list per label.
-- FR-L6: `SkillOut` and `SkillListOut` schemas include `labels: list[LabelOut]` (name + count of appliers).
-- FR-L7: `GET /api/skills` supports `?labels=<comma-separated>` filter (already partially wired; make it functional).
-- FR-L8: Admin — `PATCH /api/admin/labels/:id` — rename label; all `SkillLabel` records updated atomically.
-- FR-L9: Admin — `POST /api/admin/labels/:id/merge` — merge label B into label A; all SkillLabel records for B updated to A; B deleted.
-- FR-L10: Admin — `DELETE /api/admin/labels/:id` — delete label and all its SkillLabel records.
+- FR-L3: `POST /api/skills/:slug/labels` — add a label to a skill (auth required). Body: `{ "name": "<label>" }`. Label name normalised then validated against `^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$` (max 50 chars) — invalid input returns 400. Creates `Label` document if it doesn't exist; creates `SkillLabel` after successful insert; increments `usage_count` via `$inc` after insert. Returns 409 if caller already applied this label. Returns 429 if caller has applied ≥ 5 labels to this skill. Returns **201** on success.
+- FR-L3b: Rate limiting — max 5 labels per user per skill (enforced in `LabelService.add()`); max 50 label-add operations per user per hour (enforced via slowapi).
+- FR-L4: `DELETE /api/skills/:slug/labels/:name` — remove a label the caller applied (auth required). Resolves label by normalised name. Decrements `usage_count` via `$inc` after delete. Returns 404 if label not applied by caller.
+- FR-L5: `GET /api/skills/:slug/labels` — list all labels on a skill. Uses `get_optional_user` dependency (returns `User | None`) so unauthenticated callers receive `applied_by_me: false` without 401.
+- FR-L6: `SkillOut` and `SkillListOut` schemas include `labels: list[LabelOut]` (name + count of appliers). `SkillListOut` populated via batch hydration (2 extra queries per page, not N+1).
+- FR-L7: `GET /api/skills` supports `?labels=<comma-separated>` AND filter. Implementation: (1) resolve label names to IDs, (2) aggregate `SkillLabel` to find skill_ids carrying ALL label_ids (`$group` + `$match count == len(ids)`), (3) `$in` on Skill. Requires `(label_id, skill_id)` compound index on `skill_labels` collection.
+- FR-L8: Admin — `PATCH /api/admin/labels/:id` — rename label; wrapped in MongoDB multi-document transaction. `:id` must be a valid 24-char hex ObjectId.
+- FR-L9: Admin — `POST /api/admin/labels/:id/merge` — merge label B into A; all steps in a MongoDB transaction. Body: `{ "into_id": str }` — `into_id` must be a valid ObjectId. After merge, `usage_count` recounted from actual `SkillLabel` records (not arithmetic).
+- FR-L10: Admin — `DELETE /api/admin/labels/:id` — delete label and all its SkillLabel records in a MongoDB transaction.
 - FR-L11: Admin — `GET /api/admin/labels` — all labels with usage counts (same as public but includes zero-usage labels).
+- FR-L12b: `Label.name` index must have `unique=True`. `SkillLabel` compound index `(skill_id, label_id, applied_by)` must have `unique=True`.
+- FR-L12c: New `get_optional_user` dependency added to `auth.py` returning `User | None`. Used by any public endpoint that optionally enriches responses for authenticated callers.
+- FR-L12d: Labels router and admin sub-router registered in `backend/app/main.py`.
 
 **Frontend**
-- FR-L12: Skill cards show up to 5 label chips in a single row; "+N more" badge if > 5 (no wrapping).
+- FR-L12: Skill cards show up to 5 label chips in a single row; "+N more" badge if > 5 (no wrapping). The "+N more" badge is non-interactive; clicking the card navigates to the detail page. Label chips on cards show name only (no usage counts). Chips use a distinct interactive style: `cursor-pointer`, hover background, colour differentiated from platform badges.
 - FR-L13: Clicking a label chip on a card or detail page navigates to `/skills?labels=<name>`.
-- FR-L14: Skill detail page: label section shows all labels. Authenticated users see an inline combobox (type-and-select tag input, visible by default) with typeahead from `GET /api/labels?q=`. Authenticated users can remove labels they applied (× button on chip).
-- FR-L15: Label filter on list page (`label-filter.tsx`) is wired to real data from `GET /api/labels`; selected labels reflected in URL `?labels=`; multiple labels use AND semantics (skill must carry all selected labels).
-- FR-L16: `/labels` page — lists all labels sorted by usage count; click navigates to filtered skill list.
-- FR-L17: Unauthenticated users see label chips read-only; combobox input shows tooltip "Log in to add labels" and is disabled.
-- FR-L18: Admin label management lives at `/admin/labels` (new admin area, new Next.js route group).
+- FR-L14: Skill detail page: label section shows all labels with usage counts. Authenticated users see an inline combobox (always visible, compact style) with typeahead from `GET /api/labels?q=`. Authenticated users can remove labels they applied (× button on chip). Label add/remove use optimistic UI updates; on server error (409, 404, network), UI reverts and shows inline error below the combobox.
+- FR-L15: `label-filter.tsx` is a **new** component (not an existing file). It renders as a multi-select popover in the controls bar of the skill list page (next to visibility filter and sort select). Fetches suggestions from `GET /api/labels`; selected labels reflected in URL `?labels=`; AND semantics (skill must carry all selected labels).
+- FR-L16: `/labels` page — lists all labels sorted by usage count with counts displayed; click navigates to filtered skill list.
+- FR-L17: Unauthenticated users see label chips read-only; combobox disabled with tooltip "Authentication required to add labels. Refresh if your session expired."
+- FR-L18: Admin label management at `/admin/labels` (new Next.js route group `(admin)` with layout and admin guard). Delete and merge require AlertDialog confirmation: delete shows label name + affected skill count; merge shows source, target, and skill count. Both state the operation is irreversible.
+- FR-L19: Empty state when label filters produce zero results: "No skills match all selected labels. Try removing some to widen your search." — shown alongside removable active-label chips.
+- FR-L20: A "Labels" link appears in the global nav bar (between "Guides" and "Submit Skill") linking to `/labels`.
+- FR-L21: When `user.is_admin` is true, an "Admin" link appears in the global nav bar linking to `/admin/labels`.
+- FR-L22: Next.js proxy route handlers created for `/api/labels/[...]`, `/api/skills/[slug]/labels/[...]`, and `/api/admin/labels/[...]` following the existing `_internal.ts` auth-forwarding pattern.
+- FR-L23: `cmdk` added to `package.json` dependencies for the combobox typeahead component.
+- FR-L24: `LabelOut` TypeScript interface added to `frontend/types/skill.ts`; `labels: LabelOut[]` field added to `Skill` type.
 
 ### Non-Functional
 
 - NFR-L1: Label add/remove acknowledges within 500ms (PRD NFR-3).
 - NFR-L2: Typeahead responds in < 200ms for prefix search on up to 10k labels.
-- NFR-L3: Admin rename/merge operations are atomic (MongoDB transaction or two-phase update with rollback).
+- NFR-L3: Admin rename/merge/delete operations are atomic — all steps wrapped in MongoDB multi-document transactions (Beanie `session` parameter on all find/update/delete calls within the block).
 
 ### Acceptance Criteria
 
@@ -114,21 +124,41 @@ MongoDB (labels, skill_labels collections)
 
 ### Atomic Admin Operations
 
+All admin operations wrapped in MongoDB multi-document transactions via `async with await client.start_session() as session: async with session.start_transaction()`. Motor client accessed via `Label.get_motor_collection().database.client`.
+
 ```
 Rename label A → B:
+  (in transaction)
   1. Update Label.name = B, push A to Label.aliases
   2. No SkillLabel changes needed (SkillLabel stores label_id not name)
 
 Merge label B into A:
+  (in transaction)
   1. Find all SkillLabel where label_id = B.id
   2. For each: if (skill_id, A.id, applied_by) doesn't exist → update label_id = A.id
               else → delete (dedup)
-  3. Add A.usage_count += B.usage_count (minus deduped count)
-  4. Delete Label B and all remaining SkillLabel for B
+  3. Delete Label B and all remaining SkillLabel for B
+  4. Recount: A.usage_count = await SkillLabel.find(label_id=A.id).count()
 
 Delete label A:
+  (in transaction)
   1. Delete all SkillLabel where label_id = A.id
   2. Delete Label A
+```
+
+### AND Filter Query Pattern
+
+```
+SkillService.list() with ?labels=python,data-viz:
+  1. label_ids = [Label.find_one(name=n).id for n in requested_names]
+  2. matching_skill_ids = db.skill_labels.aggregate([
+       {$match: {label_id: {$in: label_ids}}},
+       {$group: {_id: "$skill_id", count: {$sum: 1}}},
+       {$match: {count: len(label_ids)}}
+     ])
+  3. Skill.find(In(Skill.id, matching_skill_ids))
+
+Requires index: (label_id, skill_id) on skill_labels collection.
 ```
 
 ### API Contract
@@ -279,22 +309,31 @@ Migration: additive — `labels: []` default for all existing skills. No data mi
 All slices ship in one branch (`feat/label-ux`), one PR. Order of implementation:
 
 **Slice 1 — Backend**
-- `LabelOut` schema; `labels` field in `SkillOut` / `SkillListOut`
-- `LabelService`: add / remove / list_for_skill / search / rename / merge / delete
-- Labels router: `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels`
-- Admin router: `GET/PATCH/DELETE /api/admin/labels`, `POST /api/admin/labels/:id/merge`
-- Fix `SkillService.list()` to apply AND label filter
-- Unit tests (mongomock)
+- Add `unique=True` to `Label.name` index and `SkillLabel` compound index
+- Add `@field_validator('name')` to `Label` model enforcing `^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$` (max 50 chars)
+- Add `get_optional_user` dependency to `auth.py`
+- `LabelOut` schema; `labels` field in `SkillOut` / `SkillListOut`; update `_skill_to_out()` and `_skill_to_list_out()`
+- `LabelService`: add (with rate limit) / remove / list_for_skill / search (re.escape) / rename / merge (recount) / delete — all wrapped in transactions where needed
+- Labels router: `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels` — register in `main.py`
+- Admin router: `GET/PATCH/DELETE /api/admin/labels`, `POST /api/admin/labels/:id/merge` — register in `main.py`
+- Fix `SkillService.list()` to apply AND label filter via aggregation + `(label_id, skill_id)` index
+- Unit tests (mongomock) per test plan
 
 **Slice 2 — Frontend: read path**
-- Add `labels: LabelOut[]` to frontend `Skill` type
-- Label chips on `SkillCard` (single row, 5 max + overflow badge)
-- `/labels` browse page (SSR)
-- Wire `label-filter.tsx` to `GET /api/labels`; AND filter; `?labels=` URL param
+- Add `cmdk` to `package.json`
+- Add `LabelOut` TypeScript interface; add `labels: LabelOut[]` to `Skill` type
+- Next.js proxy route handlers for `/api/labels/[...]`, `/api/skills/[slug]/labels/[...]`, `/api/admin/labels/[...]`
+- Label chips on `SkillCard` (single row, 5 max + non-interactive overflow badge, interactive style)
+- `/labels` browse page (SSR, sorted by usage_count, with counts)
+- Wire `label-filter.tsx` (new component) in list page controls bar; AND filter; `?labels=` URL param; label-specific empty state
+- "Labels" link in global nav
 
 **Slice 3 — Frontend: write path + admin**
-- `LabelSection` component on detail page (inline combobox, remove own, read-only for anon)
-- `/admin/labels` page: table of all labels + rename/merge/delete actions
+- `LabelSection` on detail page: inline combobox (cmdk, always visible when authed), usage counts, remove own, optimistic UI, auth tooltip
+- `(admin)` route group with layout + admin guard; "Admin" nav link when `user.is_admin`
+- `/admin/labels` page: table + rename/merge/delete with AlertDialog confirmations
+- File ADRs 001–004 in `docs/adr/` as `adr-u07` through `adr-u10`
+- CHANGELOG.md created; entry added for label UX feature
 
 ---
 
@@ -311,15 +350,167 @@ All slices ship in one branch (`feat/label-ux`), one PR. Order of implementation
 
 ## Definition of Done
 
-- [ ] `LabelOut` schema; `labels` in `SkillOut` + `SkillListOut`
-- [ ] `LabelService` — add/remove/list_for_skill/search/rename/merge/delete, unit tested
+- [ ] `Label.name` unique index; `SkillLabel` compound unique index
+- [ ] `Label` model `@field_validator` enforcing name regex + max 50 chars
+- [ ] `get_optional_user` dependency in `auth.py`
+- [ ] `LabelOut` schema; `labels` in `SkillOut` + `SkillListOut` (batch hydration)
+- [ ] `LabelService` — add (rate-limit)/remove/list_for_skill/search(re.escape)/rename/merge(recount)/delete, unit tested
 - [ ] `GET /api/labels`, `GET/POST/DELETE /api/skills/:slug/labels` implemented and tested
-- [ ] Admin rename/merge/delete endpoints with atomicity tests
-- [ ] `SkillService.list()` applies AND label filter via `?labels=`
-- [ ] Frontend `Skill` type includes `labels: LabelOut[]`
-- [ ] Label chips on skill cards (single row, up to 5 + "+N more" badge)
-- [ ] `/labels` browse page live (SSR, sorted by usage_count)
-- [ ] `label-filter.tsx` wired to real API; AND multi-select; `?labels=` URL param
-- [ ] `LabelSection` on detail page: inline combobox (always visible when authed), remove own, disabled with tooltip for anon
-- [ ] `/admin/labels` page: table + rename/merge/delete actions
+- [ ] Admin rename/merge/delete endpoints with MongoDB transaction tests
+- [ ] `SkillService.list()` AND label filter via aggregation; `(label_id, skill_id)` index added
+- [ ] Labels and admin routers registered in `main.py`
+- [ ] Frontend `Skill` type and `LabelOut` interface updated
+- [ ] Next.js proxy route handlers for all new endpoints
+- [ ] `cmdk` added to `package.json`
+- [ ] Label chips on skill cards (single row, up to 5 + non-interactive "+N more" badge, interactive style)
+- [ ] `/labels` browse page live (SSR, sorted by usage_count, with counts); "Labels" nav link
+- [ ] `label-filter.tsx` (new): multi-select popover in list page controls bar; AND filter; `?labels=` URL param; label-specific empty state
+- [ ] `LabelSection` on detail page: inline combobox (cmdk), usage counts, remove own, optimistic UI, auth tooltip
+- [ ] `(admin)` route group + guard; "Admin" nav link when `user.is_admin`
+- [ ] `/admin/labels` page: table + rename/merge/delete with AlertDialog confirmations
+- [ ] ADRs 001–004 filed in `docs/adr/` as `adr-u07` through `adr-u10`
+- [ ] CHANGELOG.md created with label UX entry
+- [ ] README updated to mention `/labels`, label combobox, `/admin/labels`
 - [ ] AC-L1 through AC-L7 pass in staging
+
+---
+
+## Test Plan
+
+### Unit Tests — `backend/tests/test_label_service.py` (mongomock)
+
+**Happy paths:**
+- `test_add_label_creates_label_and_skill_label` — new label created, SkillLabel created, usage_count=1
+- `test_add_label_existing_label` — label reused across two skills; usage_count=2
+- `test_add_label_same_user_second_label` — user adds two different labels to same skill; both exist
+- `test_remove_label` — add then remove; SkillLabel deleted, usage_count decremented
+- `test_list_for_skill` — 3 labels added by different users; all returned with correct counts
+- `test_list_for_skill_applied_by_me` — `applied_by_me` True for caller's labels, False for others
+- `test_list_for_skill_anonymous` — viewer_id=None; all `applied_by_me` = False
+- `test_search_prefix` — search "py" returns "python" and "pytorch", not "react"
+- `test_search_empty_query` — returns all labels ordered by usage_count desc
+- `test_search_limit` — limit parameter caps results
+
+**Error paths:**
+- `test_add_label_duplicate_409` — same user adds same label twice; second raises Duplicate
+- `test_add_label_invalid_name_uppercase` — "Python" rejected
+- `test_add_label_invalid_name_special_chars` — "data_viz" rejected
+- `test_add_label_invalid_name_spaces` — "data viz" rejected
+- `test_add_label_invalid_name_leading_hyphen` — "-python" rejected
+- `test_add_label_invalid_name_trailing_hyphen` — "python-" rejected
+- `test_add_label_invalid_name_empty` — "" rejected
+- `test_add_label_invalid_name_too_long` — 51-char label rejected
+- `test_add_label_skill_not_found` — nonexistent skill_id raises NotFound
+- `test_remove_label_not_applied` — label not applied by caller raises NotFound
+- `test_add_label_rate_limit` — 6th label by same user on same skill rejected
+
+**Admin operations:**
+- `test_rename_label` — Label.name updated, old name pushed to aliases
+- `test_rename_label_conflict` — rename to existing name raises Duplicate
+- `test_merge_labels_simple` — all SkillLabel for B updated to A; B deleted; usage_count recounted
+- `test_merge_labels_with_dedup` — duplicate (skill_id, A.id, user) deduped; usage_count correct
+- `test_merge_into_self` — rejected with error
+- `test_delete_label` — Label and all SkillLabel removed
+- `test_delete_label_cascades` — 3 skills lose label; all 3 SkillLabel records gone
+
+**AND filter:**
+- `test_list_skills_filter_single_label` — filter by "python" returns only skills with that label
+- `test_list_skills_filter_and_semantics` — filter by ["python","data-viz"] returns only skills with both
+- `test_list_skills_filter_no_match` — filter by unseen label combo returns empty list
+- `test_list_skills_filter_nonexistent_label` — filter by unknown name returns empty list (not 404)
+
+**Note:** Admin transaction tests (merge, delete) require real MongoDB or testcontainers; mongomock does not support multi-document transactions. Service methods may need transaction bypass in unit test mode.
+
+### Integration Tests — `backend/tests/test_label_routes.py` (FastAPI TestClient)
+
+- `test_get_labels_returns_list`
+- `test_get_labels_with_prefix`
+- `test_get_skill_labels`
+- `test_post_skill_label_authed` — returns 201
+- `test_post_skill_label_unauthed` — returns 401
+- `test_post_skill_label_duplicate` — returns 409
+- `test_delete_skill_label_authed` — returns 204
+- `test_delete_skill_label_not_applied` — returns 404
+- `test_admin_rename_label` — admin auth returns 200
+- `test_admin_rename_label_nonadmin` — returns 403
+- `test_admin_merge_label` — admin auth returns 200
+- `test_admin_delete_label` — returns 204
+- `test_list_skills_with_label_filter` — filtered results correct
+- `test_skill_out_includes_labels` — response includes `labels` field
+
+### Frontend Tests (vitest/jest if configured)
+
+- `test_label_chips_render_max_5` — 7 labels → 5 chips + "+2 more"
+- `test_label_chips_render_under_5` — 3 labels → 3 chips, no overflow
+- `test_label_chip_click_navigates` — chip click → `/skills?labels=name`
+- `test_label_section_shows_combobox_when_authed`
+- `test_label_section_disabled_when_anon` — tooltip visible, input disabled
+- `test_label_filter_multi_select` — selecting labels updates URL params
+- `test_label_filter_empty_state` — 0 results → label-specific message
+
+---
+
+## Board Review
+
+**Verdict:** CLEAR WITH WARNINGS
+**Date:** 2026-04-22
+**Rounds:** 1
+
+| Reviewer | Result | Amended | Key findings |
+|---|---|---|---|
+| research-handbook | ⚠️ WARN | Y | Radix Command doesn't exist (→ cmdk); use MongoDB transactions for admin ops; unique index on Label.name |
+| codebase-arch-review | ⚠️ WARN | Y | Merge/delete atomicity requires transactions; AND filter needs aggregation strategy + (label_id, skill_id) index; batch hydration for list endpoint |
+| codebase-eng-review | ⚠️ WARN | Y | Label.name non-unique (race condition); AND filter silently ignored; Next.js proxy routes missing; name validation unspecified |
+| codebase-doc-review | ⚠️ WARN | Y | Inline ADRs need filing in docs/adr/; no CHANGELOG; README update needed; router registration not in plan |
+| security-review | ⚠️ WARN | Y | Label name regex must be specified; re.escape() on ?q= param; get_optional_user needed; rate limit must be a formal FR |
+| codebase-ux-review | ⚠️ WARN | Y | cmdk dependency missing; +N more badge behaviour undefined; /labels has no nav entry; admin destructive ops need AlertDialog |
+
+**Accepted warnings:**
+- mongomock doesn't support transactions; admin service tests need testcontainers or mocked sessions
+- always-visible combobox adds ~48px visual weight for non-labeling authenticated users (accepted per ADR-002)
+- CORS wildcard pre-existing issue, not introduced by this feature
+
+**ADRs written:** 0 new in docs/adr/ (pending filing as adr-u07–u10 during Slice 3)
+**Unresolved decisions:** none
+
+<details>
+<summary>research-handbook — Round 1 (⚠️ WARN)</summary>
+
+See round-1-dr.md (merged into plan amendments above)
+
+</details>
+
+<details>
+<summary>codebase-arch-review — Round 1 (⚠️ WARN)</summary>
+
+See round-1-ar.md (merged into plan amendments above)
+
+</details>
+
+<details>
+<summary>codebase-eng-review — Round 1 (⚠️ WARN)</summary>
+
+See round-1-er.md (merged into plan amendments above; full test plan in ## Test Plan section)
+
+</details>
+
+<details>
+<summary>codebase-doc-review — Round 1 (⚠️ WARN)</summary>
+
+See round-1-dc.md (merged into Definition of Done)
+
+</details>
+
+<details>
+<summary>security-review — Round 1 (⚠️ WARN)</summary>
+
+See round-1-sr.md (merged into FR-L3/FR-L3b/FR-L12c amendments)
+
+</details>
+
+<details>
+<summary>codebase-ux-review — Round 1 (⚠️ WARN)</summary>
+
+See round-1-ux.md (merged into FR-L12 through FR-L24 amendments)
+
+</details>

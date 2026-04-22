@@ -5,6 +5,7 @@ import { useCallback, Suspense } from "react";
 import Link from "next/link";
 import { SkillCard } from "./skill-card";
 import { SortSelect } from "./sort-select";
+import { LabelFilter } from "./label-filter";
 import type { PaginatedSkills, SortOption, VisibilityType } from "@/types/skill";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -94,6 +95,9 @@ export function SkillList({ data, sort, q, labels, forkedFrom, visibility, acces
               </button>
             ))}
           </div>
+          <Suspense fallback={null}>
+            <LabelFilter activeLabels={labels} />
+          </Suspense>
           {labels.map((l) => (
             <button
               key={l}
@@ -112,11 +116,20 @@ export function SkillList({ data, sort, q, labels, forkedFrom, visibility, acces
       {/* Cards */}
       {data.items.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
-          <p>No skills found.</p>
-          {q && (
-            <Link href="/skills" className="text-primary underline text-sm mt-1 inline-block">
-              Clear search
-            </Link>
+          {labels.length > 0 ? (
+            <>
+              <p>No skills match all selected labels.</p>
+              <p className="text-sm mt-1">Try removing some to widen your search.</p>
+            </>
+          ) : (
+            <>
+              <p>No skills found.</p>
+              {q && (
+                <Link href="/skills" className="text-primary underline text-sm mt-1 inline-block">
+                  Clear search
+                </Link>
+              )}
+            </>
           )}
         </div>
       ) : (

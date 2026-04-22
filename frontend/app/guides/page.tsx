@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function GuidesPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-10">
@@ -7,6 +9,33 @@ export default function GuidesPage() {
           Everything you need to create, submit, and manage agent skills.
         </p>
       </div>
+
+      {/* Quick links */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[
+          {
+            href: "/guides/what-is-a-skill",
+            title: "What is an agent skill?",
+            description: "SOPs, repeatable workflows, domain hints — why skills matter.",
+          },
+          {
+            href: "/guides/slac-github-access",
+            title: "SLAC GitHub access",
+            description: "Link your GitHub account via SLAC SSO to access internal repos.",
+          },
+        ].map(({ href, title, description }) => (
+          <Link
+            key={href}
+            href={href}
+            className="rounded-lg border p-4 hover:bg-muted/50 transition-colors space-y-1"
+          >
+            <p className="font-semibold text-sm">{title} →</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </Link>
+        ))}
+      </div>
+
+      <hr className="border-border" />
 
       {/* How to create a skill */}
       <section className="space-y-4">

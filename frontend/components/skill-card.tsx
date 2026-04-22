@@ -3,6 +3,7 @@ import type { Skill } from "@/types/skill";
 import Link from "next/link";
 import { GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
 import { PlatformBadges } from "./platform-badges";
+import { labelColor } from "@/lib/label-color";
 import { StarRating } from "./star-rating";
 import { FlagIndicator } from "./flag-indicator";
 
@@ -102,7 +103,7 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
               key={label.name}
               href={`/skills?labels=${encodeURIComponent(label.name)}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center rounded-full bg-secondary text-secondary-foreground px-2 py-0.5 text-xs font-medium cursor-pointer hover:bg-secondary/70 transition-colors flex-shrink-0"
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 ${labelColor(label.name)}`}
             >
               {label.name}
             </Link>

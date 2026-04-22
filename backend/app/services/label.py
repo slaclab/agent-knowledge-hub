@@ -108,10 +108,10 @@ class LabelService:
         if q:
             escaped = re.escape(q.strip().lower())
             labels = await Label.find(
-                {"name": {"$regex": f"^{escaped}"}}
+                {"name": {"$regex": f"^{escaped}"}, "usage_count": {"$gt": 0}}
             ).sort([("usage_count", -1)]).limit(limit).to_list()
         else:
-            labels = await Label.find().sort([("usage_count", -1)]).limit(limit).to_list()
+            labels = await Label.find(Label.usage_count > 0).sort([("usage_count", -1)]).limit(limit).to_list()
         return [LabelOut(name=l.name, usage_count=l.usage_count) for l in labels]
 
     async def get_by_name(self, name: str) -> Optional[Label]:

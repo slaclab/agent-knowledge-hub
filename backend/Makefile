@@ -6,7 +6,7 @@ PYTEST   := $(VENV)/bin/pytest
 
 REGISTRY     ?= docker.io/slaclab
 IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
-TAG          ?= $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || echo dev)
+TAG          ?= $(shell t=$$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//'); echo "$${t:-$$(grep '^version' pyproject.toml | sed 's/.*= *"\(.*\)"/\1/')}")
 CONTAINER_RT ?= sudo podman
 
 .PHONY: dev test run clean docker-build docker-push

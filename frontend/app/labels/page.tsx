@@ -1,6 +1,7 @@
 import { listLabels } from "@/lib/api";
 import Link from "next/link";
 import { Tag } from "lucide-react";
+import { labelColor } from "@/lib/label-color";
 
 export const metadata = { title: "Labels — Agent Knowledge Hub" };
 
@@ -27,7 +28,7 @@ export default async function LabelsPage() {
             <Link
               key={label.name}
               href={`/skills?labels=${encodeURIComponent(label.name)}`}
-              className="inline-flex items-center gap-1.5 rounded-full border bg-secondary text-secondary-foreground px-3 py-1 text-sm font-medium hover:bg-secondary/70 transition-colors"
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium hover:opacity-80 transition-opacity ${labelColor(label.name)}`}
             >
               {label.name}
               <span className="text-xs text-muted-foreground tabular-nums">{label.usage_count}</span>

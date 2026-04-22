@@ -27,7 +27,7 @@ limiter = Limiter(key_func=get_remote_address)
 @router.get("", response_model=List[LabelOut])
 async def list_labels(
     q: Optional[str] = Query(None, description="Prefix typeahead"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
 ):
     return await label_service.search(q=q, limit=limit)
 

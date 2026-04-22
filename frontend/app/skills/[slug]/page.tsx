@@ -126,6 +126,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
             </p>
           </div>
 
+          {/* Labels */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-sm font-semibold">Labels</h3>
+            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
+          </div>
+
           {/* Metadata */}
           <div className="rounded-lg border p-4 space-y-3">
             <h3 className="text-sm font-semibold">Details</h3>
@@ -228,12 +234,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
               </span>
             </div>
           )}
-
-          {/* Labels */}
-          <div className="rounded-lg border p-4 space-y-2">
-            <h3 className="text-sm font-semibold">Labels</h3>
-            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
-          </div>
 
           {/* Revision History */}
           <div className="rounded-lg border p-4">

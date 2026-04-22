@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import type { LabelOut } from "@/types/skill";
-import { useAuth } from "@/lib/auth.tsx";
+import { useAuth } from "@/lib/auth";
+import { labelColor } from "@/lib/label-color";
 import { addLabel, removeLabel, listSkillLabels } from "@/lib/api";
 
 interface LabelSectionProps {
@@ -118,7 +119,7 @@ export function LabelSection({ slug, initialLabels }: LabelSectionProps) {
           {labels.map((label) => (
             <span
               key={label.name}
-              className="inline-flex items-center gap-1 rounded-full bg-secondary text-secondary-foreground px-2 py-0.5 text-xs font-medium"
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(label.name)}`}
             >
               <Link
                 href={`/skills?labels=${encodeURIComponent(label.name)}`}

@@ -21,7 +21,7 @@ export function truncate(text: string | null | undefined, max: number): string {
 
 export const PLATFORM_SUGGESTIONS = [
   "claude-code",
-  "openai",
+  "codex",
   "langchain",
   "crewai",
   "autogen",

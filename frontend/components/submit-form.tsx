@@ -33,6 +33,7 @@ interface SkillDraft {
   version: string;
   license: string;
   platforms: string[];
+  labels: string[];
 }
 
 type BulkResult = { path: string; slug?: string; error?: string };
@@ -105,6 +106,7 @@ export function SubmitForm({
         version: snap.version ?? "",
         license: snap.license ?? "",
         platforms: snap.compatible_platforms,
+        labels: [],
       }))
     );
   }, []);
@@ -211,6 +213,9 @@ export function SubmitForm({
         license: draft.license || undefined,
       });
       results.push({ path: snap.ref.path || "/", slug: data?.slug, error: error ?? undefined });
+      if (data?.slug && draft.labels.length > 0) {
+        await Promise.all(draft.labels.map((l) => addLabel(data.slug, l)));
+      }
     }
     setBulkResults(results);
     setSubmitting(false);
@@ -438,8 +443,8 @@ export function SubmitForm({
         <SuccessPanel slug={createdSlug} onDone={() => router.push(`/skills/${createdSlug}`)} />
       )}
 
-      {/* Single-skill form — shown when not in discovery mode */}
-      {!inDiscoveryMode && !createdSlug && (
+      {/* Single-skill form — shown only after a successful scan (non-discovery mode) */}
+      {!inDiscoveryMode && !createdSlug && scanState.status === "done" && (
         <form onSubmit={handleSingleSubmit} className="space-y-6">
           <div className="space-y-1">
             <label className="text-sm font-medium">Name</label>
@@ -580,6 +585,21 @@ function DiscoveryCard({
   onTogglePlatform: (p: string) => void;
 }) {
   const isRegistered = !!draft.snapshot.existing_slug;
+  const [labelInput, setLabelInput] = useState("");
+  const [labelSuggestions, setLabelSuggestions] = useState<LabelOut[]>([]);
+  const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
+
+  const addDraftLabel = (name: string) => {
+    const trimmed = name.trim().toLowerCase();
+    if (trimmed && !draft.labels.includes(trimmed)) {
+      onUpdate({ labels: [...draft.labels, trimmed] });
+    }
+    setLabelInput("");
+    setShowLabelSuggestions(false);
+  };
+
+  const removeDraftLabel = (name: string) =>
+    onUpdate({ labels: draft.labels.filter((l) => l !== name) });
 
   return (
     <div className={`rounded-md border ${isRegistered ? "opacity-60 bg-muted" : "bg-background"}`}>
@@ -629,6 +649,52 @@ function DiscoveryCard({
                     draft.platforms.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-muted"
                   }`}>{p}</button>
               ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Labels</label>
+            <div className="flex flex-wrap gap-1">
+              {draft.labels.map((l) => (
+                <span key={l} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(l)}`}>
+                  {l}
+                  <button type="button" onClick={() => removeDraftLabel(l)} className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors" aria-label={`Remove ${l}`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="relative">
+              <input
+                value={labelInput}
+                onChange={(e) => {
+                  setLabelInput(e.target.value);
+                  setShowLabelSuggestions(true);
+                  if (e.target.value.trim()) {
+                    fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=8`)
+                      .then((r) => r.json()).then((d: LabelOut[]) => setLabelSuggestions(d)).catch(() => {});
+                  } else {
+                    setLabelSuggestions([]);
+                  }
+                }}
+                onFocus={() => setShowLabelSuggestions(true)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDraftLabel(labelInput); } }}
+                onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
+                placeholder="Add a label…"
+                className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {showLabelSuggestions && labelSuggestions.length > 0 && (
+                <div className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+                  {labelSuggestions.filter((s) => !draft.labels.includes(s.name)).map((s) => (
+                    <button key={s.name} type="button"
+                      onMouseDown={(e) => { e.preventDefault(); addDraftLabel(s.name); }}
+                      className="flex w-full items-center justify-between px-2 py-1 text-xs hover:bg-muted transition-colors"
+                    >
+                      <span>{s.name}</span>
+                      <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

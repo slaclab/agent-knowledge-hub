@@ -1,7 +1,6 @@
 import { listSkills, getSettings } from "@/lib/api";
 import { SkillList } from "@/components/skill-list";
 import type { SortOption, VisibilityType } from "@/types/skill";
-import Link from "next/link";
 import { Suspense } from "react";
 
 interface PageProps {
@@ -49,12 +48,6 @@ export default async function SkillsPage({ searchParams }: PageProps) {
             Discover agent skills and plugins built by the SLAC community.
           </p>
         </div>
-        <Link
-          href="/skills/submit"
-          className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Submit a Skill
-        </Link>
       </div>
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
         <SkillList

@@ -35,3 +35,17 @@ The removal is applied in the **contract phase** of the expand-contract rollout:
 - Steps 3 (contract) and 4 (NetworkPolicy) must be deployed in the same release window —
   deploying contract without NetworkPolicy leaves Path 1 (Vouch headers) as the sole
   intra-cluster vector with no network barrier.
+
+## Known limitation — vcluster NetworkPolicy enforcement
+
+Verified 2026-04-22: the dev environment runs inside a vcluster. A `busybox` pod with no
+matching labels was able to reach the backend on port 8000 after both `backend-deny-all-ingress`
+and `backend-allow-frontend-and-ingress` NetworkPolicies were applied. This indicates the
+host cluster CNI (Cilium on SLAC S3DF) is not syncing vcluster NetworkPolicy objects to the
+host network layer.
+
+The NetworkPolicy manifests are correct and are retained — if SLAC enables vcluster NetworkPolicy
+sync, enforcement will take effect without any further changes. Until then, intra-cluster
+isolation relies solely on the `X-Internal-Secret` application-layer check (Path 2).
+
+Action required: raise with SLAC whether `networkPolicy` syncing can be enabled for this vcluster.

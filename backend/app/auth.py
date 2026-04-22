@@ -47,14 +47,6 @@ def get_current_user(request: Request) -> User:
                     user_id=forwarded_user,
                     is_admin=forwarded_user in settings.admin_user_set,
                 )
-    else:
-        # Warn once at startup instead (see startup event in main.py), not per-request.
-        pass
-
-    # Expand phase: bare X-Forwarded-User fallback — removed once frontend sends secret
-    user_id = request.headers.get("X-Forwarded-User")
-    if user_id:
-        return User(user_id=user_id, is_admin=user_id in settings.admin_user_set)
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

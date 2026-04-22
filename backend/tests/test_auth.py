@@ -123,34 +123,33 @@ class TestGetCurrentUser:
             user = get_current_user(req)
             assert user.user_id == "eve"
 
-    def test_wrong_secret_falls_through_to_expand_fallback(self):
+    def test_wrong_secret_raises_401(self):
         import app.config as cfg
         get_current_user = self._auth()
         with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
              patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""):
-            # Wrong secret — but bare X-Forwarded-User fallback still active (expand phase)
             req = make_request([
                 (b"x-internal-secret", b"wrongsecret"),
                 (b"x-forwarded-user", b"eve"),
             ])
-            user = get_current_user(req)
-            assert user.user_id == "eve"
+            with pytest.raises(HTTPException) as exc:
+                get_current_user(req)
+            assert exc.value.status_code == 401
 
-    def test_empty_secret_header_does_not_match(self):
+    def test_empty_secret_header_raises_401(self):
         import app.config as cfg
         get_current_user = self._auth()
         with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
              patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""):
-            # Empty X-Internal-Secret → Path 2 check fails
             req = make_request([
                 (b"x-internal-secret", b""),
                 (b"x-forwarded-user", b"frank"),
             ])
-            # Falls to bare fallback (expand phase)
-            user = get_current_user(req)
-            assert user.user_id == "frank"
+            with pytest.raises(HTTPException) as exc:
+                get_current_user(req)
+            assert exc.value.status_code == 401
 
     def test_secret_none_disables_path2(self):
         import app.config as cfg
@@ -158,14 +157,13 @@ class TestGetCurrentUser:
         with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
              patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "admin_users", ""):
-            # Even with correct-looking header, Path 2 is disabled when secret is None
             req = make_request([
                 (b"x-internal-secret", b"anything"),
                 (b"x-forwarded-user", b"grace"),
             ])
-            # Falls to bare fallback (expand phase)
-            user = get_current_user(req)
-            assert user.user_id == "grace"
+            with pytest.raises(HTTPException) as exc:
+                get_current_user(req)
+            assert exc.value.status_code == 401
 
     def test_no_auth_headers_raises_401(self):
         import app.config as cfg

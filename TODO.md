@@ -12,3 +12,4 @@
 | [008](todo/008-auth-header-hardening.md) | Auth header hardening: prevent identity spoofing via ingress/cluster/proxy | 🏁 Implementation Done |
 | [009](todo/009-duplicate-skill-detection.md) | Duplicate & similar skill detection: near-duplicate warnings in discovery and submit flows | ⬜ Open |
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |
+| [011](todo/011-user-activity-profile.md) | User activity profile: skills submitted, edited, and downloaded by a user | 📋 Preparing |

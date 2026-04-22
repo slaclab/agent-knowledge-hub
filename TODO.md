@@ -14,3 +14,6 @@
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |
 | [011](todo/011-user-activity-profile.md) | User activity profile: skills submitted, edited, and downloaded by a user | 📋 Preparing |
 | [012](todo/012-moderation-flags-and-admin-deactivation.md) | Moderation: user flags and admin deactivation/reactivation | 📋 Preparing |
+| [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | 📋 Preparing |
+| [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 📋 Preparing |
+| [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 📋 Preparing |

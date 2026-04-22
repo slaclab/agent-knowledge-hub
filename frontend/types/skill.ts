@@ -2,6 +2,18 @@ export type EntryType = "skill" | "marketplace_ref";
 export type SkillStatus = "active" | "deactivated";
 export type VisibilityType = "public" | "internal" | "private";
 
+export interface LabelOut {
+  name: string;
+  usage_count: number;
+  applied_by_me: boolean;
+}
+
+export interface AdminLabelOut {
+  id: string;
+  name: string;
+  usage_count: number;
+}
+
 export interface Skill {
   id: string;
   slug: string;
@@ -28,6 +40,7 @@ export interface Skill {
   uses_agent_gateway: boolean;
   visibility: VisibilityType;
   forked_from_url: string | null;
+  labels: LabelOut[];
 }
 
 export interface PaginatedSkills {

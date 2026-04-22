@@ -3,6 +3,7 @@ import type { Skill } from "@/types/skill";
 import Link from "next/link";
 import { GitFork, AlertTriangle, ArrowRight, Lock } from "lucide-react";
 import { PlatformBadges } from "./platform-badges";
+import { labelColor } from "@/lib/label-color";
 import { StarRating } from "./star-rating";
 import { FlagIndicator } from "./flag-indicator";
 
@@ -15,6 +16,9 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
   const isDeactivated = skill.status === "deactivated";
   const isSuperseded = !!skill.superseded_by_slug;
   const isInternal = skill.visibility === "internal";
+  const labels = skill.labels ?? [];
+  const visibleLabels = labels.slice(0, 5);
+  const overflowCount = labels.length - visibleLabels.length;
 
   return (
     <Link
@@ -90,6 +94,25 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
             <GitFork className="h-3 w-3" />
             Uses SLAC Agent Gateway
           </span>
+        </div>
+      )}
+      {visibleLabels.length > 0 && (
+        <div className="mt-2 flex items-center gap-1 flex-nowrap overflow-hidden">
+          {visibleLabels.map((label) => (
+            <Link
+              key={label.name}
+              href={`/skills?labels=${encodeURIComponent(label.name)}`}
+              onClick={(e) => e.stopPropagation()}
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 ${labelColor(label.name)}`}
+            >
+              {label.name}
+            </Link>
+          ))}
+          {overflowCount > 0 && (
+            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs text-muted-foreground flex-shrink-0">
+              +{overflowCount} more
+            </span>
+          )}
         </div>
       )}
     </Link>

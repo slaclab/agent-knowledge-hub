@@ -16,6 +16,9 @@ from app.config import settings
 from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
 from app.routers import github_scan
+from app.routers.labels import admin_router as labels_admin_router
+from app.routers.labels import router as labels_router
+from app.routers.labels import skills_labels_router
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -35,6 +38,11 @@ async def lifespan(app: FastAPI):
     logger.info("Initialising Beanie...")
     await beanie.init_beanie(database=db, document_models=ALL_MODELS)
     logger.info("Beanie ready.")
+    if settings.auth_mode != "dev" and settings.internal_api_secret is None:
+        logger.warning(
+            "INTERNAL_API_SECRET is not configured — Next.js proxy auth path is disabled. "
+            "Set INTERNAL_API_SECRET in Vault and redeploy to enable."
+        )
     yield
     client.close()
 
@@ -51,7 +59,7 @@ def _redact_private_key(text: str) -> str:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Agent Knowledge Hub API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Agent Knowledge Hub API", version="0.2.0", lifespan=lifespan)
 
     # Rate limiter state
     app.state.limiter = limiter
@@ -79,6 +87,9 @@ def create_app() -> FastAPI:
     app.include_router(skills.router)
     app.include_router(skills.github_router)
     app.include_router(github_scan.router)
+    app.include_router(labels_router)
+    app.include_router(skills_labels_router)
+    app.include_router(labels_admin_router)
 
     return app
 

@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+import { BACKEND, backendHeaders } from "../_internal";
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get("url");
@@ -10,17 +9,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ detail: "url is required" }, { status: 400 });
   }
 
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore.toString();
-
   try {
-    const backendUrl = new URL(`${BACKEND_URL}/api/github-scan`);
+    const backendUrl = new URL(`${BACKEND}/api/github-scan`);
     backendUrl.searchParams.set("url", url);
     backendUrl.searchParams.set("discover", discover);
 
-    const res = await fetch(backendUrl.toString(), {
-      headers: { Cookie: cookieHeader },
-    });
+    const res = await fetch(backendUrl.toString(), { headers: backendHeaders(request) });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch {

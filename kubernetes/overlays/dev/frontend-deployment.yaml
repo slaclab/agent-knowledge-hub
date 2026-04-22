@@ -14,13 +14,18 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: slaclab/agent-knowledge-hub-frontend:0.1.0
+          image: slaclab/agent-knowledge-hub-frontend:0.2.0
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
           env:
             - name: BACKEND_URL
               value: "http://agent-knowledge-hub-backend:8000"
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: agent-knowledge-hub-secrets
+                  key: INTERNAL_API_SECRET
           livenessProbe:
             httpGet:
               path: /

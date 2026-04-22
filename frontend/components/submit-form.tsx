@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getGithubScan, getGithubDiscover, createSkill } from "@/lib/api";
-import type { SkillScanSnapshot, DiscoverResult } from "@/types/skill";
+import { getGithubScan, getGithubDiscover, createSkill, addLabel, removeLabel, listSkillLabels } from "@/lib/api";
+import type { SkillScanSnapshot, DiscoverResult, LabelOut } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
-import { Star, AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { labelColor } from "@/lib/label-color";
+import { Star, AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 
 const SCAN_TIMEOUT_MS = 10_000;
@@ -57,53 +58,19 @@ export function SubmitForm({
   const [platformInput, setPlatformInput] = useState("");
   const [skillPath, setSkillPath] = useState("/");
 
+  const [pendingLabels, setPendingLabels] = useState<LabelOut[]>([]);
+  const [labelInput, setLabelInput] = useState("");
+  const [labelSuggestions, setLabelSuggestions] = useState<LabelOut[]>([]);
+  const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const labelSuggestionsRef = useRef<HTMLDivElement>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicateSlug, setDuplicateSlug] = useState<string | null>(null);
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-
-  const runScan = useCallback(async (scanUrl: string) => {
-    if (!scanUrl.trim()) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-
-    setScanState({ status: "scanning" });
-    setDiscoverState({ status: "idle" });
-    setDrafts([]);
-    setBulkResults([]);
-    setSubmitError(null);
-    setDuplicateSlug(null);
-
-    const timer = setTimeout(() => {
-      ac.abort();
-      setScanState({ status: "error", kind: "timeout", message: "Scan timed out." });
-    }, SCAN_TIMEOUT_MS);
-
-    const { data, error, status } = await getGithubScan(scanUrl);
-    clearTimeout(timer);
-    if (ac.signal.aborted) return;
-
-    if (error || !data) {
-      let kind: "not_found" | "rate_limit" | "timeout" | "generic" = "generic";
-      if (status === 404) kind = "not_found";
-      else if (status === 429 || (status === 403 && error?.toLowerCase().includes("rate")))
-        kind = "rate_limit";
-      setScanState({ status: "error", kind, message: error ?? "Scan failed." });
-      return;
-    }
-
-    setScanState({ status: "done", snapshot: data });
-    if (!name && data.name) setName(data.name);
-    if (!description && data.description) setDescription(data.description);
-    if (!version && data.version) setVersion(data.version);
-    if (!license && data.license) setLicense(data.license);
-    if (platforms.length === 0 && data.compatible_platforms.length)
-      setPlatforms(data.compatible_platforms);
-    setSkillPath(data.ref.path === "" ? "/" : data.ref.path);
-    if (data.existing_slug) setDuplicateSlug(data.existing_slug);
-  }, [name, description, version, license, platforms]);
 
   const runDiscover = useCallback(async (scanUrl: string) => {
     abortRef.current?.abort();
@@ -141,6 +108,55 @@ export function SubmitForm({
       }))
     );
   }, []);
+
+  const runScan = useCallback(async (scanUrl: string) => {
+    if (!scanUrl.trim()) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setScanState({ status: "scanning" });
+    setDiscoverState({ status: "idle" });
+    setDrafts([]);
+    setBulkResults([]);
+    setSubmitError(null);
+    setDuplicateSlug(null);
+
+    const timer = setTimeout(() => {
+      ac.abort();
+      setScanState({ status: "error", kind: "timeout", message: "Scan timed out." });
+    }, SCAN_TIMEOUT_MS);
+
+    const { data, error, status } = await getGithubScan(scanUrl);
+    clearTimeout(timer);
+    if (ac.signal.aborted) return;
+
+    if (error || !data) {
+      let kind: "not_found" | "rate_limit" | "timeout" | "generic" = "generic";
+      if (status === 404) kind = "not_found";
+      else if (status === 429 || (status === 403 && error?.toLowerCase().includes("rate")))
+        kind = "rate_limit";
+      setScanState({ status: "error", kind, message: error ?? "Scan failed." });
+      return;
+    }
+
+    setScanState({ status: "done", snapshot: data });
+
+    const isSubdir = data.ref.path && data.ref.path !== "/" && data.ref.path !== "";
+    if (isSubdir) {
+      runDiscover(scanUrl);
+      return;
+    }
+
+    if (!name && data.name) setName(data.name);
+    if (!description && data.description) setDescription(data.description);
+    if (!version && data.version) setVersion(data.version);
+    if (!license && data.license) setLicense(data.license);
+    if (platforms.length === 0 && data.compatible_platforms.length)
+      setPlatforms(data.compatible_platforms);
+    setSkillPath(data.ref.path === "" ? "/" : data.ref.path);
+    if (data.existing_slug) setDuplicateSlug(data.existing_slug);
+  }, [name, description, version, license, platforms, runDiscover]);
 
   const handleBlur = () => {
     if (scanState.status === "idle") runScan(url);
@@ -228,7 +244,11 @@ export function SubmitForm({
       setSubmitError(error);
       return;
     }
-    if (data) router.push(`/skills/${data.slug}`);
+    if (data) {
+      // Apply any labels added before submission
+      await Promise.all(pendingLabels.map((l) => addLabel(data.slug, l.name)));
+      setCreatedSlug(data.slug);
+    }
   };
 
   const snapshot = scanState.status === "done" ? scanState.snapshot : null;
@@ -259,6 +279,7 @@ export function SubmitForm({
               setDrafts([]);
             }}
             onBlur={handleBlur}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runScan(url); } }}
             placeholder="https://github.com/org/repo  or  .../tree/branch/path/to/skill"
             required
             className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -317,14 +338,14 @@ export function SubmitForm({
         )}
 
         {/* Discover button — shown after a root-level scan */}
-        {snapshot && isRootScan && discoverState.status === "idle" && (
+        {snapshot && discoverState.status === "idle" && (
           <button
             type="button"
             disabled={discovering}
             onClick={() => runDiscover(url)}
             className="text-sm text-primary underline hover:no-underline disabled:opacity-50"
           >
-            Scan entire repo for skills
+            {isRootScan ? "Scan entire repo for skills" : "Scan directory for more skills"}
           </button>
         )}
 
@@ -412,8 +433,13 @@ export function SubmitForm({
         </form>
       )}
 
+      {/* Success: label tagging step */}
+      {createdSlug && (
+        <SuccessPanel slug={createdSlug} onDone={() => router.push(`/skills/${createdSlug}`)} />
+      )}
+
       {/* Single-skill form — shown when not in discovery mode */}
-      {!inDiscoveryMode && (
+      {!inDiscoveryMode && !createdSlug && (
         <form onSubmit={handleSingleSubmit} className="space-y-6">
           <div className="space-y-1">
             <label className="text-sm font-medium">Name</label>
@@ -448,6 +474,70 @@ export function SubmitForm({
                 className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               <button type="button" onClick={addCustomPlatform}
                 className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors">Add</button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Labels</label>
+            <div className="flex flex-wrap gap-1.5">
+              {pendingLabels.map((l) => (
+                <span key={l.name} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(l.name)}`}>
+                  {l.name}
+                  <button type="button" onClick={() => setPendingLabels((prev) => prev.filter((x) => x.name !== l.name))}
+                    className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors" aria-label={`Remove ${l.name}`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="relative">
+              <input
+                ref={labelInputRef}
+                value={labelInput}
+                onChange={(e) => {
+                  setLabelInput(e.target.value);
+                  setShowLabelSuggestions(true);
+                  if (e.target.value.trim()) {
+                    fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=10`)
+                      .then((r) => r.json()).then((d: LabelOut[]) => setLabelSuggestions(d)).catch(() => {});
+                  } else {
+                    setLabelSuggestions([]);
+                  }
+                }}
+                onFocus={() => setShowLabelSuggestions(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = labelInput.trim().toLowerCase();
+                    if (trimmed && !pendingLabels.find((l) => l.name === trimmed)) {
+                      setPendingLabels((prev) => [...prev, { name: trimmed, usage_count: 0, applied_by_me: true }]);
+                    }
+                    setLabelInput("");
+                    setShowLabelSuggestions(false);
+                  }
+                }}
+                onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
+                placeholder="Add a label…"
+                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {showLabelSuggestions && labelSuggestions.length > 0 && (
+                <div ref={labelSuggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+                  {labelSuggestions.filter((s) => !pendingLabels.find((l) => l.name === s.name)).map((s) => (
+                    <button key={s.name} type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setPendingLabels((prev) => [...prev, { name: s.name, usage_count: s.usage_count, applied_by_me: true }]);
+                        setLabelInput("");
+                        setShowLabelSuggestions(false);
+                      }}
+                      className="flex w-full items-center justify-between px-2.5 py-1 text-xs hover:bg-muted transition-colors"
+                    >
+                      <span>{s.name}</span>
+                      <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -555,6 +645,124 @@ function DiscoveryCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SuccessPanel({ slug, onDone }: { slug: string; onDone: () => void }) {
+  const [labels, setLabels] = useState<LabelOut[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [suggestions, setSuggestions] = useState<LabelOut[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const handleAdd = useCallback(async (name: string) => {
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) return;
+    setError(null);
+    setInputValue("");
+    setShowSuggestions(false);
+    setPending(trimmed);
+    const optimistic: LabelOut = { name: trimmed, usage_count: 0, applied_by_me: true };
+    setLabels((prev) => (prev.find((l) => l.name === trimmed) ? prev : [...prev, optimistic]));
+    const { data, error: err, status } = await addLabel(slug, trimmed);
+    setPending(null);
+    if (err || !data) {
+      setLabels((prev) => prev.filter((l) => l !== optimistic));
+      if (status === 409) setError("Already applied.");
+      else if (status === 429) setError("Max 5 labels reached.");
+      else setError(err ?? "Failed to add label.");
+      return;
+    }
+    const fresh = await listSkillLabels(slug);
+    setLabels(fresh);
+  }, [slug]);
+
+  const handleRemove = useCallback(async (name: string) => {
+    setLabels((prev) => prev.filter((l) => l.name !== name));
+    await removeLabel(slug, name);
+    const fresh = await listSkillLabels(slug);
+    setLabels(fresh);
+  }, [slug]);
+
+  return (
+    <div className="rounded-lg border border-green-300 bg-green-50 p-5 space-y-4">
+      <div className="space-y-1">
+        <p className="font-semibold text-green-800">Skill submitted!</p>
+        <p className="text-sm text-green-700">Add labels to help others discover it, or skip and go straight to the skill page.</p>
+      </div>
+
+      <div className="space-y-2">
+        {labels.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {labels.map((label) => (
+              <span
+                key={label.name}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${labelColor(label.name)}`}
+              >
+                {label.name}
+                <button
+                  type="button"
+                  onClick={() => handleRemove(label.name)}
+                  className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
+                  aria-label={`Remove ${label.name}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="relative">
+          <input
+            ref={inputRef}
+            value={inputValue}
+            disabled={pending !== null}
+            onChange={(e) => { setInputValue(e.target.value); setShowSuggestions(true); setError(null);
+              fetch(`/api/labels?q=${encodeURIComponent(e.target.value.trim())}&limit=8`)
+                .then((r) => r.json()).then((d: LabelOut[]) => setSuggestions(d)).catch(() => {});
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(inputValue); } }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            placeholder="Type a label and press Enter…"
+            className="w-full rounded-md border border-input bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div ref={suggestionsRef} className="absolute left-0 top-full mt-0.5 z-20 w-full rounded-md border bg-popover shadow-md">
+              {suggestions.map((s) => (
+                <button key={s.name} type="button"
+                  onMouseDown={(e) => { e.preventDefault(); handleAdd(s.name); }}
+                  className="flex w-full items-center justify-between px-2.5 py-1 text-xs hover:bg-muted transition-colors"
+                >
+                  <span>{s.name}</span>
+                  <span className="text-muted-foreground tabular-nums">{s.usage_count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onDone}
+          className="rounded-md bg-green-700 text-white px-4 py-1.5 text-sm font-medium hover:bg-green-800 transition-colors"
+        >
+          Go to skill →
+        </button>
+        {labels.length === 0 && (
+          <button type="button" onClick={onDone} className="text-sm text-green-700 underline hover:no-underline">
+            Skip
+          </button>
+        )}
+      </div>
     </div>
   );
 }

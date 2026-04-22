@@ -54,12 +54,26 @@ export function Nav() {
           >
             Guides
           </Link>
+          <Link
+            href="/labels"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Labels
+          </Link>
           {!loading && user && (
             <Link
               href="/skills/submit"
               className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               Submit Skill
+            </Link>
+          )}
+          {!loading && user?.is_admin && (
+            <Link
+              href="/admin/labels"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Admin
             </Link>
           )}
           {!loading && user && (

@@ -9,6 +9,7 @@ import type {
   SkillListParams,
   SkillScanSnapshot,
   DiscoverResult,
+  LabelOut,
 } from "@/types/skill";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
@@ -149,4 +150,39 @@ export async function getGithubDiscover(
   const qs = new URLSearchParams({ url, discover: "true" });
   const r = await request<DiscoverResult>(CLIENT_BASE, `/github-scan?${qs}`);
   return { data: r.data, error: r.error };
+}
+
+export async function listLabels(params: { q?: string; limit?: number; server?: boolean } = {}): Promise<LabelOut[]> {
+  const { server, ...rest } = params;
+  const qs = new URLSearchParams();
+  if (rest.q) qs.set("q", rest.q);
+  if (rest.limit) qs.set("limit", String(rest.limit));
+  const { data } = await request<LabelOut[]>(apiBase(server), `/labels?${qs}`);
+  return data ?? [];
+}
+
+export async function addLabel(
+  slug: string,
+  name: string,
+): Promise<{ data: LabelOut | null; error: string | null; status: number }> {
+  const r = await request<LabelOut>(CLIENT_BASE, `/skills/${slug}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  return { data: r.data, error: r.error, status: r.status };
+}
+
+export async function removeLabel(
+  slug: string,
+  name: string,
+): Promise<{ error: string | null }> {
+  const r = await request<null>(CLIENT_BASE, `/skills/${slug}/labels/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  return { error: r.error };
+}
+
+export async function listSkillLabels(slug: string): Promise<LabelOut[]> {
+  const { data } = await request<LabelOut[]>(CLIENT_BASE, `/skills/${slug}/labels`);
+  return data ?? [];
 }

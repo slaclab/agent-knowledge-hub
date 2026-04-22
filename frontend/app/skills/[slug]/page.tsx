@@ -7,6 +7,7 @@ import { RevisionTimeline } from "@/components/revision-timeline";
 import { PlatformBadges } from "@/components/platform-badges";
 import { StarRating } from "@/components/star-rating";
 import { FlagIndicator } from "@/components/flag-indicator";
+import { LabelSection } from "@/components/label-section";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
@@ -111,13 +112,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 No README available.
               </div>
             )}
-
-            <div className="rounded-lg border p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-                Revision History
-              </h2>
-              <RevisionTimeline revisions={revisions} />
-            </div>
           </div>
         </div>
 
@@ -130,6 +124,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <p className="text-xs text-muted-foreground">
               Rating submission coming soon.
             </p>
+          </div>
+
+          {/* Labels */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-sm font-semibold">Labels</h3>
+            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
           </div>
 
           {/* Metadata */}
@@ -235,10 +235,10 @@ export default async function SkillDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Labels (stub) */}
-          <div className="rounded-lg border p-4 space-y-2">
-            <h3 className="text-sm font-semibold">Labels</h3>
-            <p className="text-xs text-muted-foreground">Label support coming soon.</p>
+          {/* Revision History */}
+          <div className="rounded-lg border p-4">
+            <h3 className="text-sm font-semibold mb-3">Revision History</h3>
+            <RevisionTimeline revisions={revisions} />
           </div>
         </div>
       </div>

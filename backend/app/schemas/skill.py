@@ -12,6 +12,18 @@ from app.models.skill import EntryType, SkillStatus, VisibilityEnum
 _GITHUB_URL_RE = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
 
 
+class LabelOut(BaseModel):
+    name: str
+    usage_count: int
+    applied_by_me: bool = False
+
+
+class AdminLabelOut(BaseModel):
+    id: str
+    name: str
+    usage_count: int
+
+
 class SkillCreate(BaseModel):
     repo_url: str
     skill_path: str = "/"
@@ -74,6 +86,7 @@ class SkillOut(BaseModel):
     avg_rating: float
     rating_count: int
     flag_count: int
+    labels: List[LabelOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -95,6 +108,7 @@ class SkillListOut(BaseModel):
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
+    labels: List[LabelOut] = []
 
     model_config = {"from_attributes": True}
 

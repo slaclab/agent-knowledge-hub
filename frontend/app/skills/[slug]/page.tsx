@@ -111,13 +111,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 No README available.
               </div>
             )}
-
-            <div className="rounded-lg border p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-                Revision History
-              </h2>
-              <RevisionTimeline revisions={revisions} />
-            </div>
           </div>
         </div>
 
@@ -239,6 +232,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
           <div className="rounded-lg border p-4 space-y-2">
             <h3 className="text-sm font-semibold">Labels</h3>
             <p className="text-xs text-muted-foreground">Label support coming soon.</p>
+          </div>
+
+          {/* Revision History */}
+          <div className="rounded-lg border p-4">
+            <h3 className="text-sm font-semibold mb-3">Revision History</h3>
+            <RevisionTimeline revisions={revisions} />
           </div>
         </div>
       </div>

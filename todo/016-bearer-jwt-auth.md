@@ -1,6 +1,6 @@
 # 016 — Bearer JWT Auth: CLI Authentication Path for the Backend API
 
-**Status:** ⬜ Open
+**Status:** 🔍 Reviewed
 **Branch:** —
 **PR:** —
 
@@ -15,7 +15,7 @@
 **Success metrics:**
 - `POST /api/skills/<slug>/rate` with a valid SLAC JWT returns 200
 - `POST /api/skills/<slug>/rate` with an invalid/expired token returns 401
-- Existing VouchProxy and Next.js proxy auth paths are unaffected
+- Existing Next.js proxy auth path (Path 2) is unaffected; VouchProxy path (Path 1) is intentionally removed (see ADR-016-B)
 - All other write endpoints (submit, edit, admin actions) also accept Bearer JWT
 
 **Out of scope:**
@@ -60,7 +60,7 @@
 
 ### Functional
 
-- **FR-1:** `get_current_user` accepts `Authorization: Bearer <token>` as Path 3 (after Path 1 VouchProxy, Path 2 proxy secret).
+- **FR-1:** `get_current_user` accepts `Authorization: Bearer <token>` as Path 3 (Path 1 Vouch removed per ADR-016-B; Path 2 proxy secret retained).
 - **FR-2:** Path 3 validates the JWT signature using RS256 and the configured public key.
 - **FR-3:** Path 3 validates the `iss` claim equals `https://dex.slac.stanford.edu`.
 - **FR-4:** Path 3 validates token expiry (`exp` claim).
@@ -82,12 +82,15 @@
 - **AC-2:** Given a JWT signed with the wrong key, `get_current_user` raises HTTP 401.
 - **AC-3:** Given an expired JWT (`exp` in the past), `get_current_user` raises HTTP 401.
 - **AC-4:** Given a JWT with `iss != https://dex.slac.stanford.edu`, `get_current_user` raises HTTP 401.
-- **AC-5:** Given no `Authorization` header, Path 3 is skipped and the request falls through to 401 (or is satisfied by Path 1/2).
+- **AC-5:** Given no `Authorization` header, Path 3 is skipped and the request falls through to 401 (Path 1 removed; Path 2 requires X-Internal-Secret).
 - **AC-6:** Given `jwt_public_key=None`, a Bearer token is ignored and falls through to 401.
 - **AC-7:** Given `AUTH_MODE=dev`, Bearer token is never checked (dev path short-circuits first).
 - **AC-8:** Given a valid JWT for a user in `admin_users`, `get_current_user` returns `User(is_admin=True)`.
 - **AC-9:** `POST /api/skills/<slug>/rate` with a valid Bearer JWT returns 200.
-- **AC-10:** Existing VouchProxy and proxy-secret tests continue to pass unchanged.
+- **AC-10:** Existing proxy-secret (Path 2) tests continue to pass unchanged. Path 1 (Vouch) tests are removed/updated to verify 401 instead of 200.
+- **AC-11:** Given a JWT with `alg: HS256` signed using the public key as HMAC secret, `get_current_user` raises HTTP 401. _(security review AM-1)_
+- **AC-12:** Given a JWT with `alg: none` and empty signature, `get_current_user` raises HTTP 401. _(security review AM-1)_
+- **AC-13:** Given a request to `/api` with a spoofed `X-Vouch-Idp-Claims-Name` header (no VouchProxy), `get_current_user` raises HTTP 401 (not 200). _(security review AM-2)_
 
 ---
 
@@ -144,24 +147,32 @@ Static PEM via `JWT_PUBLIC_KEY` env var. At v1 scale (small team, infrequent key
 
 ---
 
-### ADR-016-B: Path 3 position — after Path 1 and Path 2
+### ADR-016-B: Remove Path 1 (Vouch headers) — two-path auth model
 
 **Status:** Accepted
-**Date:** 2026-04-22
+**Date:** 2026-04-22 (updated from original "Path 3 position" ADR)
 
 #### Context
-`get_current_user` checks paths in order. Bearer JWT needs a position.
+The original plan added Path 3 (Bearer JWT) after Path 1 (Vouch) and Path 2 (proxy secret).
+Board review identified that after the ingress split, Path 1 becomes a Vouch header spoofing
+vector — any external client can forge `X-Vouch-Idp-Claims-Name` on the Vouch-free API ingress.
+
+A frontend audit confirmed that all 7 browser write operations already use the Next.js proxy
+(Path 2 / X-Internal-Secret). Path 1 is never the active auth path for browser writes.
+
+VouchProxy strips `Authorization: Bearer` headers, making it impossible to keep Path 1 active
+on an ingress that also needs to pass Bearer tokens through.
 
 #### Decision
-Path 3 comes last (after VouchProxy and proxy secret). Rationale:
-- VouchProxy is the highest-trust path (ingress-injected, cannot be spoofed from outside)
-- Proxy secret is internal-only
-- Bearer JWT is the lowest-trust path (self-presented credential requiring cryptographic verification)
-- Ordering by trust level is the correct security posture
+Remove Path 1 from `get_current_user`. The two remaining paths are:
+- **Path 2:** `X-Internal-Secret` — Next.js server-side proxy (browser writes)
+- **Path 3:** `Authorization: Bearer <JWT>` — CLI tools
 
 #### Consequences
-- If a browser request somehow carries both a Vouch header and a Bearer token, Vouch wins (correct)
-- No change to existing path ordering
+- Vouch header spoofing is impossible (no code trusts Vouch headers)
+- No nginx annotation workarounds needed for `ingress-api`
+- Browser read operations are unaffected (unauthenticated)
+- Browser write operations are unaffected (already using Path 2)
 
 ---
 
@@ -176,6 +187,50 @@ Path 3 comes last (after VouchProxy and proxy secret). Rationale:
 def _validate_slac_jwt(token: str) -> str:
     # Returns user_id string on success
     # Raises HTTPException(401) on: bad signature, expired, wrong issuer, missing name claim, jwt_public_key not configured
+    # Raises HTTPException(500) on: InvalidKeyError (malformed PEM — server misconfiguration)
+```
+
+**Implementation notes (from eng review):**
+- `aud` claim is always validated against `settings.jwt_audience` (default `"s3df"` — confirmed with platform team). Do NOT pass `verify_aud=False`.
+- Use `"require": ["exp", "iss", "name"]` in options to get automatic `MissingRequiredClaimError` for missing identity claim.
+- After decode, validate `name` is a non-empty string: `isinstance(name, str) and name.strip()`.
+- Catch `InvalidKeyError` separately and raise HTTP 500 (server config error), not 401 (client error).
+- Catch `ExpiredSignatureError` separately and raise HTTP 401 with an actionable message ("Re-run `s3df login`").
+- Catch `PyJWTError` (base class) for all other JWT failures -> HTTP 401.
+
+```python
+import jwt as pyjwt
+from jwt.exceptions import ExpiredSignatureError, InvalidKeyError, PyJWTError
+
+def _validate_slac_jwt(token: str) -> str:
+    if settings.jwt_public_key is None:
+        raise HTTPException(status_code=401, detail="JWT authentication not configured")
+    try:
+        decode_options = {"require": ["exp", "iss", "name"]}
+        decode_kwargs = {
+            "algorithms": [settings.jwt_algorithm],
+            "issuer": settings.jwt_issuer,
+        }
+        # Audience validation: always enabled; default value "s3df" (confirmed with platform team)
+        decode_kwargs["audience"] = settings.jwt_audience
+        payload = pyjwt.decode(
+            token,
+            settings.jwt_public_key,
+            options=decode_options,
+            **decode_kwargs,
+        )
+    except InvalidKeyError:
+        logger.error("JWT public key configuration error — check JWT_PUBLIC_KEY format")
+        raise HTTPException(status_code=500, detail="Server authentication configuration error")
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired. Re-run 's3df login' to refresh your session.")
+    except PyJWTError as exc:
+        logger.debug("JWT validation failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    name = payload.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=401, detail="JWT missing valid 'name' claim")
+    return name.strip()
 ```
 
 **Testable in isolation:** Yes — pure function over a token string and settings; no I/O.
@@ -191,6 +246,33 @@ def _validate_slac_jwt(token: str) -> str:
 jwt_public_key: str | None = None    # RS256 PEM public key; None disables Path 3
 jwt_algorithm: str = "RS256"
 jwt_issuer: str = "https://dex.slac.stanford.edu"
+jwt_audience: str = "s3df"           # OIDC audience claim; must match `aud` in SLAC Dex tokens
+```
+
+**Field validator (from eng review):** Add `_strip_jwt_public_key` following the `_strip_internal_api_secret` pattern:
+```python
+@field_validator("jwt_public_key", mode="before")
+@classmethod
+def _strip_jwt_public_key(cls, v: object) -> str | None:
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    # Env vars often encode newlines as literal \n
+    return s.replace("\\n", "\n")
+```
+
+**Algorithm validator (security review AM-1):** Prevent config-injection of `HS256` or other weak algorithms:
+```python
+@field_validator("jwt_algorithm", mode="before")
+@classmethod
+def _validate_jwt_algorithm(cls, v: object) -> str:
+    allowed = {"RS256"}
+    val = str(v).strip().upper()
+    if val not in allowed:
+        raise ValueError(f"jwt_algorithm must be one of {allowed}, got {val!r}")
+    return val
 ```
 
 **Note:** `jwt_secret` (HS256 fallback) is dropped — RS256 is confirmed, no fallback needed.
@@ -201,9 +283,26 @@ jwt_issuer: str = "https://dex.slac.stanford.edu"
 
 ### `get_current_user` (modify `auth.py`)
 
-**Responsibility:** Add Path 3 call after Path 2.
+**Responsibility:** Remove Path 1 (Vouch headers) and add Path 3 (Bearer JWT). After the ingress
+split, all browser writes go through the Next.js proxy (Path 2 / X-Internal-Secret — confirmed by
+frontend audit). Path 1 is no longer reached from any browser path and its removal eliminates the
+Vouch header spoofing attack surface entirely.
 
-**Change:** Three-line addition — check for `Authorization: Bearer`, call `_validate_slac_jwt`, return `User`.
+**Change:** Remove Path 1 block; add Path 3 after Path 2, before the final 401:
+```python
+# Path 3: Bearer JWT — CLI tools with SLAC-issued token
+auth_header = request.headers.get("Authorization", "")
+if auth_header.startswith("Bearer "):
+    token = auth_header[7:].strip()  # len("Bearer ") == 7; strip whitespace/newlines
+    if token:
+        user_id = _validate_slac_jwt(token)
+        return User(user_id=user_id, is_admin=user_id in settings.admin_user_set)
+```
+
+**Parsing notes (from eng review):**
+- `startswith("Bearer ")` (with trailing space) rejects `BearerXYZ` and `Bearer` without token
+- Guard `if token:` handles `"Bearer "` with empty token (falls through to 401 silently)
+- `_validate_slac_jwt` internally checks `jwt_public_key is not None`
 
 **No migration required** — additive change, no schema change, no data migration.
 
@@ -235,15 +334,31 @@ Internet → ingress-api (no Vouch — backend owns auth)
                └── /health  → backend:8000
 ```
 
-**Security trade-off (accepted):** Removing Vouch from `/api` eliminates the outer SSO gate as
-defence-in-depth. Unauthenticated requests now reach the backend and receive a 401 rather than
-being redirected at the ingress. This is acceptable because:
-- The backend already correctly returns 401 for all unauthenticated requests
-- `/api` serves JSON only — no sessions, no HTML, no cookies
-- Browser users are unaffected: client-side JS fetches `/api` → nginx → backend (Path 1 still
-  works because VouchProxy headers are injected by the frontend Ingress for `/` requests, and the
-  Next.js server-side proxy path uses `X-Internal-Secret` via `BACKEND_URL` internally)
-- Modifying VouchProxy or nginx ingress controller globally is out of scope
+**Security rationale for removing Path 1:** A frontend audit confirmed that all browser write
+operations (rate, create, update, delete, label — 7 endpoints) route through the Next.js proxy
+route handlers at `frontend/app/api/*/route.ts`, which authenticate to the backend via
+`X-Internal-Secret` (Path 2). Path 1 (Vouch headers) is never the active auth path for any
+browser write request — it is unreachable via the Next.js proxy path, which fires Path 2 first.
+
+Removing Path 1 entirely:
+- Eliminates the Vouch header spoofing attack surface on `ingress-api` (no longer any code path
+  that trusts `X-Vouch-Idp-Claims-Name`)
+- Requires no nginx annotation workarounds (`configuration-snippet` is blocked on SLAC cluster)
+- Simplifies `get_current_user` to two paths: Path 2 (proxy secret) and Path 3 (Bearer JWT)
+
+**Browser read operations** (e.g. `GET /api/skills`) are unauthenticated — they work without any
+auth header and are unaffected by this change.
+
+**After split — two auth paths remain:**
+```
+Browser write  → Next.js proxy (X-Internal-Secret)   → Path 2 ✅
+CLI write      → ingress-api (Authorization: Bearer)  → Path 3 ✅
+Unauthenticated reads → ingress-api                   → no auth required ✅
+Spoofed X-Vouch-Idp-Claims-Name → Path 1 removed → 401 ✅
+```
+
+The Slice 0 validation gate must include:
+- `curl -H "X-Vouch-Idp-Claims-Name: admin" https://<dev-host>/api/skills` returns 401 (not 200)
 
 ### Request flow after this change
 
@@ -258,18 +373,55 @@ ingress-api (nginx, no Vouch)
   ▼
 Backend FastAPI
   │  get_current_user dependency
-  │    Path 1: X-Vouch-Idp-Claims-Name?  → User (vouch user, browser via frontend)
+  │    Path 1: REMOVED (ADR-016-B — Vouch headers no longer trusted)
   │    Path 2: X-Internal-Secret match?  → User (Next.js server-side proxy)
   │    Path 3: Authorization: Bearer?
   │      └─ _validate_slac_jwt(token)
   │           ├─ jwt_public_key configured? else → 401
-  │           ├─ PyJWT.decode(RS256, issuer, options={verify_exp: True})
+  │           ├─ PyJWT.decode(RS256, iss, aud="s3df", verify_exp=True)
   │           ├─ extract payload["name"] → user_id
   │           └─ return User(user_id, is_admin=...)
   │    None matched → 401
   ▼
   rate endpoint handler (no changes needed)
 ```
+
+### Skill-side contract (interface for todo/007)
+
+This section defines the contract that the `/agent-knowledge-hub` skill (todo/007) must implement
+to use Bearer JWT auth. It is out of scope for #016 to implement the skill side, but the interface
+must be locked in so #007 has a stable target.
+
+**Token discovery:**
+- Read `~/.s3df-access-token` (raw JWT string, single line, may have trailing newline)
+- If the file does not exist or is empty, do NOT send a Bearer header; instead display:
+  `"No SLAC token found. Run 's3df login' to authenticate, then try again."`
+- Strip whitespace from the token before sending
+
+**Request format:**
+- Header: `Authorization: Bearer <token>` (no quotes around token)
+- Sent on all write requests: `rate`, `submit`, `label`
+- NOT sent on read requests (`search`, `install`, `list`) — those are unauthenticated
+
+**Error handling — interpreting 401 responses:**
+The backend returns JSON `{"detail": "<message>"}` on 401. The skill should display the `detail`
+value directly to the user — it is written to be human-readable and actionable:
+
+| Backend `detail` | Skill should display |
+|---|---|
+| `"Token expired. Re-run 's3df login' to refresh your session."` | Show as-is |
+| `"Invalid or expired token"` | Show as-is (covers bad signature, malformed token) |
+| `"JWT missing valid 'name' claim"` | Show as-is + suggest contacting S3DF support |
+| `"JWT authentication not configured"` | `"Server-side auth not yet configured. Bearer JWT auth may not be deployed yet."` |
+| `"Authentication required"` | Generic fallback — show as-is |
+
+**Token refresh flow (user-facing):**
+1. User runs `/agent-knowledge-hub rate <slug> 5`
+2. Skill reads `~/.s3df-access-token`, sends Bearer header
+3. Backend returns 401 with `"Token expired..."` detail
+4. Skill displays: `"Token expired. Re-run 's3df login' to refresh your session."`
+5. User runs `s3df login` in their terminal
+6. User retries the rate command -- succeeds
 
 ---
 
@@ -312,8 +464,9 @@ until the gate passes.
 - [ ] `curl https://<dev-host>/api/skills` without any auth returns `401` JSON (not a 302 redirect)
 - [ ] `curl https://<dev-host>/api/skills` with a valid browser session cookie still returns 200
 - [ ] Next.js server-side rendering still works (skills page loads, ratings display)
+- [ ] `curl -H "X-Vouch-Idp-Claims-Name: admin" https://<dev-host>/api/skills` returns `401` (Vouch header spoofing blocked) _(security review AM-2)_
 
-_Do not proceed until all four checks pass._
+_Do not proceed until all five checks pass._
 
 ---
 
@@ -323,16 +476,79 @@ _Do not proceed until all four checks pass._
 using a synthetic RS256 key pair — before we need a real SLAC public key.
 
 - Add `jwt_public_key`, `jwt_algorithm`, `jwt_issuer` to `Settings` in `config.py`
+- Add `_strip_jwt_public_key` field validator (A-1 from eng review)
 - Add `_validate_slac_jwt(token) -> str` to `auth.py`
   - Returns `user_id` on success
   - Raises `HTTPException(401)` on: not configured, bad signature, expired, wrong issuer, missing `name` claim
+  - Raises `HTTPException(500)` on: `InvalidKeyError` (malformed PEM — server misconfiguration)
+  - Expired tokens get a distinct detail message: `"Token expired. Re-run 's3df login' to refresh your session."`
 - Add Path 3 block to `get_current_user`
+  - Strip whitespace from Bearer token before validation (`token.strip()`) to handle trailing newlines from file reads
 - Generate a throwaway RSA key pair in the test suite (no secrets needed)
-- Unit tests in `test_auth.py` covering AC-1 through AC-10
+- Unit tests in `test_auth.py` covering AC-1 through AC-10 plus expanded test matrix
+
+**Test fixture pattern:**
+```python
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+
+@pytest.fixture(scope="module")
+def rsa_keypair():
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode()
+    return private_pem, public_pem
+
+def _make_jwt(private_pem, claims=None, **overrides):
+    import time
+    payload = {"name": "alice", "iss": "https://dex.slac.stanford.edu",
+               "exp": int(time.time()) + 3600, "iat": int(time.time())}
+    if claims: payload.update(claims)
+    payload.update(overrides)
+    return jwt.encode(payload, private_pem, algorithm="RS256")
+```
+
+**Expanded test matrix (from eng review):**
+
+| ID | Description | Category |
+|----|-------------|----------|
+| T-JWT-01 | Valid RS256 JWT -> `User(user_id="alice")` | AC-1 |
+| T-JWT-02 | JWT signed with wrong RSA key -> 401 | AC-2 |
+| T-JWT-03 | Expired JWT -> 401 | AC-3 |
+| T-JWT-04 | Wrong `iss` -> 401 | AC-4 |
+| T-JWT-05 | No Authorization header -> 401 | AC-5 |
+| T-JWT-06 | `jwt_public_key=None` -> falls through to 401 | AC-6 |
+| T-JWT-07 | `auth_mode=dev` -> dev_user wins, Bearer ignored | AC-7 |
+| T-JWT-08 | Valid JWT, user in admin_users -> is_admin=True | AC-8 |
+| T-JWT-09 | POST /api/skills/slug/rate with Bearer -> 200 | AC-9 |
+| T-JWT-10 | Path 1 (Vouch header) → 401; Path 2 (proxy secret) tests unchanged | AC-10 |
+| T-JWT-11 | `Bearer ` (empty token) -> 401 | Edge |
+| T-JWT-12 | `Bearer abc.def` (malformed) -> 401 | Edge |
+| T-JWT-13 | `Basic ...` (non-Bearer) -> skipped, 401 | Edge |
+| T-JWT-14 | Missing `name` claim -> 401 | Edge |
+| T-JWT-15 | `name=""` -> 401 | Edge |
+| T-JWT-16 | `name=123` (non-string) -> 401 | Edge |
+| T-JWT-17 | No `aud` claim in token -> 401 (aud always validated) | PyJWT |
+| T-JWT-18 | PEM with literal `\n` -> validator normalises | Config |
+| T-JWT-19 | Whitespace-only PEM -> None, disabled | Config |
+| T-JWT-20 | Spoofed `X-Vouch-Idp-Claims-Name` header on API ingress -> 401 (Path 1 removed) | Security |
+| T-JWT-21 | Internal secret + Bearer -> secret wins | Priority |
+| T-JWT-22 | get_optional_user + bad Bearer -> None | Dep |
+| T-JWT-23 | Malformed PEM -> 500 | Config err |
+| T-JWT-24 | `nbf` in future -> 401 | Edge |
+| T-JWT-25 | Wrong `aud` claim (e.g. `"other-app"`) -> 401 | Security |
 
 **Validation gate:**
 - [ ] All unit tests pass in CI with synthetic key pair
-- [ ] Existing Path 1 and Path 2 tests pass unchanged (AC-10)
+- [ ] Existing Path 2 (proxy-secret) tests pass unchanged; Path 1 (Vouch) tests updated to verify 401
 - [ ] `jwt_public_key=None` → Path 3 disabled, falls through to 401 (AC-6)
 
 _Do not proceed until CI is green._
@@ -346,14 +562,15 @@ actually work against the deployed backend.
 
 - Obtain the SLAC Dex RS256 public key (PEM) — fetch from `https://dex.slac.stanford.edu/.well-known/openid-configuration` → `jwks_uri`, extract the active signing key
 - Add `JWT_PUBLIC_KEY` to the dev k8s secret
-- Add `JWT_PUBLIC_KEY` to `.env.example` (placeholder/instructions)
+- Add `JWT_PUBLIC_KEY`, `JWT_ALGORITHM`, `JWT_ISSUER` to `backend/.env.example` with comments explaining defaults and AUTH_MODE=dev bypass
 - Deploy Slice 1 code + updated secret to dev cluster
+- Write `docs/runbooks/jwt-public-key-rotation.md` — follows the `internal-api-secret.md` pattern: fetch key from JWKS, store in Vault, deploy backend, verify, rollback
 
 **Validation gate:**
 - [ ] `curl -H "Authorization: Bearer $(cat ~/.s3df-access-token)" https://<dev-host>/api/skills/me` returns 200 with correct `user_id`
 - [ ] `curl -H "Authorization: Bearer badtoken"` returns 401
 - [ ] Expired token (manually crafted or waited out) returns 401
-- [ ] Browser auth (Path 1) and Next.js proxy (Path 2) still work alongside Path 3
+- [ ] Browser auth (Next.js proxy / Path 2) still works alongside Path 3
 
 _Do not proceed until all four checks pass against the live dev cluster._
 
@@ -368,6 +585,11 @@ _Do not proceed until all four checks pass against the live dev cluster._
 - Deploy to prod
 - Smoke test: `curl -H "Authorization: Bearer $(cat ~/.s3df-access-token)" https://<prod-host>/api/skills/me`
 - Update `todo/007` dependency note: "Bearer JWT auth — ✅ complete"
+- **Docs:**
+  - Add CHANGELOG entry for Bearer JWT auth (new auth path, ingress split, config requirements)
+  - Update `docs/runbooks/internal-api-secret.md` Section 5 verification table to include a Path 3 Bearer JWT check
+  - Extract ADR-016-A, ADR-016-B, ADR-016-C from this file into `docs/adr/adr-p08-*.md` (or next available number) as standalone files
+  - Update `PRD.md` Section 12 Secrets Management: replace `JWT_SECRET` reference with `JWT_PUBLIC_KEY`
 
 **Validation gate:**
 - [ ] Prod smoke test returns 200 with correct `user_id`
@@ -386,18 +608,26 @@ _Do not proceed until all four checks pass against the live dev cluster._
 | PEM key misconfigured (wrong format, trailing newline) | Medium | Medium | Add `_strip` validator (same pattern as `internal_api_secret`) |
 | PyJWT version incompatibility with `options` dict | Low | Low | `PyJWT>=2.8` already pinned; API is stable |
 | Key rotation causes outage if pod not restarted | Low | High | Document rotation runbook; consider JWKS upgrade in future |
+| Vouch header spoofing on ungated API ingress _(security review SR-3)_ | N/A | N/A | Eliminated by Path 1 removal (ADR-016-B) — no code trusts Vouch headers; verified by AC-13 |
+| Token replay from other Dex clients _(security review SR-2)_ | Low | Medium | `aud` claim validated against `"s3df"` — tokens for other Dex clients are rejected |
+| Algorithm confusion via `alg: HS256` or `alg: none` _(security review SR-1)_ | Low (PyJWT 2.8 mitigates) | Critical | Pin `algorithms=["RS256"]`; validate `jwt_algorithm` config; test AC-11/AC-12 |
 
 ---
 
 ## Definition of Done
 
 - [ ] Ingress split deployed to dev; browser login verified; unauthenticated `/api` returns 401
-- [ ] AC-1 through AC-10 pass in CI
+- [ ] AC-1 through AC-13 pass in CI (includes algorithm confusion and Vouch spoofing tests from security review)
 - [ ] Unit tests: valid token → 200, bad signature → 401, expired → 401, wrong issuer → 401, no key configured → 401
-- [ ] Existing Path 1 and Path 2 tests pass unchanged
-- [ ] `JWT_PUBLIC_KEY` added to k8s secret (dev + prod overlays)
+- [ ] Existing proxy-secret (Path 2) tests pass unchanged; Path 1 (Vouch) tests updated to verify 401
 - [ ] Integration test against dev cluster with real `~/.s3df-access-token`
 - [ ] `todo/007` dependency unblocked
+- [ ] `backend/.env.example` updated with `JWT_PUBLIC_KEY`, `JWT_ALGORITHM`, `JWT_ISSUER`
+- [ ] `docs/runbooks/jwt-public-key-rotation.md` written and reviewed
+- [ ] `docs/runbooks/internal-api-secret.md` updated with Path 3 verification step
+- [ ] CHANGELOG entry added for Bearer JWT auth
+- [ ] ADR-016-A/B/C extracted into `docs/adr/` as standalone files
+- [ ] `PRD.md` Section 12 `JWT_SECRET` reference corrected to `JWT_PUBLIC_KEY`
 
 ---
 
@@ -417,3 +647,145 @@ _None yet._
 - `todo/008-auth-header-hardening.md` — explicitly deferred "CLI auth / Bearer token path" → now this file
 - Token location: `~/.s3df-access-token` (raw RS256 JWT string issued by `s3df login`)
 - Issuer: `https://dex.slac.stanford.edu`
+
+---
+
+## Board Review
+
+**Verdict:** CLEAR TO BUILD
+**Date:** 2026-04-22
+**Rounds:** 2
+
+| Reviewer | Result | Amended | Key findings |
+|---|---|---|---|
+| research-handbook | — SKIP | N | Technology well-understood; no speculative unknowns |
+| codebase-arch-review | ✅ PASS | Y | BLOCKING: browser auth breaks + Vouch spoofing after split → resolved by removing Path 1 entirely (ADR-016-B); two-path model coherent |
+| codebase-eng-review | ⚠️ WARN | Y | PyJWT verify_aud default, name claim type validation, InvalidKeyError→500, expanded test matrix T-JWT-01–25 |
+| codebase-doc-review | ⚠️ WARN | Y | 6 doc gaps added: rotation runbook, .env.example, CHANGELOG, PRD stale ref, runbook update, ADR extraction |
+| security-review | ⚠️ WARN | Y | Algorithm confusion (AC-11/12), Vouch spoofing resolved via Path 1 removal (AC-13), aud="s3df" always validated |
+| codebase-ux-review | ⚠️ WARN | Y | Skill-side contract locked in, distinct 401 detail messages specified, token-strip added |
+
+**Accepted warnings:**
+- `name` claim assumed to be immutable UNIX username (not display name) — tech debt tracked
+- Key rotation requires pod restart (acceptable for v1; JWKS upgrade path documented)
+- CORS `allow_origins=["*"]` pre-existing issue, amplified slightly; deferred to follow-up
+
+**ADRs written:** 3 inline (ADR-016-A, ADR-016-B, ADR-016-C) — to be extracted to `docs/adr/` in Slice 3
+**Unresolved decisions:** none
+
+---
+
+### Reviewer output
+
+<details>
+<summary>codebase-arch-review — Round 2 (✅ PASS)</summary>
+
+## Summary
+
+BLOCKING-1 and BLOCKING-3 are substantively resolved — Path 1 removal is the correct fix and the two-path model (Path 2 + Path 3) is coherent. BLOCKING-2 wording is improved. However, the plan had several stale references to Path 1 that were cleaned up before implementation.
+
+## Issues
+
+### VERIFIED: BLOCKING-1 resolved — Path 1 removal is correct
+
+ADR-016-B correctly identifies that (a) all 7 browser write operations use the Next.js proxy (Path 2), (b) Path 1 is unreachable for browser writes, and (c) VouchProxy strips Bearer headers making Path 1 and Path 3 incompatible on the same ingress. The two-path model (Path 2 + Path 3) is coherent. ✅
+
+### VERIFIED: BLOCKING-3 resolved — spoofing mitigated by Path 1 removal
+
+With Path 1 removed, no code path trusts `X-Vouch-Idp-Claims-Name`. AC-13 is present and trivially achievable. No nginx annotation workarounds needed. ✅
+
+### VERIFIED: BLOCKING-2 resolved — wording updated ✅
+
+### NOTED: WARNING-1 — prod/stage ingress may not exist yet
+
+Slice 3 says "Apply ingress split to prod and stage overlays" but prod/stage may not have ingress files yet. Non-blocking — implementer should clarify before Slice 3.
+
+## Status
+PASS
+
+</details>
+
+<details>
+<summary>codebase-eng-review — Round 1 (⚠️ WARN)</summary>
+
+## Summary
+
+The plan is well-structured and nearly complete. `_validate_slac_jwt` is synchronous/pure (appropriate), exception hierarchy is right, path ordering defensible. 2 issues, 1 decision, 8 amendments. None are blockers.
+
+## Issues
+
+- warning | impl | PyJWT `verify_aud` defaults True — SLAC tokens may lack `aud`; resolved by always enabling aud validation with `jwt_audience="s3df"`
+- low | impl | `name` claim type not validated — fixed with isinstance + strip check
+
+## Amendments made
+- Added `_strip_jwt_public_key` validator
+- Added `verify_aud` / `require` options to pseudocode
+- Added `name` claim type validation
+- Added `InvalidKeyError` → 500 distinction
+- Added Bearer header parsing edge cases
+- Added `get_optional_user` test note
+- Added logging notes
+- Expanded test matrix T-JWT-01–24
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>codebase-doc-review — Round 1 (⚠️ WARN)</summary>
+
+## Summary
+
+No documentation deliverables were tracked in the Definition of Done. Six gaps identified and added to the plan.
+
+## Issues
+
+- high | docs | No JWT public key rotation runbook (added to Slice 2)
+- medium | docs | `.env.example` incomplete — JWT_ALGORITHM and JWT_ISSUER missing (fixed)
+- medium | docs | No CHANGELOG entry (added to Slice 3)
+- low | docs | PRD Section 12 references stale `JWT_SECRET` (added to Slice 3)
+- medium | docs | `internal-api-secret.md` needs Path 3 verification step (added to Slice 3)
+- low | docs | Three ADRs inline need extraction to `docs/adr/` (added to Slice 3)
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>security-review — Round 2 (✅ PASS)</summary>
+
+## Summary
+
+AM-1 (algorithm confusion) and AM-3 (audience validation) fully verified. AM-2 (Path 1 removal / Vouch spoofing) structurally correct; stale references cleaned up. No new security issues from amendments. Path 1 removal verified safe: all 7 browser write endpoints confirmed to use Next.js proxy (Path 2).
+
+## Amendments verified
+
+- AM-1: `algorithms=["RS256"]` pinned; `jwt_algorithm` field validator rejects non-RS256; AC-11, AC-12 present ✅
+- AM-2: Path 1 removed from `get_current_user`; ADR-016-B documents rationale; AC-13 present; Slice 0 gate includes spoofing check ✅
+- AM-3: `jwt_audience: str = "s3df"` hardcoded; aud always validated; risk register updated ✅
+
+## Status
+PASS
+
+</details>
+
+<details>
+<summary>codebase-ux-review — Round 1 (⚠️ WARN)</summary>
+
+## Summary
+
+Core backend plumbing clean. Three UX gaps addressed: skill-side contract locked in, distinct 401 detail messages specified per failure mode, first-use onboarding flow documented, token-strip added.
+
+## Issues
+
+- high | ux | No skill-side token-handling specification — added "Skill-side contract" section
+- high | ux | 401 responses generic — added distinct detail strings per failure mode
+- medium | ux | No first-use flow documented — added to skill-side contract section
+- low | ux | Token trailing-newline handling — added `token.strip()` to Path 3 code
+
+## Status
+PASS WITH WARNINGS
+
+</details>

@@ -479,7 +479,8 @@ class GitHubScanner:
         truncated = bool(tree_data.get("truncated"))
         tree_items = tree_data.get("tree", [])
 
-        # Find directories that contain skill.md or CLAUDE.md
+        # Find directories that contain skill.md or CLAUDE.md, optionally scoped to ref.path
+        base = ref.path.strip("/")  # "" for root, "engineering" for subdir
         skill_file_dirs: set[str] = set()
         for item in tree_items:
             if item.get("type") == "blob":
@@ -487,6 +488,8 @@ class GitHubScanner:
                 fname = path.rsplit("/", 1)[-1] if "/" in path else ""
                 if fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
                     dirpath = path.rsplit("/", 1)[0] if "/" in path else "/"
+                    if base and not dirpath.startswith(base):
+                        continue
                     skill_file_dirs.add(dirpath)
 
         capped = len(skill_file_dirs) > 20

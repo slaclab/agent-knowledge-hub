@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0 — 2026-04-22
+
+### Skill ratings (#005)
+
+Authenticated users can now rate any skill 1–5 stars from the detail page.
+
+- **Interactive star picker** — authenticated users see a clickable 5-star picker on the skill detail page. Stars highlight on hover; keyboard navigation (Tab, Enter/Space) and `aria-label` attributes are included for accessibility.
+- **Optimistic update** — the picker and average update instantly on click; reverts cleanly if the API call fails with an inline error message.
+- **Upsert semantics** — re-rating a skill updates your previous vote rather than creating a duplicate. One rating per user per skill, enforced via a unique MongoDB index.
+- **Your prior rating pre-filled** — when you revisit a skill you've already rated, your previous star choice is shown in the picker after a client-side fetch.
+- **Read-only view for guests** — unauthenticated visitors see the current average and count with a "Sign in to rate." prompt.
+
 ## v0.2.0 — 2026-04-22
 
 ### Label UX: community tagging, filter, and admin tools (#003)

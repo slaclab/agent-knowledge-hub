@@ -42,7 +42,7 @@ No configuration. No manual file copying.
 Register the SLAC marketplace once to get started:
 
 ```
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/cli/api/marketplace.json
 /plugin install agent-knowledge-hub
 ```
 

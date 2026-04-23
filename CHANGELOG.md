@@ -19,7 +19,7 @@ Discover, install, rate, and submit catalog skills entirely from within your Cla
 
 **Bootstrap (one-time):**
 ```
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/cli/api/marketplace.json
 /plugin install agent-knowledge-hub
 ```
 

@@ -88,7 +88,20 @@ async def marketplace_json(response: Response):
             Skill.entry_type == EntryType.skill,
         ).to_list()
 
-        plugins = []
+        # Always include the agent-knowledge-hub discovery plugin itself as the
+        # first entry — it's a bootstrap tool that must be installable before
+        # the user has the skill to discover it via the catalog.
+        plugins = [
+            {
+                "name": "agent-knowledge-hub",
+                "description": "Discover, install, rate, and submit skills from the SLAC S3DF catalog — entirely within your agent session.",
+                "source": {
+                    "source": "github",
+                    "repo": "slaclab/agent-knowledge-hub",
+                    "path": "skill",
+                },
+            }
+        ]
         for s in skills:
             # Derive GitHub owner/repo from repo_url
             # Expected format: https://github.com/<owner>/<repo>
@@ -103,7 +116,7 @@ async def marketplace_json(response: Response):
                 "name": s.slug,
                 "description": s.description or s.name,
                 "source": {
-                    "type": "github",
+                    "source": "github",
                     "repo": f"{owner}/{repo}",
                 },
             }

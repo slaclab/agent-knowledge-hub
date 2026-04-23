@@ -5,7 +5,7 @@
   "skills": [
     {
       "name": "agent-knowledge-hub",
-      "path": "skill/SKILL.md"
+      "path": "SKILL.md"
     }
   ]
 }

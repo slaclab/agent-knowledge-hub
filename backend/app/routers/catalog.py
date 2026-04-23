@@ -127,7 +127,7 @@ async def marketplace_json(response: Response):
 
         manifest = {
             "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-            "name": "agent-knowledge-hub",
+            "name": "slac-s3df",
             "description": "SLAC S3DF agent skills catalog",
             "owner": {
                 "name": "SLAC S3DF",

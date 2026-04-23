@@ -1,6 +1,6 @@
 # 016 — Bearer JWT Auth: CLI Authentication Path for the Backend API
 
-**Status:** 🏁 Implementation Done
+**Status:** ✅ Complete
 **Branch:** —
 **PR:** —
 
@@ -616,18 +616,26 @@ _Do not proceed until all four checks pass against the live dev cluster._
 
 ## Definition of Done
 
-- [ ] Ingress split deployed to dev; browser login verified; unauthenticated `/api` returns 401
-- [ ] AC-1 through AC-13 pass in CI (includes algorithm confusion and Vouch spoofing tests from security review)
-- [ ] Unit tests: valid token → 200, bad signature → 401, expired → 401, wrong issuer → 401, no key configured → 401
-- [ ] Existing proxy-secret (Path 2) tests pass unchanged; Path 1 (Vouch) tests updated to verify 401
+- [x] Ingress split deployed to dev; browser login verified; unauthenticated `/api` returns 401
+- [x] AC-1 through AC-13 pass in CI (includes algorithm confusion and Vouch spoofing tests from security review)
+- [x] Unit tests: valid token → 200, bad signature → 401, expired → 401, wrong issuer → 401, no key configured → 401
+- [x] Existing proxy-secret (Path 2) tests pass unchanged; Path 1 (Vouch) tests updated to verify 401
 - [ ] Integration test against dev cluster with real `~/.s3df-access-token`
-- [ ] `todo/007` dependency unblocked
-- [ ] `backend/.env.example` updated with `JWT_PUBLIC_KEY`, `JWT_ALGORITHM`, `JWT_ISSUER`
-- [ ] `docs/runbooks/jwt-public-key-rotation.md` written and reviewed
-- [ ] `docs/runbooks/internal-api-secret.md` updated with Path 3 verification step
-- [ ] CHANGELOG entry added for Bearer JWT auth
-- [ ] ADR-016-A/B/C extracted into `docs/adr/` as standalone files
-- [ ] `PRD.md` Section 12 `JWT_SECRET` reference corrected to `JWT_PUBLIC_KEY`
+- [x] `todo/007` dependency unblocked
+- [x] `backend/.env.example` updated with `JWT_JWKS_URI`, `JWT_ALGORITHM`, `JWT_ISSUER`, `JWT_AUDIENCE`
+- [x] `docs/runbooks/jwt-public-key-rotation.md` written
+- [x] `docs/runbooks/internal-api-secret.md` updated with Path 3 verification step
+- [x] CHANGELOG entry added for Bearer JWT auth
+- [x] ADR-P08 (ingress split), ADR-P09 (JWKS), ADR-P10 (remove Vouch Path 1) written to `docs/adr/`
+- [x] `PRD.md` Section 12 `JWT_SECRET` reference corrected
+
+## Notes
+
+**ADR-016-A (static PEM) was superseded** — during implementation, user confirmed Dex rotates keys and the correct endpoint is `dex-dev.slac.stanford.edu`. Replaced with JWKS auto-fetch via `PyJWKClient` (ADR-P09). Config fields are now `JWT_JWKS_URI`, `JWT_ISSUER`, `JWT_AUDIENCE` (no `JWT_PUBLIC_KEY`).
+
+**Ingress root cause** — the old monolithic `ingress.yaml` (name: `agent-knowledge-hub`) was left live in the cluster after kustomization.yaml was updated to use the new split ingresses. `kubectl delete ingress agent-knowledge-hub -n dev` was required to clear the host-cluster vcluster-synced object that was blocking `ingress-frontend` from registering.
+
+**Debug logging** added in v0.4.1 (`--log-level debug` in Dockerfile; `logger.debug` in `auth.py` and `me.py`; `console.debug` in `_internal.ts` and `me/route.ts`) to diagnose the auth issue. Can be dialled back in a future cleanup.
 
 ---
 

@@ -8,7 +8,7 @@
 | [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ⬜ Open |
 | [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ✅ Merged |
 | [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | 📋 Preparing |
-| [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | ⬜ Open |
+| [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | 🏁 Implementation Done |
 | [008](todo/008-auth-header-hardening.md) | Auth header hardening: prevent identity spoofing via ingress/cluster/proxy | 🏁 Implementation Done |
 | [009](todo/009-duplicate-skill-detection.md) | Duplicate & similar skill detection: near-duplicate warnings in discovery and submit flows | ⬜ Open |
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |

@@ -14,13 +14,19 @@ Skills in private SLAC GitHub repos are fully supported. Skills that require SLA
 
 ## Share what you've built
 
-Have something useful to share? `/agent-knowledge-hub` walks you through the whole process:
+Have something useful to share? Scaffold a skill from within your session:
+
+```
+/agent-knowledge-hub create
+```
+
+Then push it to GitHub and submit it to the catalog:
 
 ```
 /agent-knowledge-hub submit
 ```
 
-It will guide you through creating a new GitHub repo (or adding to an existing one), structuring your skill, and registering it in the catalog — step by step, without leaving your assistant.
+This will print the catalog submission URL so you can register your skill from the web.
 
 ## Install without leaving your assistant
 

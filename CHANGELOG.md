@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### /agent-knowledge-hub skill (#007)
+
+Discover, install, rate, and submit catalog skills entirely from within your Claude Code session.
+
+- **`/agent-knowledge-hub <query>`** — describe what you need in plain English; Claude fetches
+  the catalog and returns ranked matches with explanations. Pick one to install immediately.
+- **`install <slug>`** — downloads skill files from GitHub into `~/.claude/skills/<slug>/`
+  using the GitHub Contents API. A mandatory path traversal guard rejects any skill whose
+  `skill_path` would write files outside the skills directory.
+- **`list` / `update` / `remove`** — manage installed skills without leaving your session.
+- **`rate <slug> <1-5>`** — submit a rating using your SLAC token from `~/.s3df-access-token`.
+  Requires `s3df login` (one-time). Clear error messages if the token is missing or expired.
+- **`create`** — scaffold a new `SKILL.md` template locally; ready to push to GitHub and submit.
+- **`submit`** — prints the web submission URL (direct API POST planned for v2).
+
+**Bootstrap (one-time):**
+```
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
+/plugin install agent-knowledge-hub
+```
+
+**New backend endpoints:** `GET /api/skills/summary` (slim catalog listing for LLM context,
+no `readme_html`), `GET /api/marketplace.json` (dynamic Claude Code marketplace manifest,
+5-minute cache + ETag).
+
+**New guides:** `/guides/agent-knowledge-hub`, `/guides/create-a-skill`, `/guides/troubleshooting`.
+
 ### Bearer JWT auth for CLI tools (#016)
 
 CLI tools (including the `/agent-knowledge-hub` skill) can now authenticate write operations
@@ -24,8 +51,9 @@ using a SLAC-issued JWT from `~/.s3df-access-token`.
 - **Security:** `algorithms=["RS256"]` pinned; `alg: HS256` and `alg: none` rejected;
   `aud="s3df"` always validated; algorithm injection via config rejected at startup.
 
-**New config keys:** `JWT_PUBLIC_KEY`, `JWT_ALGORITHM` (default `RS256`),
-`JWT_ISSUER` (default `https://dex.slac.stanford.edu`), `JWT_AUDIENCE` (default `s3df`).
+**New config keys:** `JWT_JWKS_URI` (default `https://dex-dev.slac.stanford.edu/keys`),
+`JWT_ALGORITHM` (default `RS256`), `JWT_ISSUER` (default `https://dex.slac.stanford.edu`),
+`JWT_AUDIENCE` (default `s3df`).
 
 **New docs:** `docs/runbooks/jwt-public-key-rotation.md`, `docs/adr/adr-p08-split-ingress.md`,
 `docs/adr/adr-p09-jwt-static-pem.md`, `docs/adr/adr-p10-remove-vouch-path1.md`.

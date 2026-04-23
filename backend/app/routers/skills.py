@@ -46,6 +46,7 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         description=skill.description,
         readme_html=skill.readme_html,
         compatible_platforms=skill.compatible_platforms,
+        keywords=skill.keywords,
         license=skill.license,
         version=skill.version,
         github_stars=skill.github_stars,

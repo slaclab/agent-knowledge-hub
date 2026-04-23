@@ -32,6 +32,7 @@ interface SkillDraft {
   description: string;
   version: string;
   license: string;
+  keywords: string;
   platforms: string[];
   labels: string[];
   result?: { slug?: string; error?: string };
@@ -81,6 +82,7 @@ export function SubmitForm({
         description: snap.description ?? "",
         version: snap.version ?? "",
         license: snap.license ?? "",
+        keywords: "",
         platforms: snap.compatible_platforms,
         labels: [],
       }))
@@ -158,6 +160,7 @@ export function SubmitForm({
         name: draft.name || undefined,
         description: draft.description || undefined,
         compatible_platforms: draft.platforms.length ? draft.platforms : undefined,
+        keywords: draft.keywords ? draft.keywords.split(",").map((k) => k.trim()).filter(Boolean) : [],
         version: draft.version || undefined,
         license: draft.license || undefined,
       });
@@ -390,6 +393,12 @@ function DiscoveryCard({
               <input value={draft.license} onChange={(e) => onUpdate({ license: e.target.value })} placeholder="MIT"
                 className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Keywords</label>
+            <input value={draft.keywords} onChange={(e) => onUpdate({ keywords: e.target.value })} placeholder="e.g. python, slurm, data-analysis"
+              className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            <p className="text-xs text-muted-foreground">Comma-separated. Improves search and discovery.</p>
           </div>
         </div>
       )}

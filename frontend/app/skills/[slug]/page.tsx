@@ -232,6 +232,20 @@ export default async function SkillDetailPage({ params }: PageProps) {
             </div>
           )}
 
+          {/* Keywords */}
+          {skill.keywords && skill.keywords.length > 0 && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <h3 className="text-sm font-semibold">Keywords</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {skill.keywords.map((kw) => (
+                  <span key={kw} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    {kw}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Agent Gateway badge */}
           {skill.uses_agent_gateway && (
             <div className="rounded-lg border p-4">

@@ -134,6 +134,7 @@ class SkillRepository:
             readme_html=github_data.readme_html if github_data else None,
             readme_fetched_at=github_data.fetched_at if github_data else None,
             compatible_platforms=data.compatible_platforms,
+            keywords=data.keywords,
             license=data.license or (github_data.license if github_data else None),
             version=data.version,
             github_stars=github_data.stars if github_data else None,

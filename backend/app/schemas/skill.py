@@ -179,3 +179,19 @@ class DiscoverOut(BaseModel):
     skills: List[SkillScanSnapshotOut]
     tree_truncated: bool = False
     capped: bool = False
+
+
+class SkillSummaryOut(BaseModel):
+    """Slim skill record for the /api/skills/summary endpoint (no readme_html)."""
+    slug: str
+    name: str
+    description: Optional[str]
+    repo_url: str
+    skill_path: str
+    entry_type: str
+    compatible_platforms: List[str]
+    avg_rating: float
+    rating_count: int
+    labels: List[str] = []
+
+    model_config = {"from_attributes": True}

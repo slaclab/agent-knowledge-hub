@@ -22,10 +22,10 @@
 - OpenCode custom agent install (`~/.config/opencode/agents/`) — v2
 - OOD pre-seeding (auto-registering the marketplace for all S3DF users) — follow-on
 - Automated skill testing or CI on install
-- Backend Bearer JWT validation — tracked in **[#016](016-bearer-jwt-auth.md)** (dependency)
+- Backend Bearer JWT validation — tracked in **[#016](016-bearer-jwt-auth.md)** (dependency, ✅ complete)
 
 **Dependencies:**
-- **[#016](016-bearer-jwt-auth.md)** — Bearer JWT auth must land before `rate` can authenticate
+- **[#016](016-bearer-jwt-auth.md)** — Bearer JWT auth ✅ complete (deployed to dev, v0.4.1)
 
 ---
 
@@ -129,21 +129,21 @@ Every `entry_type: skill` in the catalog becomes a plugin entry automatically.
 
 **Resolved (OQ-1):** The skill authenticates by reading a token from `~/.s3df-access-token`, populated by the `s3df login` command. The skill reads this file and passes the token as a `Bearer` token in the `Authorization` header on all write requests (`rate`, `submit`, `label`).
 
-**Still to resolve — backend token validation:** The current backend trusts `X-Vouch-*` headers injected by VouchProxy at the ingress layer. A Bearer token arriving directly at the API bypasses VouchProxy entirely. Two options:
+**Backend token validation: ✅ complete (#016, v0.4.1)**
 
-| Option | Pros | Cons |
-|---|---|---|
-| **A — S3DF issues a signed JWT** that the backend validates (shared secret or public key) | Clean; no new infrastructure; VouchProxy already supports JWT issuance | Need to confirm S3DF can issue a compatible JWT; backend adds JWT validation path |
-| **B — Lightweight token exchange endpoint** (`POST /api/auth/token-exchange`) where the user presents their `~/.s3df-access-token` and gets back a short-lived session token the backend issues and validates | Self-contained; no VouchProxy dependency for CLI flows | New infrastructure in the backend; token storage/rotation complexity |
-| **C — `s3df login` writes a VouchProxy session cookie** that the skill sends as a cookie header | Zero backend changes | Fragile; cookies aren't designed for CLI use; session expiry unpredictable |
+The backend validates Bearer JWT tokens via JWKS auto-fetch from `https://dex-dev.slac.stanford.edu` (RS256, `aud="s3df"`, issuer validated). The ingress is split — `/api` has no VouchProxy gate so Bearer tokens reach the backend unmodified.
 
-**Recommended path:** Option A — confirm with S3DF platform team whether `s3df login` issues a standard SLAC JWT (likely yes). Backend adds a second auth path: if `Authorization: Bearer <token>` present, validate JWT; otherwise fall back to existing `X-Vouch-*` header path.
+**Auth endpoint contract (from #016):**
+- Verify token is valid: `GET /api/me` with `Authorization: Bearer <token>` → `{"user_id": "...", "is_admin": ...}` on success, 401 on failure
+- Token file: `~/.s3df-access-token` (raw JWT string, strip whitespace before sending)
+- If file absent: display `"No SLAC token found. Run 's3df login' to authenticate, then try again."`
+- 401 `detail` messages are human-readable — display them directly to the user (see #016 Skill-side contract section)
 
 Read-only endpoints (browse, search) remain unauthenticated and require no token.
 
 ### Open Questions
 
-1. **`s3df login` JWT format** _(blocks #016 Slice 2)_: Tracked in `todo/016-bearer-jwt-auth.md`.
+1. **`s3df login` JWT format** _(was OQ-1, blocks #016 Slice 2)_: ✅ Resolved — SLAC Dex issues RS256 JWTs, backend validates via JWKS auto-fetch. See #016.
 2. **`submit` — GitHub repo creation**: Resolved — the skill does **not** create GitHub repos. `create` scaffolds the skill files locally; `submit` redirects to the web form in v1.
 3. **Skill repo location**: Resolved — `skill/` subdirectory in this monorepo.
 
@@ -296,7 +296,7 @@ Uses existing `GET /api/skills` and GitHub Contents API. No auth required.
 
 ### Slice 2 — `rate` command + `create` scaffolding
 **Scope:** Add `rate` to `SKILL.md` (reads `~/.s3df-access-token`, POSTs to `/rate`). Add `create` scaffolding flow. Add `submit` redirect.
-**Note:** `rate` sends the Bearer token; server-side JWT validation is gated on **#016**.
+**Note:** `rate` sends the Bearer token; server-side JWT validation is live (**#016** ✅ complete, v0.4.1).
 **Done when:** AC-6, AC-7, AC-8 pass.
 
 ### Slice 3 — Packaging + bootstrap docs
@@ -326,7 +326,7 @@ Uses existing `GET /api/skills` and GitHub Contents API. No auth required.
 - [ ] Bootstrap instructions added to web guides page
 - [ ] `plugin.json` present and valid for `/plugin install` flow
 - [ ] `skill/SKILL.md` size verified ≤ 8 KB
-- [ ] **#016** (Bearer JWT) deployed to staging before rate auth is considered complete
+- [ ] **#016** (Bearer JWT) ✅ complete — `rate` auth is fully active once this skill is deployed
 
 ---
 

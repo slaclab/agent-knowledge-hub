@@ -16,6 +16,7 @@ from app.config import settings
 from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
 from app.routers import github_scan
+from app.routers.catalog import router as catalog_router
 from app.routers.labels import admin_router as labels_admin_router
 from app.routers.labels import router as labels_router
 from app.routers.labels import skills_labels_router
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(me.router)
     app.include_router(site_settings.router)
+    app.include_router(catalog_router)
     app.include_router(skills.router)
     app.include_router(skills.github_router)
     app.include_router(github_scan.router)

@@ -17,4 +17,4 @@
 | [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | 📋 Preparing |
 | [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 📋 Preparing |
 | [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 📋 Preparing |
-| [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | 🔍 Reviewed |
+| [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | 🏁 Implementation Done |

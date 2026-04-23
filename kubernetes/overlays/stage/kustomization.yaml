@@ -9,6 +9,8 @@ resources:
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
+  - ingress-frontend.yaml
+  - ingress-api.yaml
   - network-policy-backend.yaml
 
 configMapGenerator:
@@ -16,6 +18,9 @@ configMapGenerator:
     literals:
       - GITHUB_API_URL=https://api.github.com
       - AUTH_MODE=vouchproxy
+      - JWT_JWKS_URI=https://dex.slac.stanford.edu/keys
+      - JWT_ISSUER=https://dex.slac.stanford.edu
+      - JWT_AUDIENCE=s3df
     options:
       disableNameSuffixHash: true
 

@@ -769,7 +769,7 @@ make -C kubernetes/overlays/dev rollout-restart
 ### Secrets Management
 
 - Secrets fetched from **Vault** at apply time, written to `.secrets/` (gitignored), applied as k8s Secrets, then deleted
-- Secret keys: `GITHUB_TOKEN` (read-only, for GitHub API rate limit), `MONGO_ROOT_PASSWORD`, `JWT_SECRET` (if JWT validation used)
+- Secret keys: `GITHUB_TOKEN` (read-only, for GitHub API rate limit), `MONGO_ROOT_PASSWORD`, `INTERNAL_API_SECRET` (Next.js proxy trust), `JWT_PUBLIC_KEY` (RS256 PEM for CLI Bearer JWT auth — see ADR-P09)
 - `DEV_USER` env var in dev overlay bypasses VouchProxy for local/dev use — **never present in prod overlay**
 
 ### Resource Conventions

@@ -75,6 +75,7 @@ After both rollouts complete, verify the authenticated flow works end-to-end:
 | `/api/skills/[slug]/revisions` | GET | 200 |
 | `/api/skills/[slug]/revisions/[n]` | GET | 200 |
 | `/api/github-scan` | GET | 200/4xx (auth works, response depends on URL) |
+| **Path 3 (Bearer JWT)** | `Authorization: Bearer $(cat ~/.s3df-access-token)` | 200 for any write route |
 
 ---
 

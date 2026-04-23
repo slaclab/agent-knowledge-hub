@@ -6,6 +6,7 @@ import type { LabelOut } from "@/types/skill";
 import { useAuth } from "@/lib/auth";
 import { addLabel, removeLabel, listSkillLabels } from "@/lib/api";
 import { LabelPicker } from "@/components/label-picker";
+import { labelColor } from "@/lib/label-color";
 
 interface LabelSectionProps {
   slug: string;
@@ -85,7 +86,7 @@ export function LabelSection({ slug, initialLabels }: LabelSectionProps) {
                 <Link
                   key={label.name}
                   href={`/skills?labels=${encodeURIComponent(label.name)}`}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium hover:opacity-80 transition-opacity`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium hover:opacity-80 transition-opacity ${labelColor(label.name)}`}
                 >
                   <span>{label.name}</span>
                   <span className="text-muted-foreground tabular-nums">{label.usage_count}</span>

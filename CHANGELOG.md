@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Bearer JWT auth for CLI tools (#016)
+
+CLI tools (including the `/agent-knowledge-hub` skill) can now authenticate write operations
+using a SLAC-issued JWT from `~/.s3df-access-token`.
+
+- **New auth path (Path 3):** `Authorization: Bearer <token>` — the backend validates RS256 JWTs
+  issued by `https://dex.slac.stanford.edu`. All write endpoints (`rate`, `submit`, `edit`,
+  admin actions) accept Bearer JWT with no per-endpoint changes.
+- **Path 1 removed:** VouchProxy header trust (`X-Vouch-Idp-Claims-Name`) has been removed from
+  `get_current_user`. All browser writes already use the Next.js proxy (Path 2). Removal
+  eliminates the Vouch header spoofing attack surface on the now-ungated API ingress.
+  See ADR-P10.
+- **Ingress split:** The single Ingress object is replaced by two: `ingress-frontend.yaml`
+  (Vouch-gated, routes `/` to Next.js) and `ingress-api.yaml` (no Vouch, routes `/api` and
+  `/health` to the backend). Browser SSO is unaffected. See ADR-P08.
+- **Static PEM config:** Public key configured via `JWT_PUBLIC_KEY` env var / k8s secret.
+  No per-request network call. See ADR-P09 and `docs/runbooks/jwt-public-key-rotation.md`.
+- **Actionable 401 messages:** Expired tokens return `"Token expired. Re-run 's3df login' to
+  refresh your session."` Misconfigured PEM returns HTTP 500 (server error, not client error).
+- **Security:** `algorithms=["RS256"]` pinned; `alg: HS256` and `alg: none` rejected;
+  `aud="s3df"` always validated; algorithm injection via config rejected at startup.
+
+**New config keys:** `JWT_PUBLIC_KEY`, `JWT_ALGORITHM` (default `RS256`),
+`JWT_ISSUER` (default `https://dex.slac.stanford.edu`), `JWT_AUDIENCE` (default `s3df`).
+
+**New docs:** `docs/runbooks/jwt-public-key-rotation.md`, `docs/adr/adr-p08-split-ingress.md`,
+`docs/adr/adr-p09-jwt-static-pem.md`, `docs/adr/adr-p10-remove-vouch-path1.md`.
+
 ## v0.3.0 — 2026-04-22
 
 ### Skill ratings (#005)

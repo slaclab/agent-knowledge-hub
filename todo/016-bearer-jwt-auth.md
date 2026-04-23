@@ -1,6 +1,6 @@
 # 016 — Bearer JWT Auth: CLI Authentication Path for the Backend API
 
-**Status:** 🔍 Reviewed
+**Status:** 🏁 Implementation Done
 **Branch:** —
 **PR:** —
 

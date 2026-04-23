@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-knowledge-hub-api
+  annotations:
+    # Strip the /cli prefix before forwarding to the backend so it sees /api/...
+    # CLI tools call https://<host>/cli/api/skills/<slug>/rate etc.
+    # No VouchProxy — backend owns auth via Authorization: Bearer <jwt>.
+    # See ADR-P08 (revised): /cli path on same hostname, no separate DNS needed.
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - host: agent-knowledge-hub-dev.slac.stanford.edu
+      http:
+        paths:
+          - path: /cli(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: agent-knowledge-hub-backend
+                port:
+                  number: 8000

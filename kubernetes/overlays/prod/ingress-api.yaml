@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-knowledge-hub-api
+  # No VouchProxy annotations — the backend owns auth for /api and /health.
+  # CLI Bearer JWT requests must reach the backend without an SSO redirect.
+  # See ADR-016-C: Split ingress.
+spec:
+  rules:
+    - host: agent-knowledge-hub.slac.stanford.edu
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-knowledge-hub-backend
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-knowledge-hub-backend
+                port:
+                  number: 8000

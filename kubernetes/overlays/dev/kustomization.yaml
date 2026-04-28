@@ -11,6 +11,7 @@ resources:
   - frontend-service.yaml
   - ingress-frontend.yaml
   - ingress-api.yaml
+  - ingress-marketplace-redirect.yaml
   - mongodb/mongo.yaml
   - network-policy-backend.yaml
 

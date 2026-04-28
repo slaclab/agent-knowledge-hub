@@ -28,7 +28,7 @@ export default function AgentKnowledgeHubGuidePage() {
           </p>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
 {`# 1. Register the SLAC S3DF marketplace
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/cli/api/marketplace.json
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
 
 # 2. Install the discovery skill
 /plugin install agent-knowledge-hub`}

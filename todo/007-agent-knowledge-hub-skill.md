@@ -112,7 +112,7 @@ Every `entry_type: skill` in the catalog becomes a plugin entry automatically.
 
 ```bash
 # Register the SLAC marketplace (one-time)
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/cli/api/marketplace.json
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
 
 # Install the discovery skill itself
 /plugin install agent-knowledge-hub

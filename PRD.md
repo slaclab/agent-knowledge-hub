@@ -934,7 +934,7 @@ Users register the SLAC marketplace once via Claude Code's native `/plugin` prot
 
 ```bash
 # Register the SLAC marketplace (one-time)
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/cli/api/marketplace.json
+/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
 
 # Install the /agent-knowledge-hub discovery tool itself
 /plugin install agent-knowledge-hub

@@ -26,6 +26,9 @@ export interface Skill {
   superseded_by_slug: string | null;
   description: string | null;
   readme_html: string | null;
+  skill_md_raw: string | null;
+  skill_md_filename: string | null;
+  readme_raw: string | null;
   compatible_platforms: string[];
   license: string | null;
   version: string | null;

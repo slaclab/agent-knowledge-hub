@@ -11,7 +11,7 @@ from slugify import slugify
 from app.models.label import Label, SkillLabel
 from app.models.skill import Skill, SkillStatus, VisibilityEnum
 from app.schemas.skill import SkillCreate, SkillUpdate
-from app.services.github import GitHubFetchError, _normalize_github_url, extract_repo_root_url, github_fetcher
+from app.services.github import GitHubFetchError, GitHubRef, _normalize_github_url, extract_repo_root_url, github_fetcher, github_scanner
 from app.services.revision import revision_service
 from app.models.revision import RevisionAction
 from app.services import label as label_module
@@ -124,6 +124,24 @@ class SkillRepository:
         except GitHubFetchError:
             pass
 
+        # Scan skill_path directory to capture file content
+        skill_md_raw: Optional[str] = None
+        skill_md_filename: Optional[str] = None
+        readme_raw: Optional[str] = None
+        try:
+            from app.services.github import github_url_parser
+            ref = github_url_parser.parse(repo_url)
+            ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill_path)
+            scan = await github_scanner.scan(ref)
+            for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+                if fname in scan.files:
+                    skill_md_raw = scan.files[fname][:100_000]  # cap at 100 KB
+                    skill_md_filename = fname
+                    break
+            readme_raw = scan.files.get("README.md") or scan.root_readme
+        except (GitHubFetchError, ValueError):
+            pass
+
         name = data.name or (github_data.name if github_data else repo_url.split("/")[-1])
         slug = await _unique_slug(name)
 
@@ -136,6 +154,9 @@ class SkillRepository:
             description=data.description or (github_data.description if github_data else None),
             readme_html=github_data.readme_html if github_data else None,
             readme_fetched_at=github_data.fetched_at if github_data else None,
+            skill_md_raw=skill_md_raw,
+            skill_md_filename=skill_md_filename,
+            readme_raw=readme_raw,
             compatible_platforms=data.compatible_platforms,
             license=data.license or (github_data.license if github_data else None),
             version=data.version,
@@ -217,6 +238,17 @@ class SkillRepository:
             skill.visibility = gh.visibility
             if not skill.description:
                 skill.description = gh.description
+            # Refresh readme_raw from HEAD
+            try:
+                from app.services.github import github_url_parser
+                ref = github_url_parser.parse(skill.repo_url)
+                ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill.skill_path)
+                scan = await github_scanner.scan(ref)
+                new_readme = scan.files.get("README.md") or scan.root_readme
+                if new_readme is not None:
+                    skill.readme_raw = new_readme
+            except (GitHubFetchError, ValueError):
+                pass
             skill.updated_at = datetime.now(timezone.utc)
             await skill.save()
             await revision_service.record(

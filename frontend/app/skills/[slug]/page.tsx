@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { getSkill, getRevisions, listSkills, getSettings } from "@/lib/api";
+import { getSkill, getRevisions, listSkills, getSettings, getMe } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
-import { ReadmeRender } from "@/components/readme-render";
+import { SkillContentTabs } from "@/components/skill-content-tabs";
 import { RevisionTimeline } from "@/components/revision-timeline";
 import { PlatformBadges } from "@/components/platform-badges";
 import { FlagIndicator } from "@/components/flag-indicator";
@@ -32,9 +32,10 @@ export default async function SkillDetailPage({ params }: PageProps) {
   const revisions = await getRevisions(params.slug, true);
 
   // Fetch forks of this skill in the catalog (FR-P16)
-  const [forksData, siteSettings] = await Promise.all([
+  const [forksData, siteSettings, viewer] = await Promise.all([
     listSkills({ forked_from: skill.repo_url, page_size: 3, server: true }),
     getSettings(true),
+    getMe(true),
   ]);
   const forkCount = forksData?.total ?? 0;
   const accessInstructionsUrl = siteSettings.github_access_instructions_url;
@@ -105,20 +106,14 @@ export default async function SkillDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="space-y-4">
-            {skill.readme_html ? (
-              <div className="rounded-lg border p-6">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-                  README
-                </h2>
-                <ReadmeRender html={skill.readme_html} />
-              </div>
-            ) : (
-              <div className="rounded-lg border p-6 text-center text-muted-foreground text-sm">
-                No README available.
-              </div>
-            )}
-          </div>
+          <SkillContentTabs
+            readmeRaw={skill.readme_raw}
+            readmeHtml={skill.readme_html}
+            skillMdRaw={skill.skill_md_raw}
+            skillMdFilename={skill.skill_md_filename}
+            isInternal={isInternal}
+            isAuthenticated={!!viewer}
+          />
         </div>
 
         {/* Sidebar */}

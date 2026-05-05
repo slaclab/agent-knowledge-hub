@@ -48,6 +48,10 @@ class Skill(Document):
     forked_from_url: Optional[str] = None
     skill_path: str = "/"
 
+    skill_md_raw: Optional[str] = None
+    skill_md_filename: Optional[str] = None
+    readme_raw: Optional[str] = None
+
     @field_validator("skill_path")
     @classmethod
     def validate_skill_path(cls, v: str) -> str:

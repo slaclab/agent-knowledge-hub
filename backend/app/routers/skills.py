@@ -32,7 +32,7 @@ github_router = APIRouter(prefix="/api")
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None) -> SkillOut:
+def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None, omit_content: bool = False) -> SkillOut:
     return SkillOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -44,7 +44,10 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         deactivation_reason=skill.deactivation_reason,
         superseded_by_slug=skill.superseded_by_slug,
         description=skill.description,
-        readme_html=skill.readme_html,
+        readme_html=None if omit_content else skill.readme_html,
+        skill_md_raw=None if omit_content else skill.skill_md_raw,
+        skill_md_filename=None if omit_content else skill.skill_md_filename,
+        readme_raw=None if omit_content else skill.readme_raw,
         compatible_platforms=skill.compatible_platforms,
         license=skill.license,
         version=skill.version,
@@ -152,7 +155,9 @@ async def get_skill(slug: str, viewer: Optional[User] = Depends(get_optional_use
             Rating.user_id == viewer.user_id,
         )
         my_rating = rating.value if rating else None
-    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating)
+    from app.models.skill import VisibilityEnum
+    omit_content = skill.visibility == VisibilityEnum.internal and not viewer
+    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating, omit_content=omit_content)
 
 
 @router.post("/{slug}/rate", response_model=RateSkillOut)

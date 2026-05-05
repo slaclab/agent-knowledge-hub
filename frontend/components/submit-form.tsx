@@ -268,6 +268,12 @@ export function SubmitForm({
             More than 20 skill directories found — only the first 20 were scanned. Paste a specific directory URL to register skills outside this set.
           </div>
         )}
+
+        {discoverState.status === "done" && drafts.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No skills found in this repo. Make sure it contains a <code className="text-xs bg-muted px-1 py-0.5 rounded">SKILL.md</code> or <code className="text-xs bg-muted px-1 py-0.5 rounded">CLAUDE.md</code> file.
+          </p>
+        )}
       </div>
 
       {/* Discovery mode */}

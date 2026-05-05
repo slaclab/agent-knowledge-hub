@@ -93,16 +93,15 @@ async def marketplace_json(response: Response):
 
         # Always include the discovery plugin itself as the first entry — it's a
         # bootstrap tool that must be installable before the user has the skill to
-        # discover it via the catalog.  Slug and path are configurable so that the
-        # dev instance can advertise "agent-knowledge-hub-dev" backed by "skill-dev/".
+        # discover it via the catalog.
         plugins = [
             {
-                "name": settings.self_plugin_slug,
+                "name": "agent-knowledge-hub",
                 "description": "Discover, install, rate, and submit skills from the SLAC S3DF catalog — entirely within your agent session.",
                 "source": {
                     "source": "github",
                     "repo": "slaclab/agent-knowledge-hub",
-                    "path": settings.self_skill_path,
+                    "path": "skill",
                 },
             }
         ]

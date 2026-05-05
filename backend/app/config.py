@@ -31,12 +31,6 @@ class Settings(BaseSettings):
     # URL shown in "SLAC Members Only" badge; configurable by admin
     github_access_instructions_url: str = "/guides/slac-github-access"
 
-    # Public URL of this instance — used in the marketplace bootstrap plugin entry
-    app_url: str = "https://agent-knowledge-hub.slac.stanford.edu"
-    # Slug and repo path for the self-hosted bootstrap plugin
-    self_plugin_slug: str = "agent-knowledge-hub"
-    self_skill_path: str = "skill"
-
     # Shared secret for Next.js → backend trust; None disables the proxy auth path entirely
     internal_api_secret: Optional[str] = None
 

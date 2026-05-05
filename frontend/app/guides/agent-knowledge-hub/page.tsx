@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
-const APP_URL = process.env.APP_URL ?? "https://agent-knowledge-hub.slac.stanford.edu";
-const PLUGIN_SLUG = process.env.SELF_PLUGIN_SLUG ?? "agent-knowledge-hub";
+const APP_URL = "https://agent-knowledge-hub.slac.stanford.edu";
+const PLUGIN_SLUG = "agent-knowledge-hub";
 
 export default function AgentKnowledgeHubGuidePage() {
   return (

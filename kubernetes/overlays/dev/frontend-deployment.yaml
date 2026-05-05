@@ -21,10 +21,6 @@ spec:
           env:
             - name: BACKEND_URL
               value: "http://agent-knowledge-hub-backend:8000"
-            - name: APP_URL
-              value: "https://agent-knowledge-hub-dev.slac.stanford.edu"
-            - name: SELF_PLUGIN_SLUG
-              value: "agent-knowledge-hub-dev"
             - name: INTERNAL_API_SECRET
               valueFrom:
                 secretKeyRef:

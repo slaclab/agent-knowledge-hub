@@ -23,9 +23,6 @@ configMapGenerator:
       - JWT_JWKS_URI=https://dex-dev.slac.stanford.edu/keys
       - JWT_ISSUER=https://dex-dev.slac.stanford.edu
       - JWT_AUDIENCE=s3df
-      - APP_URL=https://agent-knowledge-hub-dev.slac.stanford.edu
-      - SELF_PLUGIN_SLUG=agent-knowledge-hub-dev
-      - SELF_SKILL_PATH=skill-dev
     options:
       disableNameSuffixHash: true
 

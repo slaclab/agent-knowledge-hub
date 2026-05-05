@@ -65,7 +65,6 @@ async def skills_summary(
             skill_path=s.skill_path,
             entry_type=s.entry_type.value,
             compatible_platforms=s.compatible_platforms,
-            keywords=s.keywords,
             version=s.version,
             avg_rating=s.avg_rating,
             rating_count=s.rating_count,
@@ -125,8 +124,6 @@ async def marketplace_json(response: Response):
             }
             if s.version:
                 plugin["version"] = s.version
-            if s.keywords:
-                plugin["keywords"] = s.keywords
             if s.skill_path and s.skill_path not in ("/", ""):
                 plugin["source"]["path"] = s.skill_path.lstrip("/")
 

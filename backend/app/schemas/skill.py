@@ -30,7 +30,7 @@ class SkillCreate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     compatible_platforms: List[str] = []
-    keywords: List[str] = []
+    keywords: List[str] = []  # deprecated: converted to labels on create
     license: Optional[str] = None
     version: Optional[str] = None
     uses_agent_gateway: bool = False
@@ -41,7 +41,6 @@ class SkillUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     compatible_platforms: Optional[List[str]] = None
-    keywords: Optional[List[str]] = None
     license: Optional[str] = None
     version: Optional[str] = None
     uses_agent_gateway: Optional[bool] = None
@@ -84,7 +83,6 @@ class SkillOut(BaseModel):
     description: Optional[str]
     readme_html: Optional[str]
     compatible_platforms: List[str]
-    keywords: List[str] = []
     license: Optional[str]
     version: Optional[str]
     github_stars: Optional[int]
@@ -193,7 +191,6 @@ class SkillSummaryOut(BaseModel):
     skill_path: str
     entry_type: str
     compatible_platforms: List[str]
-    keywords: List[str] = []
     version: Optional[str] = None
     avg_rating: float
     rating_count: int

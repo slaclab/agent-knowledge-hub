@@ -37,7 +37,6 @@ class Skill(Document):
     description: Optional[str] = None
     readme_html: Optional[str] = None
     compatible_platforms: List[str] = Field(default_factory=list)
-    keywords: List[str] = Field(default_factory=list)
     license: Optional[str] = None
     version: Optional[str] = None
     github_stars: Optional[int] = None

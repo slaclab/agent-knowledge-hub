@@ -21,9 +21,9 @@ Interact with the SLAC S3DF skills catalog without leaving your agent session.
 `/agent-knowledge-hub <query>`
 `/agent-knowledge-hub search <query>`
 
-1. Fetch `GET /api/skills/summary` — returns slug, name, description, keywords, labels, version, avg_rating for all active skills.
+1. Fetch `GET /api/skills/summary` — returns slug, name, description, labels, version, avg_rating for all active skills.
 2. Pass the full catalog list and the user's query to Claude.
-3. Match the query against name, description, labels, **and keywords**.
+3. Match the query against name, description, **and labels**.
 4. Rank the results by relevance, return the top matches with a one-sentence explanation each.
 5. Ask the user if they want to install any of them.
 

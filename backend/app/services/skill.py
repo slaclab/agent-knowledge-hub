@@ -14,6 +14,7 @@ from app.schemas.skill import SkillCreate, SkillUpdate
 from app.services.github import GitHubFetchError, _normalize_github_url, extract_repo_root_url, github_fetcher
 from app.services.revision import revision_service
 from app.models.revision import RevisionAction
+from app.services import label as label_module
 
 
 SortField = Literal["newest", "highest_rated", "most_rated", "most_stars"]
@@ -134,7 +135,6 @@ class SkillRepository:
             readme_html=github_data.readme_html if github_data else None,
             readme_fetched_at=github_data.fetched_at if github_data else None,
             compatible_platforms=data.compatible_platforms,
-            keywords=data.keywords,
             license=data.license or (github_data.license if github_data else None),
             version=data.version,
             github_stars=github_data.stars if github_data else None,
@@ -159,6 +159,28 @@ class SkillRepository:
             action=RevisionAction.create,
             snapshot=skill.model_dump(mode="json"),
         )
+        # Convert keywords → labels (system-applied, bypass rate limit)
+        if data.keywords:
+            from app.services.label import label_service as _ls
+            from pymongo.errors import DuplicateKeyError as _DKE
+            from app.models.label import Label as _Label, SkillLabel as _SkillLabel
+            for kw in data.keywords:
+                kw = kw.strip().lower()
+                if not kw:
+                    continue
+                label = await _Label.find_one(_Label.name == kw)
+                if label is None:
+                    label = _Label(name=kw, created_by="system")
+                    try:
+                        await label.insert()
+                    except _DKE:
+                        label = await _Label.find_one(_Label.name == kw)
+                sl = _SkillLabel(skill_id=str(skill.id), label_id=str(label.id), applied_by="system")
+                try:
+                    await sl.insert()
+                    await _Label.find_one(_Label.id == label.id).update({"$inc": {"usage_count": 1}})
+                except _DKE:
+                    pass  # already tagged
         return skill
 
     async def update(

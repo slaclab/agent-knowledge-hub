@@ -27,7 +27,6 @@ export interface Skill {
   description: string | null;
   readme_html: string | null;
   compatible_platforms: string[];
-  keywords: string[];
   license: string | null;
   version: string | null;
   github_stars: number | null;
@@ -76,7 +75,7 @@ export interface SkillCreate {
   name?: string;
   description?: string;
   compatible_platforms?: string[];
-  keywords?: string[];
+  keywords?: string[];  // deprecated: converted to labels on create
   version?: string;
   license?: string;
 }
@@ -85,7 +84,6 @@ export interface SkillUpdate {
   name?: string;
   description?: string;
   compatible_platforms?: string[];
-  keywords?: string[];
   version?: string;
   license?: string;
   changelog_note?: string;

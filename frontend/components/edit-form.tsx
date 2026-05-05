@@ -18,7 +18,6 @@ export function EditForm({ skill }: EditFormProps) {
   const [description, setDescription] = useState(skill.description ?? "");
   const [version, setVersion] = useState(skill.version ?? "");
   const [license, setLicense] = useState(skill.license ?? "");
-  const [keywords, setKeywords] = useState((skill.keywords ?? []).join(", "));
   const [platforms, setPlatforms] = useState<string[]>(skill.compatible_platforms);
   const [platformInput, setPlatformInput] = useState("");
   const [changelog, setChangelog] = useState("");
@@ -45,7 +44,6 @@ export function EditForm({ skill }: EditFormProps) {
       name: name || undefined,
       description: description || undefined,
       compatible_platforms: platforms.length ? platforms : undefined,
-      keywords: keywords ? keywords.split(",").map((k) => k.trim()).filter(Boolean) : [],
       version: version || undefined,
       license: license || undefined,
       changelog_note: changelog || undefined,
@@ -143,17 +141,6 @@ export function EditForm({ skill }: EditFormProps) {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Keywords</label>
-        <input
-          value={keywords}
-          onChange={(e) => setKeywords(e.target.value)}
-          placeholder="e.g. python, data-analysis, slurm"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-        <p className="text-xs text-muted-foreground">Comma-separated. Improves search and discovery.</p>
       </div>
 
       <div className="space-y-1">

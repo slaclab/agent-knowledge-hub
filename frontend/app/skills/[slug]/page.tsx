@@ -4,7 +4,7 @@ import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { SkillContentTabs } from "@/components/skill-content-tabs";
 import { RevisionTimeline } from "@/components/revision-timeline";
-import { PlatformBadges } from "@/components/platform-badges";
+import { PlatformSection } from "@/components/platform-section";
 import { FlagIndicator } from "@/components/flag-indicator";
 import { LabelSection } from "@/components/label-section";
 import { RatingWidget } from "@/components/rating-widget";
@@ -220,12 +220,10 @@ export default async function SkillDetailPage({ params }: PageProps) {
           )}
 
           {/* Platforms */}
-          {skill.compatible_platforms.length > 0 && (
-            <div className="rounded-lg border p-4 space-y-2">
-              <h3 className="text-sm font-semibold">Compatible Platforms</h3>
-              <PlatformBadges platforms={skill.compatible_platforms} />
-            </div>
-          )}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-sm font-semibold">Compatible Platforms</h3>
+            <PlatformSection slug={skill.slug} initialPlatforms={skill.compatible_platforms} />
+          </div>
 
           {/* Agent Gateway badge */}
           {skill.uses_agent_gateway && (

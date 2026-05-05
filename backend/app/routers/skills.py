@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from pydantic import BaseModel
+
 from app.auth import User, get_current_user, get_optional_user
 from app.models.rating import Rating
 from app.models.revision import SkillRevision
@@ -214,6 +216,36 @@ async def refetch_skill(slug: str, user: User = Depends(get_current_user)):
     skill = await skill_repository.refetch(skill, actor_id=user.user_id)
     skill_labels = await label_service.list_for_skill(str(skill.id))
     return _skill_to_out(skill, labels=skill_labels)
+
+
+class AddPlatformIn(BaseModel):
+    platform: str
+
+
+@router.post("/{slug}/platforms", response_model=SkillOut)
+async def add_platform(slug: str, body: AddPlatformIn, user: User = Depends(get_current_user)):
+    from app.models.skill import Skill
+    skill = await Skill.find_one(Skill.slug == slug)
+    if not skill or skill.status == SkillStatus.deactivated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    platform = body.platform.strip().lower()
+    if not platform:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Platform name required")
+    if platform not in skill.compatible_platforms:
+        skill.compatible_platforms = skill.compatible_platforms + [platform]
+        await skill.save()
+    skill_labels = await label_service.list_for_skill(str(skill.id))
+    return _skill_to_out(skill, labels=skill_labels)
+
+
+@router.delete("/{slug}/platforms/{platform}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_platform(slug: str, platform: str, user: User = Depends(get_current_user)):
+    from app.models.skill import Skill
+    skill = await Skill.find_one(Skill.slug == slug)
+    if not skill or skill.status == SkillStatus.deactivated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    skill.compatible_platforms = [p for p in skill.compatible_platforms if p != platform]
+    await skill.save()
 
 
 @router.get("/{slug}/revisions", response_model=List[RevisionOut])

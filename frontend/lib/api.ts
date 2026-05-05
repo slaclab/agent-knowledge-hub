@@ -183,6 +183,27 @@ export async function removeLabel(
   return { error: r.error };
 }
 
+export async function addPlatform(
+  slug: string,
+  platform: string,
+): Promise<{ data: Skill | null; error: string | null; status: number }> {
+  const r = await request<Skill>(CLIENT_BASE, `/skills/${slug}/platforms`, {
+    method: "POST",
+    body: JSON.stringify({ platform }),
+  });
+  return { data: r.data, error: r.error, status: r.status };
+}
+
+export async function removePlatform(
+  slug: string,
+  platform: string,
+): Promise<{ error: string | null }> {
+  const r = await request<null>(CLIENT_BASE, `/skills/${slug}/platforms/${encodeURIComponent(platform)}`, {
+    method: "DELETE",
+  });
+  return { error: r.error };
+}
+
 export async function listSkillLabels(slug: string): Promise<LabelOut[]> {
   const { data } = await request<LabelOut[]>(CLIENT_BASE, `/skills/${slug}/labels`);
   return data ?? [];

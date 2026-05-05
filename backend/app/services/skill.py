@@ -73,7 +73,8 @@ class SkillRepository:
             collection = SkillLabel.get_motor_collection()
             pipeline = [
                 {"$match": {"label_id": {"$in": label_ids}}},
-                {"$group": {"_id": "$skill_id", "cnt": {"$sum": 1}}},
+                {"$group": {"_id": {"skill_id": "$skill_id", "label_id": "$label_id"}}},
+                {"$group": {"_id": "$_id.skill_id", "cnt": {"$sum": 1}}},
                 {"$match": {"cnt": len(label_ids)}},
             ]
             cursor = collection.aggregate(pipeline)

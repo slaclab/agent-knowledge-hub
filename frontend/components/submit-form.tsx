@@ -156,7 +156,7 @@ export function SubmitForm({
     ));
   };
 
-  const selectedCount = drafts.filter((d) => d.selected).length;
+  const selectedCount = visibleDrafts.filter((d) => d.selected).length;
   const totalCount = drafts.filter((d) => !d.snapshot.existing_slug).length;
 
   const handleBulkSubmit = async (e: React.FormEvent) => {
@@ -265,7 +265,7 @@ export function SubmitForm({
 
         {discoverState.status === "done" && discoverState.result.capped && (
           <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-            More than 20 skill directories found — showing the first 20.
+            More than 20 skill directories found — only the first 20 were scanned. Paste a specific directory URL to register skills outside this set.
           </div>
         )}
       </div>

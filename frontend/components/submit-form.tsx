@@ -48,6 +48,7 @@ export function SubmitForm({
   const [discoverState, setDiscoverState] = useState<DiscoverState>({ status: "idle" });
   const [drafts, setDrafts] = useState<SkillDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [filterText, setFilterText] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -98,6 +99,7 @@ export function SubmitForm({
     setScanState({ status: "scanning" });
     setDiscoverState({ status: "idle" });
     setDrafts([]);
+    setFilterText("");
 
     const timer = setTimeout(() => {
       ac.abort();
@@ -137,11 +139,23 @@ export function SubmitForm({
       )
     );
 
-  const allNewSelected = drafts.filter((d) => !d.snapshot.existing_slug).every((d) => d.selected);
+  const filterLower = filterText.toLowerCase();
+  const visibleDrafts = filterText
+    ? drafts.filter((d) =>
+        (d.snapshot.ref.path || "/").toLowerCase().includes(filterLower) ||
+        d.name.toLowerCase().includes(filterLower) ||
+        d.description.toLowerCase().includes(filterLower)
+      )
+    : drafts;
+
+  const allNewSelected = visibleDrafts.filter((d) => !d.snapshot.existing_slug).every((d) => d.selected);
 
   const toggleSelectAll = () => {
     const next = !allNewSelected;
-    setDrafts((prev) => prev.map((d) => (d.snapshot.existing_slug ? d : { ...d, selected: next })));
+    const visiblePaths = new Set(visibleDrafts.map((d) => d.snapshot.ref.path));
+    setDrafts((prev) => prev.map((d) =>
+      d.snapshot.existing_slug || !visiblePaths.has(d.snapshot.ref.path) ? d : { ...d, selected: next }
+    ));
   };
 
   const selectedCount = drafts.filter((d) => d.selected).length;
@@ -151,7 +165,8 @@ export function SubmitForm({
     e.preventDefault();
     setSubmitting(true);
     setDrafts((prev) => prev.map((d) => ({ ...d, result: undefined })));
-    const selected = drafts.filter((d) => d.selected);
+    const visiblePaths = new Set(visibleDrafts.map((d) => d.snapshot.ref.path));
+    const selected = drafts.filter((d) => d.selected && visiblePaths.has(d.snapshot.ref.path));
     for (const draft of selected) {
       const snap = draft.snapshot;
       const { data, error } = await createSkill({
@@ -269,17 +284,29 @@ export function SubmitForm({
             )}
           </div>
 
+          {drafts.length > 8 && (
+            <input
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Filter skills by path or name…"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+
           <div className="space-y-2">
-            {drafts.map((draft, i) => (
-              <DiscoveryCard
-                key={draft.snapshot.ref.path}
-                draft={draft}
-                onToggleSelect={() => updateDraft(i, { selected: !draft.selected })}
-                onToggleExpand={() => updateDraft(i, { expanded: !draft.expanded })}
-                onUpdate={(patch) => updateDraft(i, patch)}
-                onTogglePlatform={(p) => toggleDraftPlatform(i, p)}
-              />
-            ))}
+            {visibleDrafts.map((draft) => {
+              const globalIdx = drafts.indexOf(draft);
+              return (
+                <DiscoveryCard
+                  key={draft.snapshot.ref.path}
+                  draft={draft}
+                  onToggleSelect={() => updateDraft(globalIdx, { selected: !draft.selected })}
+                  onToggleExpand={() => updateDraft(globalIdx, { expanded: !draft.expanded })}
+                  onUpdate={(patch) => updateDraft(globalIdx, patch)}
+                  onTogglePlatform={(p) => toggleDraftPlatform(globalIdx, p)}
+                />
+              );
+            })}
           </div>
 
           <button
@@ -287,7 +314,7 @@ export function SubmitForm({
             disabled={submitting || selectedCount === 0}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {submitting ? "Submitting…" : `Submit ${selectedCount} of ${drafts.length} skill${drafts.length !== 1 ? "s" : ""}`}
+            {submitting ? "Submitting…" : `Submit ${selectedCount} skill${selectedCount !== 1 ? "s" : ""}`}
           </button>
         </form>
       )}

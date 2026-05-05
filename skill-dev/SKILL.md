@@ -1,13 +1,13 @@
 ---
-name: agent-knowledge-hub
+name: agent-knowledge-hub-dev
 description: Discover, install, rate, and submit SLAC S3DF catalog skills from within your agent session.
 ---
 
-# /agent-knowledge-hub
+# /agent-knowledge-hub-dev
 
 Interact with the SLAC S3DF skills catalog without leaving your agent session.
 
-**Catalog base URL:** `https://agent-knowledge-hub.slac.stanford.edu/cli`
+**Catalog base URL:** `https://agent-knowledge-hub-dev.slac.stanford.edu/cli`
 **Skills directory:** `~/.claude/skills/`
 **Commands directory:** `~/.claude/commands/`
 **Agents directory:** `~/.claude/agents/`
@@ -18,8 +18,8 @@ Interact with the SLAC S3DF skills catalog without leaving your agent session.
 ## Sub-commands
 
 ### Natural-language search (default)
-`/agent-knowledge-hub <query>`
-`/agent-knowledge-hub search <query>`
+`/agent-knowledge-hub-dev <query>`
+`/agent-knowledge-hub-dev search <query>`
 
 1. Fetch `GET /api/skills/summary` — returns slug, name, description, keywords, labels, version, avg_rating for all active skills.
 2. Pass the full catalog list and the user's query to Claude.
@@ -32,7 +32,7 @@ If the user says yes, run the install flow for that slug.
 ---
 
 ### Install by slug
-`/agent-knowledge-hub install <slug>`
+`/agent-knowledge-hub-dev install <slug>`
 
 1. Fetch `GET /api/skills/<slug>` — get `repo_url` and `skill_path`.
 2. Parse `repo_url` to extract `<owner>/<repo>`. It must be a `https://github.com/` URL.
@@ -79,7 +79,7 @@ If the GitHub API returns a rate-limit error (403 with X-RateLimit-Remaining: 0)
 ---
 
 ### List installed skills
-`/agent-knowledge-hub list`
+`/agent-knowledge-hub-dev list`
 
 Scan `~/.claude/skills/` and print each subdirectory name. If a `SKILL.md` is present, show its
 `name` frontmatter, `description` frontmatter, and `version` frontmatter alongside the slug:
@@ -93,7 +93,7 @@ Omit `v<version>` if no version frontmatter is present.
 ---
 
 ### Update a skill
-`/agent-knowledge-hub update <slug>`
+`/agent-knowledge-hub-dev update <slug>`
 
 1. If `~/.claude/skills/<slug>/SKILL.md` exists, read its `version` frontmatter (call it `<old_version>`).
 2. Delete `~/.claude/skills/<slug>/`.
@@ -107,7 +107,7 @@ Omit `v<version>` if no version frontmatter is present.
 ---
 
 ### Remove a skill
-`/agent-knowledge-hub remove <slug>`
+`/agent-knowledge-hub-dev remove <slug>`
 
 Ask the user to confirm, then:
 
@@ -122,7 +122,7 @@ If `plugin.json` is not present, just delete `~/.claude/skills/<slug>/`.
 ---
 
 ### Validate a local plugin
-`/agent-knowledge-hub validate <path>`
+`/agent-knowledge-hub-dev validate <path>`
 
 Validate a plugin directory before submitting it to the catalog.
 
@@ -165,7 +165,7 @@ Or list each failure with `✗` and a description, then print `X check(s) failed
 ---
 
 ### Rate a skill
-`/agent-knowledge-hub rate <slug> <1-5>`
+`/agent-knowledge-hub-dev rate <slug> <1-5>`
 
 1. Read `~/.s3df-access-token`. If the file does not exist or is empty:
    Tell the user: `"No SLAC token found. Run 's3df login' to authenticate, then try again."` — stop here.
@@ -177,7 +177,7 @@ Or list each failure with `✗` and a description, then print `X check(s) failed
 ---
 
 ### Create a new skill scaffold
-`/agent-knowledge-hub create`
+`/agent-knowledge-hub-dev create`
 
 Ask the user for:
 - A directory to create the skill in (default: current directory)
@@ -218,19 +218,19 @@ TODO: write the instructions for Claude to follow when this skill is invoked.
 ```
 
 Confirm both file paths to the user and remind them:
-- Run `/agent-knowledge-hub validate .` to check the plugin before submitting.
-- Submit via `/agent-knowledge-hub submit` once it's in a GitHub repo.
+- Run `/agent-knowledge-hub-dev validate .` to check the plugin before submitting.
+- Submit via `/agent-knowledge-hub-dev submit` once it's in a GitHub repo.
 
 ---
 
 ### Submit to the catalog
-`/agent-knowledge-hub submit`
+`/agent-knowledge-hub-dev submit`
 
 Ask for the GitHub URL of the skill's repo. Then print:
 
 ```
 To submit your skill to the SLAC S3DF catalog, open:
-  https://agent-knowledge-hub.slac.stanford.edu
+  https://agent-knowledge-hub-dev.slac.stanford.edu
 
 Click "Submit a skill" and paste your GitHub URL.
 ```

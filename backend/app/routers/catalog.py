@@ -15,6 +15,7 @@ from typing import List
 from fastapi import APIRouter, Query, Response
 from fastapi.responses import JSONResponse
 
+from app.config import settings
 from app.models.skill import EntryType, Skill, SkillStatus
 from app.schemas.skill import SkillSummaryOut
 from app.services.label import label_service
@@ -90,17 +91,18 @@ async def marketplace_json(response: Response):
             Skill.entry_type == EntryType.skill,
         ).to_list()
 
-        # Always include the agent-knowledge-hub discovery plugin itself as the
-        # first entry — it's a bootstrap tool that must be installable before
-        # the user has the skill to discover it via the catalog.
+        # Always include the discovery plugin itself as the first entry — it's a
+        # bootstrap tool that must be installable before the user has the skill to
+        # discover it via the catalog.  Slug and path are configurable so that the
+        # dev instance can advertise "agent-knowledge-hub-dev" backed by "skill-dev/".
         plugins = [
             {
-                "name": "agent-knowledge-hub",
+                "name": settings.self_plugin_slug,
                 "description": "Discover, install, rate, and submit skills from the SLAC S3DF catalog — entirely within your agent session.",
                 "source": {
                     "source": "github",
                     "repo": "slaclab/agent-knowledge-hub",
-                    "path": "skill",
+                    "path": settings.self_skill_path,
                 },
             }
         ]
@@ -133,8 +135,8 @@ async def marketplace_json(response: Response):
 
         manifest = {
             "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-            "name": "slac-s3df",
-            "description": "SLAC S3DF agent skills catalog",
+            "name": "SLAC-Agent-Knowledge-Hub",
+            "description": "SLAC Agent Knowledge Hub Catalog",
             "owner": {
                 "name": "SLAC S3DF",
                 "email": "s3df-support@slac.stanford.edu",

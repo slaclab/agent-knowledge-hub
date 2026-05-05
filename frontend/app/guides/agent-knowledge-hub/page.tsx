@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
+const APP_URL = process.env.APP_URL ?? "https://agent-knowledge-hub.slac.stanford.edu";
+const PLUGIN_SLUG = process.env.SELF_PLUGIN_SLUG ?? "agent-knowledge-hub";
+
 export default function AgentKnowledgeHubGuidePage() {
   return (
     <div className="max-w-3xl mx-auto space-y-10">
@@ -7,9 +12,9 @@ export default function AgentKnowledgeHubGuidePage() {
         <p className="text-sm text-muted-foreground mb-2">
           <Link href="/guides" className="hover:underline">Guides</Link>
           {" / "}
-          Using the /agent-knowledge-hub skill
+          Using the /{PLUGIN_SLUG} skill
         </p>
-        <h1 className="text-3xl font-bold">The <code className="font-mono">/agent-knowledge-hub</code> Skill</h1>
+        <h1 className="text-3xl font-bold">The <code className="font-mono">/{PLUGIN_SLUG}</code> Skill</h1>
         <p className="text-muted-foreground mt-2">
           Discover, install, rate, and submit catalog skills entirely from within your Claude Code
           session — no browser required.
@@ -28,14 +33,17 @@ export default function AgentKnowledgeHubGuidePage() {
           </p>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
 {`# 1. Register the SLAC S3DF marketplace
-/plugin marketplace add https://agent-knowledge-hub.slac.stanford.edu/marketplace.json
+/plugin marketplace add ${APP_URL}/marketplace.json
 
 # 2. Install the discovery skill
-/plugin install agent-knowledge-hub`}
+/plugin install ${PLUGIN_SLUG}
+
+# 3. Activate the skill
+/reload-plugins`}
           </pre>
         </div>
         <p className="text-sm text-muted-foreground">
-          After installation, the <code className="bg-muted rounded px-1 font-mono text-xs">/agent-knowledge-hub</code> slash
+          After installation, the <code className="bg-muted rounded px-1 font-mono text-xs">/{PLUGIN_SLUG}</code> slash
           command is available in every Claude Code session.
         </p>
       </section>
@@ -50,9 +58,9 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Search the catalog</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub I need something to query EPICS
-/agent-knowledge-hub find me a skill for analysing NeXus files
-/agent-knowledge-hub search --label hdf5`}
+{`/${PLUGIN_SLUG} I need something to query EPICS
+/${PLUGIN_SLUG} find me a skill for analysing NeXus files
+/${PLUGIN_SLUG} search --label hdf5`}
           </pre>
           <p className="text-sm text-muted-foreground">
             Claude fetches the catalog and returns a ranked list of matches with a one-sentence
@@ -64,7 +72,7 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Install a skill</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub install k8s-troubleshooting`}
+{`/${PLUGIN_SLUG} install k8s-troubleshooting`}
           </pre>
           <p className="text-sm text-muted-foreground">
             Downloads the skill files from GitHub into{" "}
@@ -79,9 +87,9 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Manage installed skills</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub list                  # show installed skills
-/agent-knowledge-hub update k8s-troubleshooting   # pull latest version
-/agent-knowledge-hub remove k8s-troubleshooting   # uninstall`}
+{`/${PLUGIN_SLUG} list                  # show installed skills
+/${PLUGIN_SLUG} update k8s-troubleshooting   # pull latest version
+/${PLUGIN_SLUG} remove k8s-troubleshooting   # uninstall`}
           </pre>
         </div>
 
@@ -89,7 +97,7 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Rate a skill</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub rate k8s-troubleshooting 5`}
+{`/${PLUGIN_SLUG} rate k8s-troubleshooting 5`}
           </pre>
           <p className="text-sm text-muted-foreground">
             Requires a SLAC token (see <a href="#cli-auth" className="text-primary underline">CLI authentication</a> below).
@@ -101,13 +109,13 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Scaffold a new skill</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub create`}
+{`/${PLUGIN_SLUG} create`}
           </pre>
           <p className="text-sm text-muted-foreground">
             Walks you through a name and description, then writes a{" "}
             <code className="bg-muted rounded px-1 font-mono text-xs">SKILL.md</code> template to
             a directory you choose. Once your skill is in a GitHub repo, use{" "}
-            <code className="bg-muted rounded px-1 font-mono text-xs">/agent-knowledge-hub submit</code> to
+            <code className="bg-muted rounded px-1 font-mono text-xs">/{PLUGIN_SLUG} submit</code> to
             add it to the catalog.
           </p>
         </div>
@@ -116,7 +124,7 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Submit to the catalog</h3>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-{`/agent-knowledge-hub submit`}
+{`/${PLUGIN_SLUG} submit`}
           </pre>
           <p className="text-sm text-muted-foreground">
             Prints the web submission URL for your skill&apos;s GitHub repo. Direct API submission
@@ -175,7 +183,7 @@ export default function AgentKnowledgeHubGuidePage() {
         <div className="flex-1 space-y-1">
           <p className="font-semibold text-sm">Want to add your own skill to the catalog?</p>
           <p className="text-sm text-muted-foreground">
-            Use <code className="bg-primary/10 rounded px-1 font-mono text-xs">/agent-knowledge-hub create</code> to
+            Use <code className="bg-primary/10 rounded px-1 font-mono text-xs">/{PLUGIN_SLUG} create</code> to
             scaffold a skill, push it to GitHub, then submit it from the web.
           </p>
         </div>

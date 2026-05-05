@@ -9,84 +9,98 @@ export default function SlacGithubAccessPage() {
           {" / "}
           SLAC GitHub Access
         </p>
-        <h1 className="text-3xl font-bold">Accessing SLAC GitHub Repos</h1>
+        <h1 className="text-3xl font-bold">Accessing SLAC Internal Skills</h1>
         <p className="text-muted-foreground mt-2">
-          Some skills in this catalog are hosted in private or internal repositories under the{" "}
+          Skills badged <strong>SLAC Members Only</strong> are hosted in internal repositories
+          under the{" "}
           <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code> GitHub
-          organisation. To install or view those skills you need to link your GitHub account to
-          your SLAC identity via Single Sign-On (SSO).
+          organisation. Installing them via the <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">claude</code> CLI
+          requires your local GitHub credentials to have access to that org.
         </p>
       </div>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">What you need</h2>
         <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
-          <li>A GitHub account (personal accounts are fine)</li>
-          <li>An active SLAC computing account</li>
+          <li>A SLAC computing account</li>
+          <li>Membership in the <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code> GitHub org (request from your team lead or IT)</li>
+          <li>A GitHub Personal Access Token (classic) or SSH key authorized for SAML SSO</li>
         </ul>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Steps</h2>
+        <h2 className="text-xl font-semibold">Authorize your PAT for SLAC SSO</h2>
+        <p className="text-sm text-muted-foreground">
+          Even if you are a <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code> org member,
+          your PAT must be explicitly authorized for SAML SSO before it can access internal repos.
+        </p>
         <ol className="space-y-4 text-sm">
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
             <span>
-              Sign in to GitHub at{" "}
+              Go to{" "}
               <a
-                href="https://github.com/login"
+                href="https://github.com/settings/tokens"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary underline"
               >
-                github.com
+                github.com/settings/tokens
               </a>{" "}
-              with your personal account.
+              and create or open an existing <strong>classic</strong> PAT with at least{" "}
+              <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">repo</code> scope.
             </span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
             <span>
-              Visit the SLAC Enterprise SSO authorisation page:{" "}
-              <a
-                href="https://github.com/enterprises/slaclab/sso"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                github.com/enterprises/slaclab/sso
-              </a>
+              Next to the token, click <strong>Configure SSO</strong> → <strong>Authorize</strong>{" "}
+              next to <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code>.
+              Sign in with your SLAC credentials (Windows/AD) if prompted.
             </span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
             <span>
-              Click <strong>Continue</strong> and sign in with your SLAC credentials (Windows/AD
-              username and password). You may be prompted for Duo MFA.
+              Set the token in your local git config so the CLI can use it:
+              <pre className="mt-2 rounded bg-muted px-3 py-2 text-xs font-mono overflow-x-auto">
+                {`git config --global credential.helper store\ngit credential approve <<EOF\nprotocol=https\nhost=github.com\nusername=<your-github-username>\npassword=<your-pat>\nEOF`}
+              </pre>
+              Or use the <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">gh</code> CLI:{" "}
+              <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">gh auth login</code> and paste your PAT when prompted.
             </span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">4</span>
             <span>
-              Once authorised, your GitHub account is linked. You can now clone or browse
-              repositories in the{" "}
-              <a
-                href="https://github.com/slaclab"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                slaclab
-              </a>{" "}
-              org that your SLAC role grants access to.
+              You can now install internal skills via the catalog — e.g.{" "}
+              <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">/agent-knowledge-hub install &lt;slug&gt;</code>.
             </span>
           </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">5</span>
-            <span>
-              Return to this catalog and install the skill — the{" "}
-              <strong>SLAC Members Only</strong> badge should no longer block you.
-            </span>
+        </ol>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Using SSH instead of a PAT</h2>
+        <p className="text-sm text-muted-foreground">
+          If you prefer SSH, your key must also be authorized for SAML SSO:
+        </p>
+        <ol className="space-y-2 text-sm list-decimal list-inside text-muted-foreground">
+          <li>
+            Go to{" "}
+            <a
+              href="https://github.com/settings/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              github.com/settings/keys
+            </a>{" "}
+            and open your SSH key.
+          </li>
+          <li>
+            Click <strong>Configure SSO</strong> → <strong>Authorize</strong> next to{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code>.
           </li>
         </ol>
       </section>
@@ -94,8 +108,8 @@ export default function SlacGithubAccessPage() {
       <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-sm space-y-1">
         <p className="font-semibold text-yellow-800">SSO session expiry</p>
         <p className="text-yellow-700">
-          GitHub SSO sessions expire periodically. If you suddenly lose access to
-          internal repos, repeat steps 2–3 above to re-authorise.
+          SAML SSO authorization expires periodically. If you lose access to internal repos,
+          revisit your token or SSH key settings and re-authorize for <code>slaclab</code>.
         </p>
       </div>
 
@@ -104,24 +118,27 @@ export default function SlacGithubAccessPage() {
         <div className="space-y-3 text-sm">
           <details className="rounded-lg border p-4 open:pb-4">
             <summary className="font-medium cursor-pointer">
-              I completed SSO but still see &ldquo;SLAC Members Only&rdquo;
+              git clone fails with 403 or &ldquo;repository not found&rdquo;
             </summary>
             <div className="mt-3 text-muted-foreground space-y-2">
               <p>
-                The catalog checks repo visibility when a skill is submitted, not on every page
-                load. The badge reflects what the backend saw at submission time. If you believe
-                you now have access, try cloning the repo directly from GitHub to confirm your
-                SSO is active, then contact the skill owner to re-fetch.
+                Most likely your PAT is not authorized for SAML SSO. Go to{" "}
+                <a href="https://github.com/settings/tokens" className="text-primary underline" target="_blank" rel="noopener noreferrer">
+                  github.com/settings/tokens
+                </a>{" "}
+                → <strong>Configure SSO</strong> → <strong>Authorize</strong> for{" "}
+                <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code>.
               </p>
             </div>
           </details>
           <details className="rounded-lg border p-4 open:pb-4">
             <summary className="font-medium cursor-pointer">
-              I don&apos;t have a SLAC computing account
+              I&apos;m not a member of the slaclab org
             </summary>
             <div className="mt-3 text-muted-foreground">
               <p>
-                Request one via the{" "}
+                Ask your team lead or a <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">slaclab</code> org owner to invite your GitHub account.
+                You also need an active SLAC computing account — request one via the{" "}
                 <a
                   href="https://s3df.slac.stanford.edu/#/accounts?id=accounts"
                   target="_blank"
@@ -129,8 +146,7 @@ export default function SlacGithubAccessPage() {
                   className="text-primary underline"
                 >
                   SLAC Account request form
-                </a>{" "}
-                or ask your SLAC host/sponsor to initiate the request.
+                </a>.
               </p>
             </div>
           </details>

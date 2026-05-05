@@ -26,7 +26,7 @@ configMapGenerator:
       - JWT_AUDIENCE=s3df
       - APP_URL=https://agent-knowledge-hub-dev.slac.stanford.edu
       - SELF_PLUGIN_SLUG=agent-knowledge-hub-dev
-      - SELF_SKILL_PATH=skills/agent-knowledge-hub-dev
+      - SELF_SKILL_PATH=
     options:
       disableNameSuffixHash: true
 

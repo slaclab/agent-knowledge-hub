@@ -54,12 +54,6 @@ export function Nav() {
           >
             Guides
           </Link>
-          <Link
-            href="/labels"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Labels
-          </Link>
           {!loading && user && (
             <Link
               href="/skills/submit"

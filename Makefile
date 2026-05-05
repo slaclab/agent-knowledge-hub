@@ -9,6 +9,8 @@ TAG := $(shell t=$$(git describe --tags --exact-match 2>/dev/null); [ -n "$$t" ]
 
 all: backend frontend dev-deploy
 
+containers: backend frontend
+
 backend:
 	$(MAKE) -C backend docker-push TAG=$(TAG)
 
@@ -20,5 +22,5 @@ dev-deploy:
 	KUBECONFIG=$(DEV_KUBECONFIG) kubectl -n dev rollout restart deployment agent-knowledge-hub-backend agent-knowledge-hub-frontend
 
 prod-deploy:
-	KUBECONFIG=$(PROD_KUBECONFIG) $(MAKE) -C $(PROD_OVERLAY) akh-apply
+	KUBECONFIG=$(PROD_KUBECONFIG) $(MAKE) -C $(PROD_OVERLAY) apply
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n prod rollout restart deployment agent-knowledge-hub-backend agent-knowledge-hub-frontend

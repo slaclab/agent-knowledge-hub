@@ -75,8 +75,8 @@ class GitHubFetcher:
 
         from app.services.github_app import github_app_client
 
-        # Determine auth strategy
-        app_token = await github_app_client.get_token()
+        # Determine auth strategy — request token scoped to owner's org
+        app_token = await github_app_client.get_token(owner=owner)
 
         if force_app_token and app_token:
             # Skip fallback chain for known-internal skills
@@ -119,9 +119,8 @@ class GitHubFetcher:
         async with httpx.AsyncClient(headers=headers, timeout=10) as client:
             resp = await client.get(f"{self._base}/repos/{owner}/{repo}")
             if resp.status_code == 401 and token:
-                # Invalidate cached app token if it was the app token
                 from app.services.github_app import github_app_client
-                await github_app_client.invalidate()
+                await github_app_client.invalidate(owner=owner)
                 resp = await client.get(f"{self._base}/repos/{owner}/{repo}")
             if resp.status_code == 200:
                 return resp.json(), 200
@@ -156,8 +155,9 @@ class GitHubFetcher:
         if lic:
             license_name = lic.get("spdx_id") or lic.get("name")
 
-        # Visibility is determined by the GitHub API private field (ADR-P04)
-        visibility = VisibilityEnum.internal if data.get("private") else VisibilityEnum.public
+        # GHEC "internal" repos return private=false but visibility="internal"
+        _vis = data.get("visibility", "public")
+        visibility = VisibilityEnum.internal if (_vis == "internal" or data.get("private")) else VisibilityEnum.public
 
         forked_from_url: Optional[str] = None
         if data.get("fork"):
@@ -320,26 +320,26 @@ class GitHubScanner:
             h["Authorization"] = f"Bearer {token}"
         return h
 
-    async def _get_token(self) -> Optional[str]:
+    async def _get_token(self, owner: Optional[str] = None) -> Optional[str]:
         from app.services.github_app import github_app_client
-        return await github_app_client.get_token()
+        return await github_app_client.get_token(owner=owner)
 
     async def _best_token(self, owner: str) -> Optional[str]:
         pat = settings.github_token
         private_orgs = {o.strip().lower() for o in settings.github_private_orgs.split(",") if o.strip()}
         if owner.lower() in private_orgs:
-            app_token = await self._get_token()
+            app_token = await self._get_token(owner=owner)
             return app_token or pat
         return pat
 
-    async def _api_get(self, path: str, token: Optional[str], accept: str = "application/vnd.github+json") -> tuple[Any, int]:
+    async def _api_get(self, path: str, token: Optional[str], accept: str = "application/vnd.github+json", owner: Optional[str] = None) -> tuple[Any, int]:
         headers = self._make_headers(token)
         headers["Accept"] = accept
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(f"{self._base}{path}", headers=headers)
             if resp.status_code == 401 and token:
                 from app.services.github_app import github_app_client
-                await github_app_client.invalidate()
+                await github_app_client.invalidate(owner=owner)
                 resp = await client.get(f"{self._base}{path}", headers=headers)
             if resp.status_code == 200:
                 return resp.json(), 200
@@ -355,12 +355,12 @@ class GitHubScanner:
         path = ref.path.lstrip("/")
 
         # Parallel: repo metadata + directory contents + repo-root README
-        repo_task = self._api_get(f"/repos/{owner}/{repo}", token)
+        repo_task = self._api_get(f"/repos/{owner}/{repo}", token, owner=owner)
         dir_path = path if path else ""
         contents_url = f"/repos/{owner}/{repo}/contents/{dir_path}"
         if branch:
             contents_url += f"?ref={branch}"
-        contents_task = self._api_get(contents_url, token)
+        contents_task = self._api_get(contents_url, token, owner=owner)
 
         root_readme_task = asyncio.create_task(self._fetch_text(
             f"/repos/{owner}/{repo}/contents/README.md" + (f"?ref={branch}" if branch else ""),
@@ -373,7 +373,10 @@ class GitHubScanner:
         if repo_status == 403:
             raise GitHubFetchError("GitHub rate limit reached. Wait a moment and try again.")
         if repo_status == 404:
-            raise GitHubFetchError("Repo not found. Check the URL and your access.")
+            raise GitHubFetchError(
+                "Repo not found. Check the URL — if this is a private or internal repo, "
+                "the catalog's GitHub App may need to be installed on that org."
+            )
         if repo_status != 200:
             raise GitHubFetchError(f"GitHub API error: {repo_status}")
         if contents_status == 403:
@@ -465,13 +468,13 @@ class GitHubScanner:
 
         # Resolve default branch if needed
         if not branch:
-            repo_data, status = await self._api_get(f"/repos/{owner}/{repo}", token)
+            repo_data, status = await self._api_get(f"/repos/{owner}/{repo}", token, owner=owner)
             if status != 200:
                 raise GitHubFetchError("Repo not found.")
             branch = repo_data.get("default_branch", "main")
 
         tree_data, tree_status = await self._api_get(
-            f"/repos/{owner}/{repo}/git/trees/{branch}?recursive=1", token
+            f"/repos/{owner}/{repo}/git/trees/{branch}?recursive=1", token, owner=owner
         )
         if tree_status != 200:
             raise GitHubFetchError(f"Could not retrieve repo tree: {tree_status}")
@@ -539,7 +542,8 @@ class MetadataExtractor:
             except ValueError:
                 pass
 
-        visibility = VisibilityEnum.internal if repo.get("private") else VisibilityEnum.public
+        _vis = repo.get("visibility", "public")
+        visibility = VisibilityEnum.internal if (_vis == "internal" or repo.get("private")) else VisibilityEnum.public
 
         forked_from_url: Optional[str] = None
         if repo.get("fork"):

@@ -80,9 +80,10 @@ class SkillRepository:
             matching_skill_ids = [doc["_id"] async for doc in cursor]
             if not matching_skill_ids:
                 return [], 0
-            query_parts.append(In(Skill.id, [
-                __import__("bson").ObjectId(sid) for sid in matching_skill_ids
-            ]))
+            import bson
+            query_parts.append({"_id": {"$in": [
+                bson.ObjectId(sid) for sid in matching_skill_ids
+            ]}})
 
         base_query = Skill.find(*query_parts) if query_parts else Skill.find()
 

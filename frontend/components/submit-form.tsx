@@ -436,7 +436,7 @@ function ScanErrorBanner({
     return (
       <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex items-start gap-2">
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-        <span>Repository or path not found. Check the URL and try again.</span>
+        <span>{message || "Repository or path not found. Check the URL and try again."}</span>
       </div>
     );
   }

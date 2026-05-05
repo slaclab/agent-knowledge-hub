@@ -108,11 +108,32 @@ class LabelService:
         if q:
             escaped = re.escape(q.strip().lower())
             labels = await Label.find(
-                {"name": {"$regex": f"^{escaped}"}, "usage_count": {"$gt": 0}}
-            ).sort([("usage_count", -1)]).limit(limit).to_list()
+                {"name": {"$regex": f"^{escaped}"}}
+            ).sort([("usage_count", -1)]).limit(limit * 2).to_list()
         else:
-            labels = await Label.find(Label.usage_count > 0).sort([("usage_count", -1)]).limit(limit).to_list()
-        return [LabelOut(name=l.name, usage_count=l.usage_count) for l in labels]
+            labels = await Label.find().sort([("usage_count", -1)]).limit(limit * 2).to_list()
+
+        if not labels:
+            return []
+
+        label_ids = [str(l.id) for l in labels]
+        collection = SkillLabel.get_motor_collection()
+        pipeline = [
+            {"$match": {"label_id": {"$in": label_ids}}},
+            {"$group": {"_id": {"lid": "$label_id", "sid": "$skill_id"}}},
+            {"$group": {"_id": "$_id.lid", "count": {"$sum": 1}}},
+        ]
+        counts: dict[str, int] = {}
+        async for doc in collection.aggregate(pipeline):
+            counts[doc["_id"]] = doc["count"]
+
+        results = [
+            LabelOut(name=l.name, usage_count=counts[str(l.id)])
+            for l in labels
+            if counts.get(str(l.id), 0) > 0
+        ]
+        results.sort(key=lambda x: x.usage_count, reverse=True)
+        return results[:limit]
 
     async def get_by_name(self, name: str) -> Optional[Label]:
         return await Label.find_one(Label.name == name.strip().lower())

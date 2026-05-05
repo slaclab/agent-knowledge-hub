@@ -354,18 +354,13 @@ class GitHubScanner:
         branch = ref.branch
         path = ref.path.lstrip("/")
 
-        # Parallel: repo metadata + directory contents + repo-root README
+        # Parallel: repo metadata + directory contents
         repo_task = self._api_get(f"/repos/{owner}/{repo}", token, owner=owner)
         dir_path = path if path else ""
         contents_url = f"/repos/{owner}/{repo}/contents/{dir_path}"
         if branch:
             contents_url += f"?ref={branch}"
         contents_task = self._api_get(contents_url, token, owner=owner)
-
-        root_readme_task = asyncio.create_task(self._fetch_text(
-            f"/repos/{owner}/{repo}/contents/README.md" + (f"?ref={branch}" if branch else ""),
-            token,
-        )) if path else asyncio.coroutine(lambda: None)()
 
         repo_data, repo_status = await repo_task
         contents_data, contents_status = await contents_task
@@ -488,7 +483,7 @@ class GitHubScanner:
         for item in tree_items:
             if item.get("type") == "blob":
                 path = item.get("path", "")
-                fname = path.rsplit("/", 1)[-1] if "/" in path else ""
+                fname = path.rsplit("/", 1)[-1] if "/" in path else path
                 if fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
                     dirpath = path.rsplit("/", 1)[0] if "/" in path else "/"
                     if base and not dirpath.startswith(base):

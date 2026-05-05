@@ -2,121 +2,137 @@
 
 **Feature:** #001 — Private/Internal GitHub Repos  
 **Audience:** Platform ops / admin  
-**Updated:** 2026-04-21
+**Updated:** 2026-05-05
 
 ---
 
 ## Overview
 
-This runbook covers the one-time setup of the GitHub App that allows the Agent Knowledge Hub
-backend to fetch metadata for private/internal repos in the `slaclab` GitHub Enterprise org.
+The Agent Knowledge Hub backend uses a GitHub App to fetch metadata for private and internal repos
+(including repos in the `slaclab` GitHub Enterprise Cloud org).  Without this, submitting an
+internal repo URL returns "Repo not found."
 
-Once set up, the backend can auto-fetch README, stars, and fork provenance for slaclab private
-repos without any per-user authentication.
+Secrets live in Vault at `secret/scs/sage/agent-knowledge-hub/app` and are injected via
+`make akh-apply`.
 
 ---
 
 ## Step 1: Create the GitHub App
 
-1. Navigate to the slaclab GitHub Enterprise org settings:
-   `https://github.com/organizations/slaclab/settings/apps`
+1. Navigate to the slaclab org app settings:
+   `https://github.com/organizations/slaclab/settings/apps/new`
 
-2. Click **New GitHub App**.
+2. Fill in:
+   - **GitHub App name:** `slac-agent-knowledge-hub` (or similar)
+   - **Homepage URL:** `https://agent-knowledge-hub.slac.stanford.edu`
+   - **Webhook:** uncheck **Active** — not needed
 
-3. Fill in:
-   - **Name:** `Agent Knowledge Hub`
-   - **Homepage URL:** your catalog URL (e.g., `https://hub.slac.stanford.edu`)
-   - **Webhook:** disable (uncheck "Active")
-   - **Permissions → Repository permissions:**
-     - `Contents`: Read-only
-     - `Metadata`: Read-only (mandatory)
+3. Under **Repository permissions**:
+   - `Contents`: Read-only
+   - `Metadata`: Read-only (auto-selected)
 
 4. Under **Where can this GitHub App be installed?**: select **Only on this account**.
 
 5. Click **Create GitHub App**.
 
-6. Note the **App ID** shown on the app settings page.
+6. Note the **App ID** shown at the top of the settings page.
 
-7. Scroll to **Private keys** → click **Generate a private key**. Download the `.pem` file.
+7. Scroll to **Private keys** → **Generate a private key**. A `.pem` file downloads.
 
 ---
 
 ## Step 2: Install the App on the slaclab org
 
-1. In the App settings, click **Install App**.
-2. Select **slaclab** → **All repositories** (or select specific repos).
-3. Click **Install**.
+1. In the App settings page, click **Install App** in the left sidebar.
+2. Click **Install** next to `slaclab`.
+3. Select **All repositories** (or specific repos).
+4. Click **Install**.
 
 ---
 
-## Step 3: Store secrets in vault
+## Step 3: Store secrets in Vault
 
 ```bash
-# Store App ID
-vault kv put secret/agent-knowledge-hub/github-app \
-  app_id="<APP_ID>" \
-  private_key="$(cat /path/to/private-key.pem)"
+vault kv patch secret/scs/sage/agent-knowledge-hub/app \
+  GITHUB_APP_ID=<APP_ID> \
+  GITHUB_APP_PRIVATE_KEY="$(cat /path/to/downloaded.pem)"
 ```
+
+The `app` secret already contains `GITHUB_TOKEN` and `INTERNAL_API_SECRET` — `patch` adds
+or updates only the specified fields without touching the others.
 
 ---
 
-## Step 4: Inject into Kubernetes secrets
+## Step 4: Deploy
 
-Edit `kubernetes/overlays/dev/kustomization.yaml` (and stage/prod equivalents):
-
-```yaml
-secretGenerator:
-  - name: agent-knowledge-hub-secrets
-    literals:
-      - MONGO_URI=...
-      - GITHUB_APP_ID=<APP_ID>
-      - GITHUB_APP_PRIVATE_KEY=<PEM_CONTENTS_SINGLE_LINE_OR_MULTILINE>
+```bash
+cd /path/to/ai-playground-deploy/kubernetes/overlays/prod2
+make akh-apply
 ```
 
-For multiline PEM in a k8s secret literal, use the `|` YAML block scalar notation or base64-encode
-and use `secretGenerator.envs` instead. Alternatively, mount as a file:
-
-```yaml
-volumes:
-  - name: github-app-key
-    secret:
-      secretName: agent-knowledge-hub-secrets
-      items:
-        - key: GITHUB_APP_PRIVATE_KEY
-          path: github-app-private-key.pem
-volumeMounts:
-  - name: github-app-key
-    mountPath: /run/secrets
-    readOnly: true
-```
-
-Then set `GITHUB_APP_PRIVATE_KEY` to the file path: `/run/secrets/github-app-private-key.pem`
-(if using file-mount mode).
+`akh-apply` pulls all four fields (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_TOKEN`,
+`INTERNAL_API_SECRET`) from Vault into `agent-knowledge-hub/etc/.secrets/`, applies the
+kustomization, then cleans up the local secret files.
 
 ---
 
 ## Step 5: Verify
 
-Deploy and test by submitting a private slaclab repo URL. The skill should appear with
-`visibility: internal` and the "SLAC Members Only" badge.
+**Check the App is visible to the backend** (no redeploy needed — just needs a request to trigger):
 
-Check backend logs for JWT generation:
-```
-grep "github_app" backend logs
+```bash
+# Generate a JWT and look up the App
+APP_ID=<APP_ID>
+vault kv get --field=GITHUB_APP_PRIVATE_KEY secret/scs/sage/agent-knowledge-hub/app > /tmp/akh.pem
+
+NOW=$(date +%s); IAT=$((NOW-60)); EXP=$((NOW+600))
+b64url() { openssl base64 -e -A | tr '+/' '-_' | tr -d '='; }
+HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | b64url)
+PAYLOAD=$(echo -n "{\"iat\":${IAT},\"exp\":${EXP},\"iss\":\"${APP_ID}\"}" | b64url)
+SIG=$(echo -n "${HEADER}.${PAYLOAD}" | openssl dgst -sha256 -sign /tmp/akh.pem | b64url)
+JWT="${HEADER}.${PAYLOAD}.${SIG}"
+
+# App metadata
+curl -s -H "Authorization: Bearer ${JWT}" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/app | grep -E '"slug"|"html_url"'
+
+# Installations — slaclab should appear
+curl -s -H "Authorization: Bearer ${JWT}" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/app/installations | grep -E '"login"|"id"'
+
+rm /tmp/akh.pem
 ```
 
-Expected: no errors, no PEM key in log output.
+**Check backend logs after submitting a slaclab internal URL:**
+
+```bash
+KUBECONFIG=~/.kube/config.sage kubectl -n prod logs deployment/agent-knowledge-hub-backend \
+  --tail=50 | grep -i "github\|install\|token\|warn\|error"
+```
+
+Expected: a log line like:
+```
+GitHub App installation token refreshed (installation <id>, org=slaclab)
+```
+
+Then try submitting `https://github.com/slaclab/<some-internal-repo>` — it should scan
+successfully and show the amber "This repo requires SLAC GitHub access." badge (informational
+only, not a blocker).
 
 ---
 
-## Rotation
+## Key rotation
 
-If the private key is compromised:
+If the private key is compromised or expired:
 
-1. In GitHub App settings → Private keys → **Revoke** the old key.
-2. **Generate a new private key**.
-3. Update vault and re-deploy.
-4. The old key is immediately invalid.
+1. GitHub App settings → **Private keys** → **Revoke** the old key.
+2. **Generate a new private key** — download the `.pem`.
+3. Update Vault: `vault kv patch secret/scs/sage/agent-knowledge-hub/app GITHUB_APP_PRIVATE_KEY="$(cat new.pem)"`
+4. `make akh-apply` to redeploy.
+
+The old key is immediately invalid after revoking — no grace period.
 
 ---
 
@@ -124,7 +140,9 @@ If the private key is compromised:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `visibility=public` on known private repo | App not installed | Verify App installation on slaclab org |
-| JWT error in logs | Malformed PEM | Ensure no extra whitespace; key must be full RSA PEM block |
-| 401 from GitHub API | Key rotated | Generate new key, update vault |
-| No installations found | App installed on wrong account | Re-install on `slaclab` org |
+| `"Repo not found"` on slaclab internal URL | App not installed on slaclab | Complete Step 2 |
+| `has no installations` in backend logs | App created but not installed anywhere | Install App on slaclab org (Step 2) |
+| `JWT error` / `401` from GitHub API | Malformed or expired PEM | Check PEM includes full `-----BEGIN/END RSA PRIVATE KEY-----` block; regenerate if needed |
+| `401` after working previously | Key rotated or revoked | Generate new key, update Vault, redeploy |
+| `visibility=public` on known internal repo | Old image without GHEC visibility fix | Ensure image is ≥ 0.6.0 |
+| Scan returns no skills for a root-level skill repo | `discover` skipping root-level files | Ensure image is ≥ 0.6.0 (bug fixed in that release) |

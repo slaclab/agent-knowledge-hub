@@ -18,6 +18,11 @@ export default function GuidesPage() {
             description: "SOPs, repeatable workflows, domain hints — why skills matter.",
           },
           {
+            href: "/guides/why-agent-knowledge-hub",
+            title: "Why use Agent Knowledge Hub?",
+            description: "Centralised catalog, labels, provenance, quality signals, and in-agent install.",
+          },
+          {
             href: "/guides/agent-knowledge-hub",
             title: "Using /agent-knowledge-hub",
             description: "Discover, install, rate, and submit skills without leaving your agent session.",

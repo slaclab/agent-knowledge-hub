@@ -1,11 +1,11 @@
 # TODO #019 — plugin.json-First Scan Pipeline + Rich Component Metadata
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open
-> **Branch:** —
+> **Status:** 🏁 Implementation Done
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
-> **Shipped:** —
+> **Shipped:** 2026-05-05 (`89c6c4d`)
 > **Depends on:** —
 
 ---

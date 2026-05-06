@@ -1,11 +1,11 @@
 # TODO #018 — Skill File Cache (SKILL.md + README display storage)
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open
-> **Branch:** —
+> **Status:** 🏁 Implementation Done
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
-> **Shipped:** —
+> **Shipped:** 2026-05-05 (`bb6df03`)
 > **Depends on:** — (Slice 2 `pin()` integration is enhanced by #017 but all other slices are independent)
 
 ---

@@ -58,6 +58,25 @@ using a SLAC-issued JWT from `~/.s3df-access-token`.
 **New docs:** `docs/runbooks/jwt-public-key-rotation.md`, `docs/adr/adr-p08-split-ingress.md`,
 `docs/adr/adr-p09-jwt-static-pem.md`, `docs/adr/adr-p10-remove-vouch-path1.md`.
 
+### Skill file cache: SKILL.md + README storage and tabbed UI (#018)
+
+Skill files are now stored in the database at scan time and surfaced in a tabbed view on the detail page.
+
+- **SKILL.md stored at submission** — `skill_md_raw` and `skill_md_filename` saved to the `Skill` document on first fetch; re-fetched on every manual refetch.
+- **Tabbed detail view** — skill detail page gains a "SKILL.md" tab (shown first when content is present) and a "README" tab. Tabs only appear when content exists; the view falls back gracefully to a single tab.
+- **Auth gate** — skill file content is only visible to signed-in users; guests see a prompt to sign in.
+- **Backfill script** — `backend/scripts/002_backfill_skill_file_content.py` populates `skill_md_raw` for all existing catalog entries. Idempotent; safe to re-run.
+
+### plugin.json scan pipeline: rich component metadata and structural auto-labels (#019)
+
+The scanner now parses `plugin.json` (with `.claude-plugin/plugin.json` fallback) to extract rich component metadata and automatically apply structural labels.
+
+- **Component metadata extracted** — agent count, agent names, MCP server presence, scripts presence, author, and keywords parsed from `plugin.json` and stored on the `Skill` document.
+- **`.claude-plugin/plugin.json` fallback** — if `plugin.json` is not found in the skill directory, the scanner checks `.claude-plugin/plugin.json` automatically.
+- **Structural auto-labels** — `mcp`, `multi-agent`, and `has-scripts` labels applied automatically at submission based on parsed content; no manual tagging required.
+- **Plugin Info sidebar** — skill detail page shows a "Plugin Info" section when any component metadata is present: MCP server badge, agent count badge, scripts badge, and plugin author.
+- **Skill card badges** — MCP and agent count badges appear in the right-side badge row on skill list cards.
+
 ## v0.3.0 — 2026-04-22
 
 ### Skill ratings (#005)

@@ -94,6 +94,12 @@ class SkillOut(BaseModel):
     uses_agent_gateway: bool
     visibility: VisibilityEnum
     forked_from_url: Optional[str]
+    # plugin.json metadata
+    agent_count: int = 0
+    agent_names: List[str] = []
+    has_mcp_server: bool = False
+    has_scripts: bool = False
+    plugin_author: Optional[str] = None
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
@@ -120,6 +126,12 @@ class SkillListOut(BaseModel):
     flag_count: int
     visibility: VisibilityEnum
     forked_from_url: Optional[str]
+    # plugin.json metadata
+    agent_count: int = 0
+    agent_names: List[str] = []
+    has_mcp_server: bool = False
+    has_scripts: bool = False
+    plugin_author: Optional[str] = None
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
@@ -177,6 +189,13 @@ class SkillScanSnapshotOut(BaseModel):
     fetched_at: datetime
     no_skill_files: bool
     existing_slug: Optional[str]
+    # plugin.json fields
+    agent_count: int = 0
+    agent_names: List[str] = []
+    has_mcp_server: bool = False
+    has_scripts: bool = False
+    plugin_author: Optional[str] = None
+    keywords: List[str] = []
 
 
 class DiscoverOut(BaseModel):

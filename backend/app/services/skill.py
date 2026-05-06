@@ -128,8 +128,9 @@ class SkillRepository:
         skill_md_raw: Optional[str] = None
         skill_md_filename: Optional[str] = None
         readme_raw: Optional[str] = None
+        plugin_meta: dict = {}
         try:
-            from app.services.github import github_url_parser
+            from app.services.github import github_url_parser, metadata_extractor
             ref = github_url_parser.parse(repo_url)
             ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill_path)
             scan = await github_scanner.scan(ref)
@@ -139,6 +140,8 @@ class SkillRepository:
                     skill_md_filename = fname
                     break
             readme_raw = scan.files.get("README.md") or scan.root_readme
+            if "plugin.json" in scan.files:
+                plugin_meta = metadata_extractor._parse_plugin_json(scan.files["plugin.json"])
         except (GitHubFetchError, ValueError):
             pass
 
@@ -165,6 +168,11 @@ class SkillRepository:
             uses_agent_gateway=data.uses_agent_gateway,
             visibility=github_data.visibility if github_data else VisibilityEnum.public,
             forked_from_url=github_data.forked_from_url if github_data else None,
+            agent_count=plugin_meta.get("agent_count", 0),
+            agent_names=plugin_meta.get("agent_names", []),
+            has_mcp_server=plugin_meta.get("has_mcp_server", False),
+            has_scripts=plugin_meta.get("has_scripts", False),
+            plugin_author=plugin_meta.get("plugin_author"),
             submitter_id=submitter_id,
         )
         try:
@@ -182,6 +190,22 @@ class SkillRepository:
             action=RevisionAction.create,
             snapshot=skill.model_dump(mode="json"),
         )
+        # Auto-labels from plugin.json structural metadata
+        auto_labels: list[str] = []
+        if plugin_meta.get("has_mcp_server"):
+            auto_labels.append("mcp")
+        if plugin_meta.get("agent_count", 0) > 0:
+            auto_labels.append("multi-agent")
+        if plugin_meta.get("has_scripts"):
+            auto_labels.append("has-scripts")
+        # Merge with keywords from submit form
+        all_label_names = list(data.keywords or []) + [l for l in auto_labels if l not in (data.keywords or [])]
+        # Also include plugin.json keywords
+        for kw in plugin_meta.get("keywords", []):
+            if kw not in all_label_names:
+                all_label_names.append(kw)
+        data = data.model_copy(update={"keywords": all_label_names})
+
         # Convert keywords → labels (system-applied, bypass rate limit)
         if data.keywords:
             from app.services.label import label_service as _ls
@@ -238,15 +262,27 @@ class SkillRepository:
             skill.visibility = gh.visibility
             if not skill.description:
                 skill.description = gh.description
-            # Refresh readme_raw from HEAD
+            # Refresh readme_raw and plugin.json fields from HEAD
             try:
-                from app.services.github import github_url_parser
+                from app.services.github import github_url_parser, metadata_extractor
                 ref = github_url_parser.parse(skill.repo_url)
                 ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill.skill_path)
                 scan = await github_scanner.scan(ref)
                 new_readme = scan.files.get("README.md") or scan.root_readme
                 if new_readme is not None:
                     skill.readme_raw = new_readme
+                for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+                    if fname in scan.files:
+                        skill.skill_md_raw = scan.files[fname][:100_000]
+                        skill.skill_md_filename = fname
+                        break
+                if "plugin.json" in scan.files:
+                    pm = metadata_extractor._parse_plugin_json(scan.files["plugin.json"])
+                    skill.agent_count = pm.get("agent_count", 0)
+                    skill.agent_names = pm.get("agent_names", [])
+                    skill.has_mcp_server = pm.get("has_mcp_server", False)
+                    skill.has_scripts = pm.get("has_scripts", False)
+                    skill.plugin_author = pm.get("plugin_author")
             except (GitHubFetchError, ValueError):
                 pass
             skill.updated_at = datetime.now(timezone.utc)

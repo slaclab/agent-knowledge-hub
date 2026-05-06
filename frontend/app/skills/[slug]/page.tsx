@@ -235,6 +235,29 @@ export default async function SkillDetailPage({ params }: PageProps) {
             </div>
           )}
 
+          {/* Plugin metadata */}
+          {(skill.has_mcp_server || skill.agent_count > 0 || skill.has_scripts || skill.plugin_author) && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <h3 className="text-sm font-semibold">Plugin Info</h3>
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                {skill.has_mcp_server && (
+                  <span className="rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 font-medium">MCP server</span>
+                )}
+                {skill.agent_count > 0 && (
+                  <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 font-medium">
+                    {skill.agent_count} agent{skill.agent_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {skill.has_scripts && (
+                  <span className="rounded-full bg-orange-100 text-orange-800 px-2 py-0.5 font-medium">scripts</span>
+                )}
+              </div>
+              {skill.plugin_author && (
+                <p className="text-xs text-muted-foreground">Author: {skill.plugin_author}</p>
+              )}
+            </div>
+          )}
+
           {/* Revision History */}
           <div className="rounded-lg border p-4">
             <h3 className="text-sm font-semibold mb-3">Revision History</h3>

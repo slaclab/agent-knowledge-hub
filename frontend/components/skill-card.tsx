@@ -101,6 +101,14 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+            {skill.has_mcp_server && (
+              <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 text-xs font-medium">MCP</span>
+            )}
+            {skill.agent_count > 0 && (
+              <span className="inline-flex items-center rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs font-medium">
+                {skill.agent_count} agent{skill.agent_count !== 1 ? "s" : ""}
+              </span>
+            )}
             {skill.uses_agent_gateway && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
                 <GitFork className="h-3 w-3" />

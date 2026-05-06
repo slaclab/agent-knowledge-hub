@@ -271,7 +271,7 @@ github_url_parser = GitHubURLParser()
 # RawScanResult
 # ---------------------------------------------------------------------------
 
-_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml"}
+_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml", "plugin.json"}
 
 
 class RawScanResult(BaseModel):
@@ -301,6 +301,13 @@ class SkillScanSnapshot(BaseModel):
     fetched_at: datetime
     no_skill_files: bool = False
     existing_slug: Optional[str] = None  # set if (repo_url, skill_path) already registered
+    # plugin.json fields
+    agent_count: int = 0
+    agent_names: List[str] = []
+    has_mcp_server: bool = False
+    has_scripts: bool = False
+    plugin_author: Optional[str] = None
+    keywords: List[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +407,16 @@ class GitHubScanner:
             if content is not None:
                 files[fname] = content
 
+        # .claude-plugin/plugin.json fallback when plugin.json not found directly
+        if "plugin.json" not in files:
+            plugin_dir = f"{path}/.claude-plugin" if path else ".claude-plugin"
+            alt_url = f"/repos/{owner}/{repo}/contents/{plugin_dir}/plugin.json"
+            if branch:
+                alt_url += f"?ref={branch}"
+            alt_content = await self._fetch_text(alt_url, token)
+            if alt_content:
+                files["plugin.json"] = alt_content
+
         # Repo-root README (only needed when we're in a subdirectory)
         root_readme: Optional[str] = None
         if path:
@@ -477,15 +494,18 @@ class GitHubScanner:
         truncated = bool(tree_data.get("truncated"))
         tree_items = tree_data.get("tree", [])
 
-        # Find directories that contain skill.md or CLAUDE.md, optionally scoped to ref.path
+        # Find directories that contain skill.md, CLAUDE.md, or plugin.json
         base = ref.path.strip("/")  # "" for root, "engineering" for subdir
         skill_file_dirs: set[str] = set()
         for item in tree_items:
             if item.get("type") == "blob":
-                path = item.get("path", "")
-                fname = path.rsplit("/", 1)[-1] if "/" in path else path
-                if fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
-                    dirpath = path.rsplit("/", 1)[0] if "/" in path else "/"
+                ipath = item.get("path", "")
+                fname = ipath.rsplit("/", 1)[-1] if "/" in ipath else ipath
+                if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json"):
+                    dirpath = ipath.rsplit("/", 1)[0] if "/" in ipath else "/"
+                    # .claude-plugin/plugin.json → parent is the skill dir
+                    if fname == "plugin.json" and (dirpath == ".claude-plugin" or dirpath.endswith("/.claude-plugin")):
+                        dirpath = dirpath[: -len("/.claude-plugin")] if "/" in dirpath else "/"
                     if base and not dirpath.startswith(base):
                         continue
                     skill_file_dirs.add(dirpath)
@@ -522,10 +542,12 @@ class MetadataExtractor:
         repo = result.repo_meta
         ref = result.ref
 
-        name = self._extract_name(files, repo, ref)
-        description = self._extract_description(files, repo)
-        platforms = self._extract_platforms(files)
-        version = self._extract_version(files)
+        plugin = self._parse_plugin_json(files.get("plugin.json", ""))
+        name = self._extract_name(files, repo, ref, plugin)
+        description = self._extract_description(files, repo, plugin)
+        platforms = self._extract_platforms(files, plugin)
+        version = self._extract_version(files, plugin)
+        keywords = self._extract_keywords(files, plugin)
         license_name = self._extract_license(repo)
         readme_html = self._extract_readme_html(files, result.root_readme)
 
@@ -560,6 +582,12 @@ class MetadataExtractor:
             forked_from_url=forked_from_url,
             fetched_at=datetime.now(timezone.utc),
             no_skill_files=result.no_skill_files,
+            agent_count=plugin.get("agent_count", 0),
+            agent_names=plugin.get("agent_names", []),
+            has_mcp_server=plugin.get("has_mcp_server", False),
+            has_scripts=plugin.get("has_scripts", False),
+            plugin_author=plugin.get("plugin_author"),
+            keywords=keywords,
         )
 
     def _frontmatter(self, content: str) -> tuple[dict, str]:
@@ -572,13 +600,89 @@ class MetadataExtractor:
 
     _GENERIC_NAMES = {"skill", "skills", "your-skill-name", "your_skill_name", "skill-name", "plugin", "tool"}
 
-    def _extract_name(self, files: dict, repo: dict, ref: GitHubRef) -> Optional[str]:
+    def _parse_plugin_json(self, content: str) -> dict:
+        if not content:
+            return {}
+        try:
+            data = json.loads(content)
+        except Exception:
+            return {}
+
+        agents = data.get("agents", [])
+        if not isinstance(agents, list):
+            agents = []
+        agent_names = []
+        for a in agents:
+            if isinstance(a, dict):
+                n = a.get("name", "")
+            else:
+                n = str(a)
+            if n:
+                agent_names.append(n)
+
+        mcp_servers = data.get("mcp-servers", [])
+        has_mcp = isinstance(mcp_servers, list) and len(mcp_servers) > 0
+
+        scripts = data.get("scripts", {})
+        has_scripts = isinstance(scripts, dict) and bool(scripts)
+
+        author = data.get("author")
+        plugin_author: Optional[str] = None
+        if isinstance(author, str):
+            plugin_author = author or None
+        elif isinstance(author, dict):
+            plugin_author = author.get("name") or None
+
+        platforms = data.get("platforms", [])
+        if not isinstance(platforms, list):
+            platforms = []
+
+        keywords = data.get("keywords", [])
+        if not isinstance(keywords, list):
+            keywords = []
+
+        version = data.get("version")
+
+        return {
+            "agent_count": len(agents),
+            "agent_names": agent_names,
+            "has_mcp_server": has_mcp,
+            "has_scripts": has_scripts,
+            "plugin_author": plugin_author,
+            "platforms": [str(p) for p in platforms if p],
+            "keywords": [str(k) for k in keywords if k],
+            "version": str(version) if version else None,
+            "name": str(data["name"]) if data.get("name") else None,
+            "description": str(data["description"]) if data.get("description") else None,
+        }
+
+    def _extract_keywords(self, files: dict, plugin: dict) -> List[str]:
+        seen: set[str] = set()
+        result: List[str] = []
+        for kw in plugin.get("keywords", []):
+            k = kw.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                result.append(k)
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+            if fname in files:
+                meta, _ = self._frontmatter(files[fname])
+                for kw in meta.get("keywords", []) or []:
+                    k = str(kw).strip().lower()
+                    if k and k not in seen:
+                        seen.add(k)
+                        result.append(k)
+        return result
+
+    def _extract_name(self, files: dict, repo: dict, ref: GitHubRef, plugin: dict = {}) -> Optional[str]:
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 candidate = str(meta["name"]) if meta.get("name") else None
                 if candidate and candidate.lower() not in self._GENERIC_NAMES:
                     return candidate
+        if plugin.get("name") and plugin["name"].lower() not in self._GENERIC_NAMES:
+            return plugin["name"]
         if "package.json" in files:
             try:
                 data = json.loads(files["package.json"])
@@ -590,25 +694,29 @@ class MetadataExtractor:
             name = self._toml_get(files["pyproject.toml"], "project", "name")
             if name:
                 return str(name)
-        # Directory basename or repo name
         path = ref.path.strip("/")
         if path:
             return path.rsplit("/", 1)[-1]
         return repo.get("name")
 
-    def _extract_description(self, files: dict, repo: dict) -> Optional[str]:
+    def _extract_description(self, files: dict, repo: dict, plugin: dict = {}) -> Optional[str]:
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, content = self._frontmatter(files[fname])
                 if meta.get("description"):
                     return str(meta["description"])
+        if plugin.get("description"):
+            return plugin["description"]
         if "README.md" in files:
             para = self._first_paragraph(files["README.md"])
             if para:
                 return para
         return repo.get("description")
 
-    def _extract_platforms(self, files: dict) -> List[str]:
+    def _extract_platforms(self, files: dict, plugin: dict = {}) -> List[str]:
+        # plugin.json platforms field takes highest priority
+        if plugin.get("platforms"):
+            return plugin["platforms"]
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
@@ -629,12 +737,14 @@ class MetadataExtractor:
                 pass
         return platforms
 
-    def _extract_version(self, files: dict) -> Optional[str]:
+    def _extract_version(self, files: dict, plugin: dict = {}) -> Optional[str]:
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("version"):
                     return str(meta["version"])
+        if plugin.get("version"):
+            return plugin["version"]
         if "package.json" in files:
             try:
                 data = json.loads(files["package.json"])

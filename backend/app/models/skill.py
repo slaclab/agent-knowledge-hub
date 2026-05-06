@@ -64,6 +64,13 @@ class Skill(Document):
             raise ValueError("skill_path must be <= 500 characters")
         return v
 
+    # plugin.json metadata
+    agent_count: int = 0
+    agent_names: List[str] = Field(default_factory=list)
+    has_mcp_server: bool = False
+    has_scripts: bool = False
+    plugin_author: Optional[str] = None
+
     submitter_id: str
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -41,6 +41,12 @@ def _snapshot_to_out(snap: SkillScanSnapshot) -> SkillScanSnapshotOut:
         fetched_at=snap.fetched_at,
         no_skill_files=snap.no_skill_files,
         existing_slug=snap.existing_slug,
+        agent_count=snap.agent_count,
+        agent_names=snap.agent_names,
+        has_mcp_server=snap.has_mcp_server,
+        has_scripts=snap.has_scripts,
+        plugin_author=snap.plugin_author,
+        keywords=snap.keywords,
     )
 
 

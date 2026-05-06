@@ -43,6 +43,11 @@ export interface Skill {
   uses_agent_gateway: boolean;
   visibility: VisibilityType;
   forked_from_url: string | null;
+  agent_count: number;
+  agent_names: string[];
+  has_mcp_server: boolean;
+  has_scripts: boolean;
+  plugin_author: string | null;
   labels: LabelOut[];
   my_rating: number | null;
 }
@@ -141,6 +146,12 @@ export interface SkillScanSnapshot {
   fetched_at: string;
   no_skill_files: boolean;
   existing_slug: string | null;
+  agent_count: number;
+  agent_names: string[];
+  has_mcp_server: boolean;
+  has_scripts: boolean;
+  plugin_author: string | null;
+  keywords: string[];
 }
 
 export interface DiscoverResult {

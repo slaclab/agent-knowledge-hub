@@ -68,22 +68,11 @@ fetch-and-write(github_url, local_path):
 
 Array-form, directory-form, and legacy install all say "call fetch-and-write(url, path) for each file" rather than repeating the security check and error handling inline.
 
-### skill_path normalization for `.claude-plugin/` layout (backend fix)
+### skill_path for `.claude-plugin/` layout — backend is correct as-is
 
-Currently, `backend/app/services/github.py` `discover()` strips `.claude-plugin` from the path — a skill at `repo-root/.claude-plugin/plugin.json` gets `skill_path = "/"`. This means the installer fetches `//plugin.json` (404) and falls to legacy.
+`discover()` in `github.py` correctly strips `.claude-plugin` — storing `skill_path = "/"` (repo root) is right because plugin.json paths like `"skills": "./skill/"` are relative to the repo root, not relative to `.claude-plugin/`. The backend scanner also has its own `.claude-plugin/` fallback in `scan()` (lines 410-418).
 
-Fix: store `skill_path = ".claude-plugin"` (or `<parent>/.claude-plugin`) instead of stripping it:
-
-```python
-# Before:
-if fname == "plugin.json" and (dirpath == ".claude-plugin" or ...):
-    dirpath = dirpath[:-len("/.claude-plugin")] if "/" in dirpath else "/"
-
-# After: keep .claude-plugin as the skill_path
-# dirpath stays as ".claude-plugin" — no stripping
-```
-
-Existing skills with `skill_path = "/"` that use `.claude-plugin/` layout will pick up the correct path on next refetch. The AKH skill itself should be refetched after this ships.
+The gap is only in the **installer** (SKILL.md step 3). No backend change needed.
 
 ### plugin.json lookup — install fallback order
 
@@ -273,7 +262,6 @@ This matches the canonical format the repo itself uses (`"skills": "./skill/"` i
 | `skill/SKILL.md` — remove command | Modify | Manifest-based cleanup of commands/agents; explicit operation order |
 | `skill/SKILL.md` — update command | Modify | Manifest cleanup before reinstall |
 | `skill/SKILL.md` — error handling | Modify | Add platform mismatch warning, file cap warning, empty-dir warning |
-| `backend/app/services/github.py` — `discover()` | Modify | Store `skill_path = ".claude-plugin"` instead of stripping to parent |
 
 ---
 
@@ -399,8 +387,6 @@ Choice: Scaffold with actual agent templates vs empty .md stubs
 
 ## Implementation Checklist
 
-- [ ] Backend: fix `discover()` in `github.py` — store `skill_path = ".claude-plugin"` instead of stripping it to parent dir
-- [ ] Backend: refetch AKH skill after fix to update its `skill_path` in the catalog
 - [ ] Install: check `<skill_path>/.claude-plugin/plugin.json` as fallback before falling to legacy install (only fall to legacy on 404 — treat 5xx/timeout as a real error)
 - [ ] Install: warn when directory-form component resolves to an empty directory (0 files)
 - [ ] Install: detect `"skills"` (and `"agents"`, `"commands"`) as string (directory) vs array

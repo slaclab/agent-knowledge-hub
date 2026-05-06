@@ -15,13 +15,39 @@ Interact with the SLAC S3DF skills catalog without leaving your agent session.
 
 ---
 
+## Shared procedure: fetch-and-write
+
+All install paths call this primitive. Apply it for every file written during install.
+
+```
+fetch-and-write(github_url, local_path, allowed_prefix):
+  1. Security check: resolve the full absolute path of local_path.
+     Assert it starts with allowed_prefix. If not → abort the entire install,
+     warn the user, and do NOT write any file.
+  2. Fetch github_url from GitHub Contents API.
+     Include Authorization header if GITHUB_TOKEN env var is set.
+  3. If response is 403 with X-RateLimit-Remaining: 0 → abort install,
+     tell the user to set GITHUB_TOKEN and retry.
+  4. If response is any non-200 other than 404 → abort install with the error.
+  5. Decode base64 content from the response JSON ("content" field).
+  6. Create parent directories of local_path as needed, then write the file.
+```
+
+Allowed prefixes by component type:
+- `skills` → `~/.claude/skills/<slug>/`
+- `commands` → `~/.claude/commands/`
+- `agents` → `~/.claude/agents/`
+
+---
+
 ## Sub-commands
 
 ### Natural-language search (default)
 `/agent-knowledge-hub <query>`
 `/agent-knowledge-hub search <query>`
 
-1. Fetch `GET /api/skills/summary` — returns slug, name, description, labels, version, avg_rating for all active skills.
+1. Fetch `GET /api/skills/summary` — returns slug, name, description, labels, version, avg_rating,
+   compatible_platforms for all active skills.
 2. Pass the full catalog list and the user's query to Claude.
 3. Match the query against name, description, **and labels**.
 4. Rank the results by relevance, return the top matches with a one-sentence explanation each.
@@ -34,45 +60,80 @@ If the user says yes, run the install flow for that slug.
 ### Install by slug
 `/agent-knowledge-hub install <slug>`
 
-1. Fetch `GET /api/skills/<slug>` — get `repo_url` and `skill_path`.
+1. Fetch `GET /api/skills/<slug>` — get `repo_url`, `skill_path`, and `compatible_platforms`.
 2. Parse `repo_url` to extract `<owner>/<repo>`. It must be a `https://github.com/` URL.
-3. Attempt to fetch `<skill_path>/plugin.json` from the GitHub Contents API:
-   `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/plugin.json`
-   If not found, fall back to **legacy install** (step 8).
 
-4. **plugin.json install:** Parse the `plugin.json`. For each component type present:
+3. **Locate plugin.json** (try in order; stop at first success):
+   a. `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/plugin.json`
+   b. If 404 → `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/.claude-plugin/plugin.json`
+   c. If 404 → **legacy install** (step 9).
+   If any step returns a non-404 error → abort install with the error message.
 
-   **skills** — for each file path in `plugin.json["skills"]`:
-   - Download the file from GitHub.
-   - Security check: assert the resolved path stays inside `~/.claude/skills/<slug>/`.
-   - Write to `~/.claude/skills/<slug>/`.
+4. **Platform check** — before writing any files:
+   - Read `compatible_platforms` from plugin.json (falls back to catalog value if absent).
+   - If absent from both → treat as `["claude-code"]` (backward compatibility).
+   - If `compatible_platforms` does not include `"claude-code"`:
+     ```
+     ⚠  This skill declares it does not support claude-code.
+        Supported platforms: <list>.
+        Install anyway? (y/n)
+     ```
+     If user says n → abort. If user says y → proceed.
+   - If `compatible_platforms` includes other platforms alongside `claude-code`:
+     ```
+     ℹ  This skill also supports: <others>. Those components are not installed here.
+     ```
 
-   **commands** — for each file path in `plugin.json["commands"]`:
-   - Download the file from GitHub.
-   - Security check: assert the resolved path stays inside `~/.claude/commands/`.
-   - Write to `~/.claude/commands/`.
+5. **Install skills component:**
+   - If `plugin.json["skills"]` is a **string** (directory path, e.g. `"./skill/"`):
+     - Resolve the path relative to `skill_path` in the repo.
+     - Fetch directory listing: `GET /repos/<owner>/<repo>/contents/<resolved_path>`
+     - Recursively fetch all files (recurse into any subdirectory entries).
+     - Cap at 200 files total; if exceeded → warn and abort install.
+     - If directory has 0 files → warn: `⚠ skills directory <path> is empty — nothing installed.`
+     - For each file: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<relative_path>, ~/.claude/skills/<slug>/)`.
+   - If `plugin.json["skills"]` is an **array** of file paths:
+     - For each path: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
+   - If `plugin.json["skills"]` is absent → skip skills component.
 
-   **agents** — for each file path in `plugin.json["agents"]`:
-   - Download the file from GitHub.
-   - Security check: assert the resolved path stays inside `~/.claude/agents/`.
-   - Write to `~/.claude/agents/`.
+6. **Install commands component** (same string/array logic as skills):
+   - String (directory) → recursively fetch and write to `~/.claude/commands/`, preserving subdirs.
+   - Array → fetch each file, write to `~/.claude/commands/`.
+   - Allowed prefix: `~/.claude/commands/`.
 
-   **mcp-servers** — for each entry in `plugin.json["mcp-servers"]`:
-   - Each entry must have a `name` and a `command` field (and optionally `args: []` and `env: {}`).
-   - Run: `claude mcp add <name> <command> [args...]`
-   - Confirm each registered MCP server.
+7. **Install agents component** (same string/array logic):
+   - String (directory) → recursively fetch and write to `~/.claude/agents/`, preserving subdirs.
+   - Array → fetch each file, write to `~/.claude/agents/`.
+   - Allowed prefix: `~/.claude/agents/`.
 
-5. Print a summary of all installed paths and registered MCP servers.
-6. If `plugin.json` contains a `version` field, note: `Installed <slug> v<version>`.
+8. **Install mcp-servers component:**
+   - For each entry in `plugin.json["mcp-servers"]`:
+     - Entry must have `name` and `command` fields (optional: `args: []`, `env: {}`).
+     - Run: `claude mcp add <name> <command> [args...]`
+     - Confirm each registered MCP server.
 
-7. **Security check (mandatory for all file writes):** Before writing any file, resolve the target
-   path and assert it stays within `~/.claude/`. If any file would escape this directory, abort
-   the entire install and warn the user. Never write the file.
+9. **Write installed-files manifest** (after all files confirmed written):
+   ```json
+   {
+     "slug": "<slug>",
+     "installed_at": "<ISO timestamp>",
+     "commands": ["<absolute-path>", ...],
+     "agents":   ["<absolute-path>", ...]
+   }
+   ```
+   Write to `~/.claude/skills/<slug>/.installed-manifest.json`.
+   List every file installed into `commands` and `agents` (not skills — the slug dir is deleted as a whole).
+   If no commands or agents were installed, write an empty manifest anyway (commands: [], agents: []).
 
-8. **Legacy install (no plugin.json):** Fetch the file listing from the GitHub Contents API:
-   `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>`
-   If `skill_path` is `/` or empty, use the repo root.
-   Download each file and write to `~/.claude/skills/<slug>/`.
+10. Print a summary of all installed paths and registered MCP servers.
+    If `plugin.json` contains a `version` field: `Installed <slug> v<version>`.
+
+11. **Legacy install** (reached only when no plugin.json found at steps 3a or 3b):
+    Fetch the file listing from the GitHub Contents API:
+    `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>`
+    If `skill_path` is `/` or empty, use the repo root.
+    For each file in the listing: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
+    Write an empty manifest (`commands: [], agents: []`) after install.
 
 If the GitHub API returns a rate-limit error (403 with X-RateLimit-Remaining: 0), suggest the user set a `GITHUB_TOKEN` environment variable.
 
@@ -81,25 +142,32 @@ If the GitHub API returns a rate-limit error (403 with X-RateLimit-Remaining: 0)
 ### List installed skills
 `/agent-knowledge-hub list`
 
-Scan `~/.claude/skills/` and print each subdirectory name. If a `SKILL.md` is present, show its
-`name` frontmatter, `description` frontmatter, and `version` frontmatter alongside the slug:
+Scan `~/.claude/skills/` and print each subdirectory name. For each:
+1. If `SKILL.md` is present: show `name`, `description`, and `version` frontmatter.
+2. If `plugin.json` is also present: show a second line with platform and component summary.
 
 ```
 <slug>   v<version>   <name> — <description>
+         Platforms: claude-code, codex   Components: 1 skill, 7 agents, 1 MCP server
 ```
 
-Omit `v<version>` if no version frontmatter is present.
+Omit `v<version>` if no version frontmatter. Omit the second line if no `plugin.json`.
 
 ---
 
 ### Update a skill
 `/agent-knowledge-hub update <slug>`
 
-1. If `~/.claude/skills/<slug>/SKILL.md` exists, read its `version` frontmatter (call it `<old_version>`).
-2. Delete `~/.claude/skills/<slug>/`.
-3. Re-run the full install flow for that slug.
-4. After install, read the new `version` from the freshly installed SKILL.md (call it `<new_version>`).
-5. Print:
+1. Read `~/.claude/skills/<slug>/SKILL.md` version frontmatter → `<old_version>` (if present).
+2. **Clean up old install:**
+   a. Read `~/.claude/skills/<slug>/.installed-manifest.json` into memory (if present).
+   b. If manifest absent: read `~/.claude/skills/<slug>/plugin.json["commands"]` and `["agents"]` as string arrays (fallback for pre-manifest installs).
+   c. Delete every path collected in steps a–b from `~/.claude/commands/` and `~/.claude/agents/`.
+   d. For each MCP server in the old `plugin.json["mcp-servers"]`: run `claude mcp remove <name>`.
+3. Delete `~/.claude/skills/<slug>/` entirely.
+4. Re-run the full install flow for that slug.
+5. After install, read the new `version` from the freshly installed SKILL.md → `<new_version>`.
+6. Print:
    - If both versions available: `Updated <slug> v<old_version> → v<new_version>`
    - If only new version: `Updated <slug> → v<new_version>`
    - Otherwise: `Updated <slug>`
@@ -109,15 +177,16 @@ Omit `v<version>` if no version frontmatter is present.
 ### Remove a skill
 `/agent-knowledge-hub remove <slug>`
 
-Ask the user to confirm, then:
+Ask the user to confirm, then — **in this exact order** (manifest is inside slug dir; read before deleting):
 
-1. Attempt to fetch `~/.claude/skills/<slug>/plugin.json`. If present, parse it and:
-   - Delete any files listed in `commands` from `~/.claude/commands/`.
-   - Delete any files listed in `agents` from `~/.claude/agents/`.
-   - For each entry in `mcp-servers`, run: `claude mcp remove <name>`
-2. Delete `~/.claude/skills/<slug>/`.
-
-If `plugin.json` is not present, just delete `~/.claude/skills/<slug>/`.
+1. Read `~/.claude/skills/<slug>/.installed-manifest.json` into memory (if present).
+2. If manifest absent: read `~/.claude/skills/<slug>/plugin.json["commands"]` and `["agents"]` as string arrays.
+   If those are directory-form strings (not arrays), warn:
+   `⚠ Could not determine which commands/agents were installed (pre-manifest directory-form install). Remove them manually from ~/.claude/commands/ and ~/.claude/agents/.`
+3. Delete every path collected in steps 1–2 from `~/.claude/commands/` and `~/.claude/agents/`.
+   Skip any path that no longer exists (do not abort).
+4. For each MCP server in `plugin.json["mcp-servers"]`: run `claude mcp remove <name>`.
+5. Delete `~/.claude/skills/<slug>/` entirely.
 
 ---
 
@@ -126,7 +195,7 @@ If `plugin.json` is not present, just delete `~/.claude/skills/<slug>/`.
 
 Validate a plugin directory before submitting it to the catalog.
 
-1. Look for `<path>/plugin.json` or `<path>/.claude-plugin/plugin.json`. If neither exists, fail with:
+1. Look for `<path>/plugin.json` or `<path>/.claude-plugin/plugin.json`. If neither exists, fail:
    `✗ No plugin.json found at <path>/plugin.json or <path>/.claude-plugin/plugin.json`
 
 2. Parse the file as JSON. If invalid, fail with the parse error.
@@ -134,33 +203,47 @@ Validate a plugin directory before submitting it to the catalog.
 3. Check required fields:
    - `name` (non-empty string) — fail if missing or empty.
    - `version` (non-empty string) — warn if missing (not a hard failure).
-   - At least one of `skills`, `commands`, `agents`, `mcp-servers` must be a non-empty array — fail if none present.
+   - At least one of `skills`, `commands`, `agents`, `mcp-servers` must be present — fail if none.
 
-4. For each file path listed in `skills`, `commands`, and `agents`:
-   - Check that the file exists at `<path>/<file_path>`.
-   - If the file is a `.md` file with a `---` frontmatter block, verify it contains both `name:` and `description:` keys.
-   - Report each missing file or missing frontmatter field as a failure.
+4. For each of `skills`, `commands`, `agents`:
+   - If the value is a **string** (directory path):
+     - Check the directory exists at `<path>/<value>`.
+     - Count `.md` files inside; note subdirectories.
+     - Report: `✓ skills: directory <value> (N files)`
+   - If the value is an **array** of file paths:
+     - Check each listed file exists at `<path>/<file_path>`.
+     - If the file is a `.md` file with a `---` frontmatter block, verify it contains both `name:` and `description:` keys.
+     - Report each missing file or missing frontmatter field as a failure.
 
-5. Check slug availability: derive the expected slug from `plugin.json["name"]` (lowercased, spaces to hyphens).
+5. If `compatible_platforms` is present:
+   - Must be a non-empty array of strings — fail if not.
+   - Report: `✓ compatible_platforms: <list>`
+
+6. If `author` is present:
+   - Must have a `name` field (non-empty string) — fail if missing.
+   - Report: `✓ author: <name> <<email>>` (email optional)
+
+7. Check slug availability: derive the expected slug from `plugin.json["name"]` (lowercased, spaces to hyphens).
    Call `GET /api/skills/<slug>`:
    - 404 → slug is available ✓
    - 200 → slug is already taken — warn: `⚠ Slug "<slug>" is already registered in the catalog.`
    - Network error → skip this check and note it.
 
-6. Print a summary:
+8. Print a summary:
 ```
 Validation results for <path>:
   ✓ plugin.json found and valid JSON
   ✓ name: <name>
   ✓ version: <version>
-  ✓ components: skills (2), commands (1)
-  ✓ all 3 component files exist
-  ✓ frontmatter valid on all .md files
+  ✓ skills: directory ./skills (3 files)
+  ✓ agents: 2 agent files declared and present
+  ✓ compatible_platforms: claude-code, codex
+  ✓ author: Claudio Bisegni <bisegni@slac.stanford.edu>
   ✓ slug "<slug>" is available
 
 All checks passed.
 ```
-Or list each failure with `✗` and a description, then print `X check(s) failed.`
+Or list each failure with `✗` and print `X check(s) failed.`
 
 ---
 
@@ -179,15 +262,33 @@ Or list each failure with `✗` and a description, then print `X check(s) failed
 ### Create a new skill scaffold
 `/agent-knowledge-hub create`
 
-Ask the user for:
-- A directory to create the skill in (default: current directory)
-- A slug/name for the skill
-- A one-sentence description
+Ask the user:
+1. A directory to create the skill in (default: current directory)
+2. A slug/name for the skill
+3. A one-sentence description
+4. Does this skill include sub-agents? (y/n) — if yes: enter agent names one per line
+5. Does this skill need an MCP server? (y/n) — if yes: server name and command
+6. Does this skill include Python scripts or other supporting files? (y/n)
+7. Target platforms: `[1] claude-code only  [2] claude-code + codex  [3] all`
 
-Then scaffold two files:
+Scaffold based on answers. For a skill with agents and scripts selected:
 
-**`SKILL.md`:**
+**Directory structure:**
 ```
+<dir>/
+  plugin.json
+  README.md
+  skills/<slug>/
+    SKILL.md
+    scripts/        ← only if scripts=yes
+      .gitkeep
+  agents/           ← only if agents=yes
+    <agent1>.md
+    <agent2>.md
+```
+
+**`skills/<slug>/SKILL.md`:**
+```markdown
 ---
 name: <slug>
 description: <description>
@@ -202,22 +303,40 @@ TODO: describe what this skill does and how to invoke it.
 TODO: write the instructions for Claude to follow when this skill is invoked.
 ```
 
+**`agents/<agentN>.md`** (one per agent name entered):
+```markdown
+---
+name: <agent-name>
+description: TODO: describe this agent's role
+---
+
+TODO: write the system prompt for this agent.
+```
+
 **`plugin.json`:**
 ```json
 {
   "name": "<slug>",
   "description": "<description>",
   "version": "0.1.0",
-  "skills": [
-    {
-      "name": "<slug>",
-      "path": "SKILL.md"
-    }
+  "author": { "name": "", "email": "" },
+  "license": "MIT",
+  "keywords": [],
+  "compatible_platforms": ["claude-code"],
+  "skills": "./skills",
+  "agents": [
+    "./agents/<agent1>.md",
+    "./agents/<agent2>.md"
   ]
 }
 ```
 
-Confirm both file paths to the user and remind them:
+Adjust `plugin.json`:
+- Omit `"agents"` if none selected.
+- Add `"mcp-servers": [{"name": "<name>", "command": "<command>", "args": []}]` if MCP selected.
+- Set `"compatible_platforms": ["claude-code", "codex"]` or `["claude-code", "codex", "other"]` per platform choice.
+
+Confirm all created file paths to the user and remind them:
 - Run `/agent-knowledge-hub validate .` to check the plugin before submitting.
 - Submit via `/agent-knowledge-hub submit` once it's in a GitHub repo.
 
@@ -243,6 +362,8 @@ Click "Submit a skill" and paste your GitHub URL.
 
 - **Skill not found (404):** Tell the user the slug doesn't exist and suggest running a search.
 - **Deactivated skill (410):** Tell the user the skill has been deactivated. If `superseded_by_slug` is present, suggest installing that instead.
-- **Path traversal attempt:** Abort install, warn the user that the skill's `skill_path` contains unsafe components, and do not write any files.
+- **Path traversal attempt:** Abort install, warn the user that the skill contains unsafe file paths, and do not write any file.
+- **Rate limit (403):** Suggest the user set `GITHUB_TOKEN` and retry.
+- **Non-404 error fetching plugin.json:** Abort install with the HTTP status and message — do not fall through to legacy install.
 - **Network error:** Show the error message and suggest retrying.
 - **MCP registration failure:** Show the error from `claude mcp add` and suggest the user run the command manually.

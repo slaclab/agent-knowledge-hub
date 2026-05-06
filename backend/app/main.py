@@ -21,6 +21,16 @@ from app.routers.labels import admin_router as labels_admin_router
 from app.routers.labels import router as labels_router
 from app.routers.labels import skills_labels_router
 
+import os
+_log_level = getattr(logging, os.environ.get("LOG_LEVEL", "DEBUG").upper(), logging.DEBUG)
+logging.basicConfig(
+    level=_log_level,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+# Keep noisy third-party libraries at WARNING
+for _noisy in ("httpx", "httpcore", "motor", "pymongo", "beanie", "bson", "cachetools"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 

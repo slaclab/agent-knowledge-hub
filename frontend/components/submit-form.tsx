@@ -83,7 +83,12 @@ export function SubmitForm({
         version: snap.version ?? "",
         license: snap.license ?? "",
         platforms: snap.compatible_platforms,
-        labels: [],
+        labels: [
+          ...snap.keywords,
+          ...(snap.has_mcp_server && !snap.keywords.includes("mcp") ? ["mcp"] : []),
+          ...(snap.agent_count > 0 && !snap.keywords.includes("multi-agent") ? ["multi-agent"] : []),
+          ...(snap.has_scripts && !snap.keywords.includes("has-scripts") ? ["has-scripts"] : []),
+        ],
       }))
     );
   }, []);

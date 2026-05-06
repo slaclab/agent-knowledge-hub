@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 from typing import List, Literal, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from beanie.operators import In, Text
 from pymongo.errors import DuplicateKeyError
 from slugify import slugify
 
+from app.models.flag import SkillFlag
 from app.models.label import Label, SkillLabel
+from app.models.rating import Rating
+from app.models.revision import RevisionAction, SkillRevision
 from app.models.skill import Skill, SkillStatus, VisibilityEnum
 from app.schemas.skill import SkillCreate, SkillUpdate
 from app.services.github import GitHubFetchError, GitHubRef, _normalize_github_url, extract_repo_root_url, github_fetcher, github_scanner
 from app.services.revision import revision_service
-from app.models.revision import RevisionAction
 from app.services import label as label_module
 
 
@@ -114,6 +119,8 @@ class SkillRepository:
         repo_url = extract_repo_root_url(data.repo_url) or data.repo_url
         skill_path = data.skill_path or "/"
 
+        logger.info("[CREATE] submitter=%s repo_url=%s skill_path=%s", submitter_id, repo_url, skill_path)
+
         # Validate skill_path (also enforced by model validator on save)
         if ".." in skill_path.split("/"):
             raise ValueError("skill_path must not contain '..' components")
@@ -121,8 +128,10 @@ class SkillRepository:
         github_data = None
         try:
             github_data = await github_fetcher.fetch(repo_url)
-        except GitHubFetchError:
-            pass
+            logger.info("[CREATE] github_fetcher ok name=%r visibility=%s stars=%s",
+                        github_data.name, github_data.visibility, github_data.stars)
+        except GitHubFetchError as exc:
+            logger.warning("[CREATE] github_fetcher failed: %s", exc)
 
         # Scan skill_path directory to capture file content
         skill_md_raw: Optional[str] = None
@@ -133,17 +142,32 @@ class SkillRepository:
             from app.services.github import github_url_parser, metadata_extractor
             ref = github_url_parser.parse(repo_url)
             ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill_path)
+            logger.info("[CREATE] scanning ref owner=%s repo=%s branch=%r path=%s",
+                        ref.owner, ref.repo, ref.branch, ref.path)
             scan = await github_scanner.scan(ref)
+            logger.info("[CREATE] scan complete files=%s root_readme=%s",
+                        list(scan.files.keys()), "set" if scan.root_readme else "None")
             for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
                 if fname in scan.files:
                     skill_md_raw = scan.files[fname][:100_000]  # cap at 100 KB
                     skill_md_filename = fname
+                    logger.info("[CREATE] skill_md_filename=%s length=%d", fname, len(skill_md_raw))
                     break
+            if skill_md_filename is None:
+                logger.warning("[CREATE] no SKILL.md/skill.md/CLAUDE.md found in scan")
             readme_raw = scan.files.get("README.md") or scan.root_readme
+            if readme_raw:
+                logger.info("[CREATE] readme_raw set from %s, length=%d",
+                            "README.md" if "README.md" in scan.files else "root_readme", len(readme_raw))
+            else:
+                logger.warning("[CREATE] readme_raw is None — neither README.md in dir nor root_readme")
             if "plugin.json" in scan.files:
                 plugin_meta = metadata_extractor._parse_plugin_json(scan.files["plugin.json"])
-        except (GitHubFetchError, ValueError):
-            pass
+                logger.info("[CREATE] plugin_meta=%s", plugin_meta)
+            else:
+                logger.debug("[CREATE] no plugin.json in scan files")
+        except (GitHubFetchError, ValueError) as exc:
+            logger.warning("[CREATE] scan failed: %s", exc, exc_info=True)
 
         name = data.name or (github_data.name if github_data else repo_url.split("/")[-1])
         slug = await _unique_slug(name)
@@ -251,9 +275,12 @@ class SkillRepository:
         return skill
 
     async def refetch(self, skill: Skill, actor_id: str) -> Skill:
+        logger.info("[REFETCH] slug=%s actor=%s repo_url=%s skill_path=%s",
+                    skill.slug, actor_id, skill.repo_url, skill.skill_path)
         try:
             # Skip fallback chain for known-internal skills (optimized refetch path)
             force_app = skill.visibility == VisibilityEnum.internal
+            logger.info("[REFETCH] force_app_token=%s (visibility=%s)", force_app, skill.visibility)
             gh = await github_fetcher.fetch(skill.repo_url, force_app_token=force_app)
             skill.github_stars = gh.stars
             skill.last_commit_at = gh.last_commit_at
@@ -262,20 +289,34 @@ class SkillRepository:
             skill.visibility = gh.visibility
             if not skill.description:
                 skill.description = gh.description
+            logger.info("[REFETCH] github_fetcher ok stars=%s visibility=%s", gh.stars, gh.visibility)
             # Refresh readme_raw and plugin.json fields from HEAD
             try:
                 from app.services.github import github_url_parser, metadata_extractor
                 ref = github_url_parser.parse(skill.repo_url)
                 ref = GitHubRef(owner=ref.owner, repo=ref.repo, branch=ref.branch, path=skill.skill_path)
+                logger.info("[REFETCH] scanning ref owner=%s repo=%s branch=%r path=%s",
+                            ref.owner, ref.repo, ref.branch, ref.path)
                 scan = await github_scanner.scan(ref)
+                logger.info("[REFETCH] scan complete files=%s root_readme=%s",
+                            list(scan.files.keys()), "set" if scan.root_readme else "None")
                 new_readme = scan.files.get("README.md") or scan.root_readme
                 if new_readme is not None:
                     skill.readme_raw = new_readme
+                    logger.info("[REFETCH] readme_raw updated from %s length=%d",
+                                "README.md" if "README.md" in scan.files else "root_readme", len(new_readme))
+                else:
+                    logger.warning("[REFETCH] readme_raw still None after rescan")
+                skill_md_found = False
                 for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
                     if fname in scan.files:
                         skill.skill_md_raw = scan.files[fname][:100_000]
                         skill.skill_md_filename = fname
+                        skill_md_found = True
+                        logger.info("[REFETCH] skill_md_filename=%s length=%d", fname, len(skill.skill_md_raw))
                         break
+                if not skill_md_found:
+                    logger.warning("[REFETCH] no SKILL.md/skill.md/CLAUDE.md found in rescan")
                 if "plugin.json" in scan.files:
                     pm = metadata_extractor._parse_plugin_json(scan.files["plugin.json"])
                     skill.agent_count = pm.get("agent_count", 0)
@@ -283,8 +324,9 @@ class SkillRepository:
                     skill.has_mcp_server = pm.get("has_mcp_server", False)
                     skill.has_scripts = pm.get("has_scripts", False)
                     skill.plugin_author = pm.get("plugin_author")
-            except (GitHubFetchError, ValueError):
-                pass
+                    logger.info("[REFETCH] plugin_meta updated: %s", pm)
+            except (GitHubFetchError, ValueError) as exc:
+                logger.warning("[REFETCH] scan failed: %s", exc, exc_info=True)
             skill.updated_at = datetime.now(timezone.utc)
             await skill.save()
             await revision_service.record(
@@ -293,11 +335,19 @@ class SkillRepository:
                 action=RevisionAction.refetch,
                 snapshot=skill.model_dump(mode="json"),
             )
-        except GitHubFetchError:
-            pass
+            logger.info("[REFETCH] done slug=%s", skill.slug)
+        except GitHubFetchError as exc:
+            logger.warning("[REFETCH] github_fetcher failed: %s", exc)
         return skill
 
     async def delete(self, skill: Skill) -> None:
+        skill_id = str(skill.id)
+
+        await label_module.label_service.purge_for_skill(skill_id)
+        await Rating.find(Rating.skill_id == skill_id).delete()
+        await SkillRevision.find(SkillRevision.skill_id == skill_id).delete()
+        await SkillFlag.find(SkillFlag.skill_id == skill_id).delete()
+
         await skill.delete()
 
 

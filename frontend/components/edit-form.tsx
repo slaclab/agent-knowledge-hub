@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateSkill } from "@/lib/api";
+import { updateSkill, refetchSkill } from "@/lib/api";
 import type { Skill } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
 import { platformPillClass } from "@/components/platform-badges";
@@ -22,6 +22,7 @@ export function EditForm({ skill }: EditFormProps) {
   const [platformInput, setPlatformInput] = useState("");
   const [changelog, setChangelog] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const togglePlatform = (p: string) => {
@@ -34,6 +35,15 @@ export function EditForm({ skill }: EditFormProps) {
     const p = platformInput.trim().toLowerCase();
     if (p && !platforms.includes(p)) setPlatforms((prev) => [...prev, p]);
     setPlatformInput("");
+  };
+
+  const handleRescan = async () => {
+    setRescanning(true);
+    setError(null);
+    const { data, error: err } = await refetchSkill(skill.slug);
+    setRescanning(false);
+    if (err) { setError(err); return; }
+    if (data) router.refresh();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,6 +178,20 @@ export function EditForm({ skill }: EditFormProps) {
       >
         {submitting ? "Saving…" : "Save Changes"}
       </button>
+
+      <div className="border-t pt-4 space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Re-scan pulls the latest README, SKILL.md, and metadata from GitHub.
+        </p>
+        <button
+          type="button"
+          onClick={handleRescan}
+          disabled={rescanning}
+          className="w-full rounded-md border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {rescanning ? "Scanning…" : "Rescan from GitHub"}
+        </button>
+      </div>
     </form>
   );
 }

@@ -65,9 +65,16 @@ export async function listSkills(
 export async function getSkill(
   slug: string,
   server = false,
+  viewerName?: string,
 ): Promise<{ skill: Skill | null; deactivated: boolean; reason: string | null }> {
   const b = apiBase(server);
-  const res = await fetch(`${b}/skills/${slug}`, { cache: "no-store" });
+  const fetchHeaders: HeadersInit = {};
+  if (server && viewerName) {
+    fetchHeaders["X-Forwarded-User"] = viewerName;
+    const secret = process.env.INTERNAL_API_SECRET;
+    if (secret) fetchHeaders["X-Internal-Secret"] = secret;
+  }
+  const res = await fetch(`${b}/skills/${slug}`, { cache: "no-store", headers: fetchHeaders });
   if (res.status === 410) {
     const json = await res.json().catch(() => ({}));
     return { skill: null, deactivated: true, reason: (json as { detail?: string }).detail ?? null };

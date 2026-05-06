@@ -84,6 +84,18 @@ class LabelService:
         await skill_label.delete()
         await Label.find_one(Label.id == label.id).update({"$inc": {"usage_count": -1}})
 
+    async def purge_for_skill(self, skill_id: str) -> None:
+        """Remove all SkillLabel rows for a skill and decrement each Label's usage_count."""
+        skill_labels = await SkillLabel.find(SkillLabel.skill_id == skill_id).to_list()
+        for sl in skill_labels:
+            try:
+                oid = _to_oid(sl.label_id)
+                await Label.find_one(Label.id == oid).update({"$inc": {"usage_count": -1}})
+            except InvalidObjectIdError:
+                pass
+        if skill_labels:
+            await SkillLabel.find(SkillLabel.skill_id == skill_id).delete()
+
     async def list_for_skill(
         self, skill_id: str, viewer_id: Optional[str] = None
     ) -> List[LabelOut]:

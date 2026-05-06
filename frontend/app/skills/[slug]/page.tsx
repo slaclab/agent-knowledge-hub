@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getSkill, getRevisions, listSkills, getSettings, getMe } from "@/lib/api";
+import { headers } from "next/headers";
+import { getSkill, getRevisions, listSkills, getSettings } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { SkillContentTabs } from "@/components/skill-content-tabs";
@@ -11,13 +12,16 @@ import { RatingWidget } from "@/components/rating-widget";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
+import { DeleteSkillButton } from "@/components/delete-skill-button";
 
 interface PageProps {
   params: { slug: string };
 }
 
 export default async function SkillDetailPage({ params }: PageProps) {
-  const { skill, deactivated, reason } = await getSkill(params.slug, true);
+  const h = headers();
+  const viewer = h.get("x-vouch-idp-claims-name") || h.get("x-vouch-user") || h.get("x-forwarded-user");
+  const { skill, deactivated, reason } = await getSkill(params.slug, true, viewer ?? undefined);
 
   if (deactivated) {
     return (
@@ -32,10 +36,9 @@ export default async function SkillDetailPage({ params }: PageProps) {
   const revisions = await getRevisions(params.slug, true);
 
   // Fetch forks of this skill in the catalog (FR-P16)
-  const [forksData, siteSettings, viewer] = await Promise.all([
+  const [forksData, siteSettings] = await Promise.all([
     listSkills({ forked_from: skill.repo_url, page_size: 3, server: true }),
     getSettings(true),
-    getMe(true),
   ]);
   const forkCount = forksData?.total ?? 0;
   const accessInstructionsUrl = siteSettings.github_access_instructions_url;
@@ -83,13 +86,14 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <span>submitted {formatDate(skill.submitted_at)}</span>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex items-center gap-2">
           <Link
             href={`/skills/${skill.slug}/edit`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
           >
             Edit
           </Link>
+          <DeleteSkillButton slug={skill.slug} submitterId={skill.submitter_id} />
         </div>
       </div>
 
@@ -118,26 +122,16 @@ export default async function SkillDetailPage({ params }: PageProps) {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Ratings */}
-          <div className="rounded-lg border p-4 space-y-2">
-            <h3 className="text-sm font-semibold">Rating</h3>
-            <RatingWidget
-              slug={skill.slug}
-              initialAvgRating={skill.avg_rating}
-              initialRatingCount={skill.rating_count}
-            />
-          </div>
-
-          {/* Labels */}
-          <div className="rounded-lg border p-4 space-y-2">
-            <h3 className="text-sm font-semibold">Labels</h3>
-            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
-          </div>
-
-          {/* Metadata */}
+          {/* Details (merged with Plugin Info + Author) */}
           <div className="rounded-lg border p-4 space-y-3">
             <h3 className="text-sm font-semibold">Details</h3>
             <dl className="space-y-2 text-sm">
+              {skill.plugin_author && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Author</dt>
+                  <dd>{skill.plugin_author}</dd>
+                </div>
+              )}
               {skill.version && (
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Version</dt>
@@ -156,12 +150,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
                   <dd>{skill.github_stars.toLocaleString()}</dd>
                 </div>
               )}
-              {skill.last_commit_at && (
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Last Commit</dt>
-                  <dd>{formatDate(skill.last_commit_at)}</dd>
-                </div>
-              )}
               <div className="space-y-1">
                 <dt className="text-muted-foreground">Repository</dt>
                 <dd>
@@ -178,11 +166,51 @@ export default async function SkillDetailPage({ params }: PageProps) {
                   </a>
                 </dd>
               </div>
+              {skill.last_commit_at && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Last Commit</dt>
+                  <dd>{formatDate(skill.last_commit_at)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Updated</dt>
                 <dd>{formatDate(skill.updated_at)}</dd>
               </div>
+              {(skill.has_mcp_server || skill.agent_count > 0 || skill.has_scripts) && (
+                <div className="flex justify-between items-start">
+                  <dt className="text-muted-foreground">Components</dt>
+                  <dd className="flex flex-wrap justify-end gap-1">
+                    {skill.has_mcp_server && (
+                      <span className="rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 text-xs font-medium">MCP server</span>
+                    )}
+                    {skill.agent_count > 0 && (
+                      <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs font-medium">
+                        {skill.agent_count} agent{skill.agent_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {skill.has_scripts && (
+                      <span className="rounded-full bg-orange-100 text-orange-800 px-2 py-0.5 text-xs font-medium">scripts</span>
+                    )}
+                  </dd>
+                </div>
+              )}
             </dl>
+          </div>
+
+          {/* Ratings */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-sm font-semibold">Rating</h3>
+            <RatingWidget
+              slug={skill.slug}
+              initialAvgRating={skill.avg_rating}
+              initialRatingCount={skill.rating_count}
+            />
+          </div>
+
+          {/* Labels */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-sm font-semibold">Labels</h3>
+            <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
           </div>
 
           {/* Fork provenance (FR-P8) */}
@@ -232,29 +260,6 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 <GitFork className="h-4 w-4" />
                 Uses S3DF AI Gateway for Experimentalists
               </span>
-            </div>
-          )}
-
-          {/* Plugin metadata */}
-          {(skill.has_mcp_server || skill.agent_count > 0 || skill.has_scripts || skill.plugin_author) && (
-            <div className="rounded-lg border p-4 space-y-2">
-              <h3 className="text-sm font-semibold">Plugin Info</h3>
-              <div className="flex flex-wrap gap-1.5 text-xs">
-                {skill.has_mcp_server && (
-                  <span className="rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 font-medium">MCP server</span>
-                )}
-                {skill.agent_count > 0 && (
-                  <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 font-medium">
-                    {skill.agent_count} agent{skill.agent_count !== 1 ? "s" : ""}
-                  </span>
-                )}
-                {skill.has_scripts && (
-                  <span className="rounded-full bg-orange-100 text-orange-800 px-2 py-0.5 font-medium">scripts</span>
-                )}
-              </div>
-              {skill.plugin_author && (
-                <p className="text-xs text-muted-foreground">Author: {skill.plugin_author}</p>
-              )}
             </div>
           )}
 

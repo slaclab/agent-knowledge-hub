@@ -25,7 +25,7 @@ export function SkillContentTabs({
   const showSkillTab = !!skillMdRaw;
   const [activeTab, setActiveTab] = useState<"readme" | "skill">("readme");
 
-  const contentGated = isInternal && !isAuthenticated;
+  const contentGated = isInternal && !isAuthenticated && !readmeRaw && !skillMdRaw;
 
   const tabs = [
     { id: "readme" as const, label: "README.md" },

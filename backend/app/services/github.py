@@ -9,11 +9,14 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import unquote
 
 import httpx
+import logging
 from cachetools import TTLCache
 from pydantic import BaseModel
 
 from app.config import settings
 from app.models.skill import VisibilityEnum
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubSnapshot(BaseModel):
@@ -336,30 +339,49 @@ class GitHubScanner:
         private_orgs = {o.strip().lower() for o in settings.github_private_orgs.split(",") if o.strip()}
         if owner.lower() in private_orgs:
             app_token = await self._get_token(owner=owner)
-            return app_token or pat
+            chosen = app_token or pat
+            logger.debug(
+                "[TOKEN] owner=%s private_org=True app_token=%s pat=%s → using=%s",
+                owner, "set" if app_token else "None", "set" if pat else "None",
+                "app_token" if app_token else ("pat" if pat else "None"),
+            )
+            return chosen
+        logger.debug(
+            "[TOKEN] owner=%s private_org=False pat=%s → using=pat",
+            owner, "set" if pat else "None",
+        )
         return pat
 
     async def _api_get(self, path: str, token: Optional[str], accept: str = "application/vnd.github+json", owner: Optional[str] = None) -> tuple[Any, int]:
         headers = self._make_headers(token)
         headers["Accept"] = accept
+        url = f"{self._base}{path}"
+        logger.debug("[API] GET %s token=%s", path, "set" if token else "None")
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{self._base}{path}", headers=headers)
+            resp = await client.get(url, headers=headers)
             if resp.status_code == 401 and token:
+                logger.warning("[API] 401 on %s — invalidating app token and retrying", path)
                 from app.services.github_app import github_app_client
                 await github_app_client.invalidate(owner=owner)
-                resp = await client.get(f"{self._base}{path}", headers=headers)
+                resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
+                logger.debug("[API] GET %s → 200 OK", path)
                 return resp.json(), 200
+            logger.warning("[API] GET %s → %d (token=%s)", path, resp.status_code, "set" if token else "None")
             return None, resp.status_code
 
     async def scan(self, ref: GitHubRef, cache_key: Optional[str] = None) -> RawScanResult:
         if cache_key and cache_key in _scan_cache:
+            logger.debug("[SCAN] cache hit key=%s", cache_key)
             return _scan_cache[cache_key]
 
         token = await self._best_token(ref.owner)
         owner, repo = ref.owner, ref.repo
         branch = ref.branch
         path = ref.path.lstrip("/")
+
+        logger.info("[SCAN] start owner=%s repo=%s path=%r branch=%r cache_key=%s",
+                    owner, repo, path, branch, cache_key)
 
         # Parallel: repo metadata + directory contents
         repo_task = self._api_get(f"/repos/{owner}/{repo}", token, owner=owner)
@@ -391,14 +413,29 @@ class GitHubScanner:
         # Resolve branch from repo default if not specified
         if not branch:
             branch = repo_data.get("default_branch", "main")
+            logger.debug("[SCAN] resolved default branch → %s", branch)
+
+        repo_visibility = repo_data.get("visibility", "unknown")
+        logger.info("[SCAN] repo visibility=%s private=%s", repo_visibility, repo_data.get("private"))
 
         # Fetch recognised files in parallel
         recognised: List[dict] = []
         if isinstance(contents_data, list):
+            all_names = [f.get("name") for f in contents_data]
+            logger.debug("[SCAN] dir listing %d items: %s", len(all_names), all_names)
             recognised = [f for f in contents_data if f.get("type") == "file" and f.get("name") in _SKILL_FILES]
+            logger.info("[SCAN] recognised files in dir: %s", [f["name"] for f in recognised])
+        else:
+            logger.warning("[SCAN] contents_data is not a list (got %s) — path may not be a directory",
+                           type(contents_data).__name__)
 
+        # Use the GitHub Contents API (not download_url / raw.githubusercontent.com) so
+        # auth works consistently for internal/private GHEC repos.
         file_tasks = {
-            item["name"]: asyncio.create_task(self._fetch_file_content(item, token))
+            item["name"]: asyncio.create_task(self._fetch_text(
+                f"/repos/{owner}/{repo}/contents/{item['path']}" + (f"?ref={branch}" if branch else ""),
+                token,
+            ))
             for item in recognised
         }
         files: Dict[str, str] = {}
@@ -406,6 +443,11 @@ class GitHubScanner:
             content = await task
             if content is not None:
                 files[fname] = content
+                logger.debug("[SCAN] fetched %s → %d chars", fname, len(content))
+            else:
+                logger.warning("[SCAN] fetched %s → None (empty or unreadable)", fname)
+
+        logger.info("[SCAN] after dir fetch files=%s", list(files.keys()))
 
         # .claude-plugin/plugin.json fallback when plugin.json not found directly
         if "plugin.json" not in files:
@@ -413,17 +455,117 @@ class GitHubScanner:
             alt_url = f"/repos/{owner}/{repo}/contents/{plugin_dir}/plugin.json"
             if branch:
                 alt_url += f"?ref={branch}"
+            logger.debug("[SCAN] no plugin.json in root, trying fallback %s", alt_url)
             alt_content = await self._fetch_text(alt_url, token)
             if alt_content:
                 files["plugin.json"] = alt_content
+                logger.info("[SCAN] plugin.json loaded from .claude-plugin fallback (%d chars)", len(alt_content))
+            else:
+                logger.debug("[SCAN] .claude-plugin/plugin.json fallback → None")
+        else:
+            logger.debug("[SCAN] plugin.json already present, skipping .claude-plugin fallback")
+
+        # If plugin.json declares skills as a directory, look for SKILL.md inside it.
+        # Handles patterns like "skills": "./skills" where SKILL.md lives in a subdir.
+        has_skill_md = any(k in files for k in ("SKILL.md", "skill.md", "CLAUDE.md"))
+        if "plugin.json" in files and not has_skill_md:
+            logger.info("[SCAN] plugin.json present but no SKILL.md yet — checking plugin.json skills field")
+            try:
+                plugin_data = json.loads(files["plugin.json"])
+                skills_val = plugin_data.get("skills")
+                logger.debug("[SCAN] plugin.json skills=%r (type=%s)", skills_val, type(skills_val).__name__)
+                if isinstance(skills_val, str):
+                    # Resolve path: strip leading "./" or "/"
+                    skills_rel = skills_val
+                    if skills_rel.startswith("./"):
+                        skills_rel = skills_rel[2:]
+                    skills_rel = skills_rel.strip("/")
+                    skills_abs = f"{path}/{skills_rel}" if path and skills_rel else (path or skills_rel)
+                    skills_url = f"/repos/{owner}/{repo}/contents/{skills_abs}"
+                    if branch:
+                        skills_url += f"?ref={branch}"
+                    logger.info("[SCAN] skills dir lookup: resolved path=%r url=%s", skills_abs, skills_url)
+                    skills_listing, skills_status = await self._api_get(skills_url, token, owner=owner)
+                    if skills_status == 200 and isinstance(skills_listing, list):
+                        skills_names = [f.get("name") for f in skills_listing]
+                        logger.debug("[SCAN] skills dir listing (%d items): %s", len(skills_names), skills_names)
+                        direct = next(
+                            (f for f in skills_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md")),
+                            None,
+                        )
+                        if direct:
+                            logger.info("[SCAN] found %s directly in skills dir", direct["name"])
+                            content = await self._fetch_text(
+                                f"/repos/{owner}/{repo}/contents/{direct['path']}" + (f"?ref={branch}" if branch else ""),
+                                token,
+                            )
+                            if content:
+                                files[direct["name"]] = content
+                                logger.info("[SCAN] fetched %s from skills dir → %d chars", direct["name"], len(content))
+                            else:
+                                logger.warning("[SCAN] %s in skills dir returned None content", direct["name"])
+                        else:
+                            subdirs = [f for f in skills_listing if f.get("type") == "dir"]
+                            logger.info("[SCAN] no direct SKILL.md in skills dir, checking %d subdirs: %s",
+                                        len(subdirs), [d["name"] for d in subdirs[:5]])
+                            for subdir in subdirs[:5]:
+                                sub_url = f"/repos/{owner}/{repo}/contents/{subdir['path']}"
+                                if branch:
+                                    sub_url += f"?ref={branch}"
+                                logger.debug("[SCAN] checking subdir %s", subdir["path"])
+                                sub_listing, sub_status = await self._api_get(sub_url, token, owner=owner)
+                                if sub_status == 200 and isinstance(sub_listing, list):
+                                    sub_names = [f.get("name") for f in sub_listing]
+                                    logger.debug("[SCAN] subdir %s listing: %s", subdir["name"], sub_names)
+                                    skill_file = next(
+                                        (f for f in sub_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md")),
+                                        None,
+                                    )
+                                    if skill_file:
+                                        logger.info("[SCAN] found %s in subdir %s", skill_file["name"], subdir["name"])
+                                        content = await self._fetch_text(
+                                            f"/repos/{owner}/{repo}/contents/{skill_file['path']}" + (f"?ref={branch}" if branch else ""),
+                                            token,
+                                        )
+                                        if content:
+                                            files[skill_file["name"]] = content
+                                            logger.info("[SCAN] fetched %s from subdir %s → %d chars",
+                                                        skill_file["name"], subdir["name"], len(content))
+                                        else:
+                                            logger.warning("[SCAN] %s in subdir %s returned None content",
+                                                           skill_file["name"], subdir["name"])
+                                        break
+                                    else:
+                                        logger.debug("[SCAN] subdir %s has no SKILL.md", subdir["name"])
+                                else:
+                                    logger.warning("[SCAN] subdir %s listing failed status=%d", subdir["name"], sub_status)
+                    else:
+                        logger.warning("[SCAN] skills dir %r → status=%d or not a list", skills_abs, skills_status)
+                elif isinstance(skills_val, list):
+                    logger.info("[SCAN] plugin.json skills is a list (file paths) — no subdir traversal needed")
+                else:
+                    logger.debug("[SCAN] plugin.json has no 'skills' field or value is %r", skills_val)
+            except Exception as exc:
+                logger.warning("[SCAN] SKILL.md subdir lookup failed: %s", exc, exc_info=True)
+        elif has_skill_md:
+            logger.debug("[SCAN] SKILL.md already found, skipping plugin.json subdir lookup")
+        else:
+            logger.debug("[SCAN] no plugin.json present, skipping subdir lookup")
 
         # Repo-root README (only needed when we're in a subdirectory)
         root_readme: Optional[str] = None
         if path:
+            logger.debug("[SCAN] fetching repo-root README (path is subdir)")
             root_readme = await self._fetch_text(
                 f"/repos/{owner}/{repo}/contents/README.md" + (f"?ref={branch}" if branch else ""),
                 token,
             )
+            logger.info("[SCAN] root_readme=%s", f"{len(root_readme)} chars" if root_readme else "None")
+
+        logger.info("[SCAN] complete — files=%s root_readme=%s no_skill_files=%s",
+                    list(files.keys()),
+                    "set" if root_readme else "None",
+                    len(files) == 0)
 
         result = RawScanResult(
             ref=GitHubRef(owner=ref.owner, repo=ref.repo, branch=branch, path=ref.path),
@@ -457,14 +599,20 @@ class GitHubScanner:
     async def _fetch_text(self, path: str, token: Optional[str]) -> Optional[str]:
         data, status = await self._api_get(path, token)
         if status != 200 or not data:
+            logger.debug("[FETCH] %s → status=%d, returning None", path, status)
             return None
-        content_b64 = data.get("content", "")
-        if content_b64:
-            try:
-                return base64.b64decode(content_b64.replace("\n", "")).decode("utf-8", errors="replace")
-            except Exception:
-                pass
-        return None
+        file_type = data.get("type") if isinstance(data, dict) else "list"
+        content_b64 = data.get("content", "") if isinstance(data, dict) else ""
+        if not content_b64:
+            logger.debug("[FETCH] %s → type=%s no content field (symlink or dir?), returning None", path, file_type)
+            return None
+        try:
+            text = base64.b64decode(content_b64.replace("\n", "")).decode("utf-8", errors="replace")
+            logger.debug("[FETCH] %s → type=%s decoded %d chars", path, file_type, len(text))
+            return text
+        except Exception as exc:
+            logger.warning("[FETCH] %s → base64 decode failed: %s", path, exc)
+            return None
 
     async def discover(self, ref: GitHubRef, cache_key: Optional[str] = None) -> tuple[List[RawScanResult], bool, bool]:
         """Recursively find skill directories (containing skill.md or CLAUDE.md).
@@ -472,11 +620,14 @@ class GitHubScanner:
         Returns (results, tree_truncated, capped).
         """
         if cache_key and cache_key in _scan_cache:
+            logger.debug("[DISCOVER] cache hit key=%s", cache_key)
             return _scan_cache[cache_key]
 
         token = await self._best_token(ref.owner)
         owner, repo = ref.owner, ref.repo
         branch = ref.branch
+
+        logger.info("[DISCOVER] start owner=%s repo=%s path=%r branch=%r", owner, repo, ref.path, branch)
 
         # Resolve default branch if needed
         if not branch:
@@ -484,6 +635,7 @@ class GitHubScanner:
             if status != 200:
                 raise GitHubFetchError("Repo not found.")
             branch = repo_data.get("default_branch", "main")
+            logger.debug("[DISCOVER] resolved default branch → %s", branch)
 
         tree_data, tree_status = await self._api_get(
             f"/repos/{owner}/{repo}/git/trees/{branch}?recursive=1", token, owner=owner
@@ -493,25 +645,53 @@ class GitHubScanner:
 
         truncated = bool(tree_data.get("truncated"))
         tree_items = tree_data.get("tree", [])
+        logger.info("[DISCOVER] tree has %d items truncated=%s", len(tree_items), truncated)
 
         # Find directories that contain skill.md, CLAUDE.md, or plugin.json
         base = ref.path.strip("/")  # "" for root, "engineering" for subdir
-        skill_file_dirs: set[str] = set()
+        _plugin_subdir_re = re.compile(r"(^|\/)\.[\w-]+-plugin$")
+        plugin_json_dirs: set[str] = set()
+        skill_md_dirs: set[str] = set()
         for item in tree_items:
             if item.get("type") == "blob":
                 ipath = item.get("path", "")
                 fname = ipath.rsplit("/", 1)[-1] if "/" in ipath else ipath
                 if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json"):
                     dirpath = ipath.rsplit("/", 1)[0] if "/" in ipath else "/"
-                    # .claude-plugin/plugin.json → parent is the skill dir
-                    if fname == "plugin.json" and (dirpath == ".claude-plugin" or dirpath.endswith("/.claude-plugin")):
-                        dirpath = dirpath[: -len("/.claude-plugin")] if "/" in dirpath else "/"
+                    orig_dirpath = dirpath
+                    # .<name>-plugin/plugin.json (e.g. .claude-plugin, .codex-plugin) → use parent
+                    if fname == "plugin.json" and _plugin_subdir_re.search(dirpath):
+                        dirpath = dirpath.rsplit("/", 1)[0] if "/" in dirpath else "/"
+                        logger.debug("[DISCOVER] plugin subdir strip: %s → %s", orig_dirpath, dirpath)
                     if base and not dirpath.startswith(base):
+                        logger.debug("[DISCOVER] skip %s (not under base %r)", ipath, base)
                         continue
-                    skill_file_dirs.add(dirpath)
+                    if fname == "plugin.json":
+                        plugin_json_dirs.add(dirpath)
+                    else:
+                        skill_md_dirs.add(dirpath)
+
+        logger.info("[DISCOVER] plugin_json_dirs=%s skill_md_dirs=%s", sorted(plugin_json_dirs), sorted(skill_md_dirs))
+
+        # Drop SKILL.md-only dirs that are subdirectories of a plugin.json dir
+        # (e.g. skills/foo/SKILL.md inside a plugin that already has plugin.json at root)
+        pruned_skill_md = {
+            d for d in skill_md_dirs
+            if not any(
+                d != p and d.startswith(p.rstrip("/") + "/")
+                for p in plugin_json_dirs
+            )
+        }
+        pruned = skill_md_dirs - pruned_skill_md
+        if pruned:
+            logger.info("[DISCOVER] pruned nested skill_md dirs: %s", sorted(pruned))
+        skill_file_dirs = plugin_json_dirs | pruned_skill_md
+        logger.info("[DISCOVER] final skill_file_dirs (%d): %s", len(skill_file_dirs), sorted(skill_file_dirs))
 
         capped = len(skill_file_dirs) > 20
         dirs_to_scan = list(skill_file_dirs)[:20]
+        if capped:
+            logger.warning("[DISCOVER] capped at 20 dirs, skipping %d", len(skill_file_dirs) - 20)
 
         # Parallel scans (up to 20)
         scan_tasks = [
@@ -519,7 +699,11 @@ class GitHubScanner:
             for d in dirs_to_scan
         ]
         results = await asyncio.gather(*scan_tasks, return_exceptions=True)
+        errors = [r for r in results if isinstance(r, Exception)]
         valid = [r for r in results if isinstance(r, RawScanResult)]
+        if errors:
+            logger.warning("[DISCOVER] %d scan tasks failed: %s", len(errors), errors)
+        logger.info("[DISCOVER] complete — %d valid scan results", len(valid))
 
         out = (valid, truncated, capped)
         if cache_key:

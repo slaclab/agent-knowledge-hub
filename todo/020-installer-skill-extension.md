@@ -1,5 +1,7 @@
 # TODO #020 — Installer Skill Extension: Directory Skills, Multi-Platform, Richer Scaffold
 
+> **Scope:** Changes are confined to `skill/SKILL.md` — the Claude-side installer skill that users invoke locally. No backend (`github.py`, database, API) changes are required or included.
+
 > **Priority:** 🟡 P2 — Medium
 > **Status:** ⬜ Open
 > **Branch:** —
@@ -43,6 +45,7 @@ The `/agent-knowledge-hub` installer skill (`skill/SKILL.md`) was designed aroun
 
 ## Non-Goals
 
+- **Backend changes** — `github.py`, the database schema, or any API endpoint. The backend scanner already handles plugin.json correctly (#019 covers that side).
 - Codex-specific install paths (we don't know Codex's install directories yet; warn + skip is sufficient for now)
 - Installing from non-GitHub sources
 - Plugin signing or integrity verification
@@ -269,13 +272,18 @@ This matches the canonical format the repo itself uses (`"skills": "./skill/"` i
 
 ### ADR-001: Directory-form components use recursive GitHub Contents API fetch
 
-**Status:** Accepted
+**Status:** Accepted (for #020 scope; superseded by [#022](022-installer-git-clone.md) long-term)
 
 **Context:** `"skills": "./skills"` declares a directory. We need to install all files within it, potentially nested several levels deep (skills/epics-archiver/scripts/query.py).
 
-**Decision:** Recursively fetch via GitHub Contents API. First call gets top-level listing; recurse into subdirectories. Cap at 200 files total to prevent runaway installs.
+Three options were evaluated (see [`docs/github-api-plugin-installation.md`](../docs/github-api-plugin-installation.md)):
+- **Contents API (recursive):** current path; O(depth × breadth) round trips; rate-limit sensitive; no git required
+- **Git Trees API:** single call enumerates all paths; still needs per-file downloads; better than Contents API for enumeration
+- **Git clone:** single operation; no API rate limits; arbitrary depth; what Claude Code native `/plugin install` uses
 
-**Consequences:** More API calls per install (bounded by directory depth × breadth). At current skill sizes (< 50 files), fine. Rate limit advisory already shown for 403 responses.
+**Decision:** Recursive Contents API fetch for #020 (simpler, no new system dependency). Cap at 200 files. Switch to git clone tracked in [#022](022-installer-git-clone.md).
+
+**Consequences:** More API calls per install (bounded by directory depth × breadth). At current skill sizes (< 50 files), fine. Rate limit advisory already shown for 403 responses. Git Trees API is a better interim option than recursive Contents API for enumeration and should be considered if rate limits become a problem before #022 ships.
 
 ---
 
@@ -313,15 +321,38 @@ This matches the canonical format the repo itself uses (`"skills": "./skill/"` i
 
 ---
 
-### ADR-003: Claude Code paths only; Codex paths TBD
+### ADR-003: Codex install paths — now documented
 
-**Status:** Accepted
+**Status:** Superseded by research (2026-06-02). See `source/research/agent-skill-mcp-integration/agent-5-codex-install-paths.md`.
 
-**Context:** We don't know Codex's install directory conventions. Installing to wrong paths is worse than not installing.
+**Context:** Codex install conventions were unknown at the time of writing. Research against `openai/codex` main branch (codex-rs, the actively maintained Rust CLI) has now established them.
 
-**Decision:** When `compatible_platforms` includes non-claude-code entries, note them but do not attempt to install those components. Revisit when Codex install conventions are documented.
+**What was found:**
+- `CODEX_HOME` defaults to `~/.codex/` (overridable via env var)
+- Codex recognises **both** `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` — a plugin with `.claude-plugin/plugin.json` works in Codex without modification
+- Skills live under `skills/<skill-name>/SKILL.md` within a plugin directory
+- Plugins are registered via `~/.codex/config.toml` using a local marketplace entry:
+  ```toml
+  [marketplaces."agent-knowledge-hub"]
+  source_type = "local"
+  source = "~/.akh/plugins"
 
-**Consequences:** Codex users get an informational message; they must install Codex components manually for now.
+  [plugins."<plugin-name>@agent-knowledge-hub"]
+  enabled = true
+  ```
+- Global instruction file is `~/.codex/AGENTS.md` (also reads `~/.codex/AGENTS.override.md`)
+
+**Decision:** When `compatible_platforms` includes `"codex"`, the installer should:
+1. Install plugin files to `~/.akh/plugins/<slug>/` (AKH-controlled directory, not Codex's `.tmp/marketplaces/`)
+2. Append a local marketplace + plugin entry to `~/.codex/config.toml`
+3. Optionally append to `~/.codex/AGENTS.md` for global skill instructions
+
+This is a new delivery slice for #020 — tracked as Slice 5 below.
+
+**Remaining gaps before implementing:**
+- `marketplace.json` manifest schema not yet fully traced in codex-rs source
+- Whether Codex auto-discovers plugins without an explicit `[plugins]` config.toml entry is unconfirmed
+- Project-level `.codex/config.toml` layer existence not fully verified
 
 ---
 
@@ -368,6 +399,13 @@ Choice: Scaffold with actual agent templates vs empty .md stubs
 - Richer question flow
 - Directory structure generation
 - Full plugin.json template with all supported fields
+
+**Slice 5 — Codex install path** *(unblocked by research 2026-06-02)*
+- When `compatible_platforms` includes `"codex"`: install plugin to `~/.akh/plugins/<slug>/`
+- Append local marketplace + plugin entry to `~/.codex/config.toml`
+- Optionally append skill instructions to `~/.codex/AGENTS.md`
+- `remove`: reverse the config.toml entries and delete `~/.akh/plugins/<slug>/`
+- Blocked on: confirming `marketplace.json` schema and whether explicit `[plugins]` entry is required
 
 ---
 

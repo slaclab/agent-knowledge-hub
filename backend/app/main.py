@@ -16,6 +16,7 @@ from app.config import settings
 from app.models import ALL_MODELS
 from app.routers import health, me, site_settings, skills
 from app.routers import github_scan
+import app.services.local  # noqa: F401 — registers LocalScanner in scanner_registry
 from app.routers.catalog import router as catalog_router
 from app.routers.labels import admin_router as labels_admin_router
 from app.routers.labels import router as labels_router

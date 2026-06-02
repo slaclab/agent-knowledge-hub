@@ -55,7 +55,8 @@ async def _check_existing(repo_url: str, skill_path: str) -> str | None:
     return existing.slug if existing else None
 
 
-@router.get("/github-scan", response_model=SkillScanSnapshotOut | DiscoverOut)
+@router.get("/scan", response_model=SkillScanSnapshotOut | DiscoverOut)
+@router.get("/github-scan", response_model=SkillScanSnapshotOut | DiscoverOut)  # permanent alias
 @limiter.limit("10/minute")
 async def github_scan(
     url: str = Query(..., description="GitHub repo or tree URL to scan"),

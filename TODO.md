@@ -5,7 +5,7 @@
 | [001](todo/001-private-repos-and-forks.md) | Private/internal GitHub repos, access model, and fork provenance | 🏁 Implementation Done |
 | [002](todo/002-skill-registration-ux.md) | Improved Skill Registration UX: Directory-Aware Submission | 🏁 Implementation Done |
 | [003](todo/003-label-ux.md) | Label UX: community tagging, filter, admin rename/merge/delete | 🏁 Implementation Done |
-| [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ⬜ Open |
+| [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | 🔍 Reviewed |
 | [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ✅ Merged |
 | [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | 📋 Preparing |
 | [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | 🏁 Implementation Done |
@@ -23,3 +23,9 @@
 | [019](todo/019-plugin-json-scan-pipeline.md) | plugin.json-first scan pipeline: rich component metadata + structural auto-labels | 🏁 Implementation Done |
 | [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | ⬜ Open |
 | [021](todo/021-marketplace-monorepo-publish.md) | Marketplace monorepo publish: `/agent-knowledge-hub create` → PR to slac-agent-plugin-marketplace | ⬜ Open |
+| [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | ⬜ Open |
+| [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | ⬜ Open |
+| [024](todo/024-agents-md-scanner.md) | AGENTS.md scanner support: recognise Codex/OpenCode instruction files | ⬜ Open |
+| [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | ⬜ Open |
+| [026](todo/026-package-embedded-skills.md) | Package-embedded skill discovery: `.agents/skills/` convention in Python/npm packages | ⬜ Open |
+| [027](todo/027-mcp-registry-integration.md) | MCP Registry integration: Pass 0 autodiscovery from modelcontextprotocol.io/registry | ⬜ Open |

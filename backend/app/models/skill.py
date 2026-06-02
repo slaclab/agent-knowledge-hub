@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from beanie import Document, Indexed
 from pymongo import IndexModel, ASCENDING, DESCENDING
@@ -70,6 +70,10 @@ class Skill(Document):
     has_mcp_server: bool = False
     has_scripts: bool = False
     plugin_author: Optional[str] = None
+
+    # source tracking
+    source_type: str = "github"                           # "github" | "local"
+    snapshotted_files: Dict[str, str] = Field(default_factory=dict)  # populated for local skills
 
     submitter_id: str
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

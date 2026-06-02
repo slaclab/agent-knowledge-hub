@@ -15,6 +15,21 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.models.skill import VisibilityEnum
+from app.services.scanner import (  # noqa: E402
+    GitHubRef,
+    LocalRef,
+    RawScanResult,
+    SourceRef,
+    SourceScanner,
+    scanner_registry,
+)
+
+# Re-export for backward compatibility — existing imports from github.py still work
+__all__ = [
+    "GitHubRef",
+    "RawScanResult",
+    "SourceRef",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -196,15 +211,7 @@ class GitHubFetcher:
 github_fetcher = GitHubFetcher()
 
 
-# ---------------------------------------------------------------------------
-# GitHubRef — parsed URL components
-# ---------------------------------------------------------------------------
-
-class GitHubRef(BaseModel):
-    owner: str
-    repo: str
-    branch: Optional[str] = None
-    path: str = "/"
+# GitHubRef is imported from scanner.py above.
 
 
 # ---------------------------------------------------------------------------
@@ -270,19 +277,9 @@ class GitHubURLParser:
 github_url_parser = GitHubURLParser()
 
 
-# ---------------------------------------------------------------------------
-# RawScanResult
-# ---------------------------------------------------------------------------
+# RawScanResult is imported from scanner.py above.
 
 _SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml", "plugin.json"}
-
-
-class RawScanResult(BaseModel):
-    ref: GitHubRef
-    repo_meta: Dict[str, Any] = {}
-    files: Dict[str, str] = {}        # filename → decoded text content
-    root_readme: Optional[str] = None  # repo-root README when path != "/"
-    no_skill_files: bool = False       # True when directory has no recognised skill files
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +317,7 @@ class SkillScanSnapshot(BaseModel):
 _scan_cache: TTLCache = TTLCache(maxsize=256, ttl=60)
 
 
-class GitHubScanner:
+class GitHubScanner(SourceScanner):
     def __init__(self):
         self._base = settings.github_api_url
 
@@ -712,6 +709,7 @@ class GitHubScanner:
 
 
 github_scanner = GitHubScanner()
+scanner_registry.register("github", github_scanner)
 
 
 # ---------------------------------------------------------------------------

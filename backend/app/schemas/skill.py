@@ -100,6 +100,8 @@ class SkillOut(BaseModel):
     has_mcp_server: bool = False
     has_scripts: bool = False
     plugin_author: Optional[str] = None
+    # source tracking
+    source_type: str = "github"
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
@@ -132,6 +134,8 @@ class SkillListOut(BaseModel):
     has_mcp_server: bool = False
     has_scripts: bool = False
     plugin_author: Optional[str] = None
+    # source tracking
+    source_type: str = "github"
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime

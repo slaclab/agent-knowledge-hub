@@ -34,11 +34,13 @@ FAKE_DIR_LISTING = [
     {
         "name": "SKILL.md",
         "type": "file",
+        "path": "SKILL.md",
         "download_url": "https://raw.githubusercontent.com/ex/repo/main/SKILL.md",
     },
     {
         "name": "README.md",
         "type": "file",
+        "path": "README.md",
         "download_url": "https://raw.githubusercontent.com/ex/repo/main/README.md",
     },
 ]
@@ -89,6 +91,9 @@ async def test_create_no_skill_files_leaves_fields_null():
     respx.get("https://api.github.com/repos/ex/empty/contents/").mock(
         return_value=httpx.Response(200, json=[])  # empty directory
     )
+    respx.get("https://api.github.com/repos/ex/empty/contents/.claude-plugin/plugin.json?ref=main").mock(
+        return_value=httpx.Response(404)
+    )
 
     data = SkillCreate(repo_url="https://github.com/ex/empty", name="empty-skill")
     skill = await skill_repository.create(data, submitter_id="alice")
@@ -114,11 +119,15 @@ async def test_create_skill_md_capped_at_100kb():
         return_value=httpx.Response(200, json=[{
             "name": "SKILL.md",
             "type": "file",
+            "path": "SKILL.md",
             "download_url": "https://raw.githubusercontent.com/ex/big/main/SKILL.md",
         }])
     )
-    respx.get("https://raw.githubusercontent.com/ex/big/main/SKILL.md").mock(
-        return_value=httpx.Response(200, text=large_content)
+    respx.get("https://api.github.com/repos/ex/big/contents/SKILL.md").mock(
+        return_value=httpx.Response(200, json={"type": "file", "content": _b64(large_content)})
+    )
+    respx.get("https://api.github.com/repos/ex/big/contents/.claude-plugin/plugin.json?ref=main").mock(
+        return_value=httpx.Response(404)
     )
 
     data = SkillCreate(repo_url="https://github.com/ex/big", name="big-skill")
@@ -255,11 +264,18 @@ def _mock_github_for_create() -> None:
     respx.get("https://api.github.com/repos/ex/repo/contents/").mock(
         return_value=httpx.Response(200, json=FAKE_DIR_LISTING)
     )
-    respx.get("https://raw.githubusercontent.com/ex/repo/main/SKILL.md").mock(
-        return_value=httpx.Response(200, text=SKILL_MD_CONTENT)
+    respx.get("https://api.github.com/repos/ex/repo/contents/SKILL.md").mock(
+        return_value=httpx.Response(200, json={"type": "file", "content": _b64(SKILL_MD_CONTENT)})
     )
-    respx.get("https://raw.githubusercontent.com/ex/repo/main/README.md").mock(
-        return_value=httpx.Response(200, text=README_CONTENT)
+    respx.get("https://api.github.com/repos/ex/repo/contents/README.md").mock(
+        return_value=httpx.Response(200, json={"type": "file", "content": _b64(README_CONTENT)})
+    )
+    # scanner falls back to .claude-plugin/plugin.json when plugin.json not in dir listing
+    respx.get("https://api.github.com/repos/ex/repo/contents/.claude-plugin/plugin.json").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.get("https://api.github.com/repos/ex/repo/contents/.claude-plugin/plugin.json?ref=main").mock(
+        return_value=httpx.Response(404)
     )
 
 
@@ -273,9 +289,15 @@ def _mock_github_for_refetch(updated_readme: str) -> None:
     respx.get("https://api.github.com/repos/ex/repo/contents/").mock(
         return_value=httpx.Response(200, json=FAKE_DIR_LISTING)
     )
-    respx.get("https://raw.githubusercontent.com/ex/repo/main/SKILL.md").mock(
-        return_value=httpx.Response(200, text=SKILL_MD_CONTENT)
+    respx.get("https://api.github.com/repos/ex/repo/contents/SKILL.md").mock(
+        return_value=httpx.Response(200, json={"type": "file", "content": _b64(SKILL_MD_CONTENT)})
     )
-    respx.get("https://raw.githubusercontent.com/ex/repo/main/README.md").mock(
-        return_value=httpx.Response(200, text=updated_readme)
+    respx.get("https://api.github.com/repos/ex/repo/contents/README.md").mock(
+        return_value=httpx.Response(200, json={"type": "file", "content": _b64(updated_readme)})
+    )
+    respx.get("https://api.github.com/repos/ex/repo/contents/.claude-plugin/plugin.json").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.get("https://api.github.com/repos/ex/repo/contents/.claude-plugin/plugin.json?ref=main").mock(
+        return_value=httpx.Response(404)
     )

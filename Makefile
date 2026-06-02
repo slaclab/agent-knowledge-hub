@@ -2,7 +2,7 @@ DEV_KUBECONFIG  ?= $(HOME)/.kube/config.sage-dev
 PROD_KUBECONFIG ?= $(HOME)/.kube/config.sage
 
 DEV_OVERLAY  := /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/dev/
-PROD_OVERLAY := /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/prod2/
+PROD_OVERLAY := /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/prod/
 TAG := $(shell t=$$(git describe --tags --exact-match 2>/dev/null); [ -n "$$t" ] && echo "$${t\#v}" || grep '^version' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
 
 .PHONY: all backend frontend dev-deploy prod-deploy

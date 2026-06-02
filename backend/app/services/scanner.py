@@ -15,6 +15,17 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+_MAX_MANIFEST = 200
+
+_TEXT_EXTENSIONS: frozenset[str] = frozenset({
+    ".md", ".txt", ".rst", ".sh", ".bash", ".zsh", ".py", ".js", ".ts",
+    ".jsx", ".tsx", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+    ".env", ".dockerfile", ".gitignore", ".gitattributes", ".editorconfig",
+    ".sql", ".html", ".css", ".go", ".rb", ".rs", ".java", ".kt", ".swift",
+    ".xml", ".csv", ".r", ".m", ".c", ".cpp", ".h", ".hpp", ".cs",
+    ".lua", ".php", ".scala", ".clj", ".ex", ".exs", ".erl", ".hs",
+})
+
 
 # ---------------------------------------------------------------------------
 # SourceRef — discriminated union
@@ -40,6 +51,17 @@ SourceRef = Annotated[
 
 
 # ---------------------------------------------------------------------------
+# FileManifestEntry — value object representing one entry in the file manifest
+# ---------------------------------------------------------------------------
+
+class FileManifestEntry(BaseModel):
+    path: str          # basename within skill_path (item["name"] from Contents API)
+    size_bytes: int
+    is_text: bool      # extension-based; False for dirs
+    is_dir: bool = False  # True when GitHub API returns type:"dir"
+
+
+# ---------------------------------------------------------------------------
 # RawScanResult — generic scan output, source-agnostic
 # ---------------------------------------------------------------------------
 
@@ -49,7 +71,9 @@ class RawScanResult(BaseModel):
     files: Dict[str, str] = {}           # filename → decoded text content
     root_readme: Optional[str] = None
     no_skill_files: bool = False
-    snapshotted_files: Dict[str, str] = {}  # persisted for local skills (Slice 2)
+    snapshotted_files: Dict[str, str] = {}  # persisted for local skills
+    all_files: List[FileManifestEntry] = []
+    manifest_truncated: bool = False
 
 
 # ---------------------------------------------------------------------------

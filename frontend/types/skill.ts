@@ -48,6 +48,8 @@ export interface Skill {
   has_mcp_server: boolean;
   has_scripts: boolean;
   plugin_author: string | null;
+  file_manifest: FileManifestEntry[];
+  manifest_truncated: boolean;
   labels: LabelOut[];
   my_rating: number | null;
 }
@@ -131,6 +133,13 @@ export interface GitHubRef {
   path: string;
 }
 
+export interface FileManifestEntry {
+  path: string;
+  size_bytes: number;
+  is_text: boolean;
+  is_dir: boolean;
+}
+
 export interface SkillScanSnapshot {
   ref: GitHubRef;
   name: string | null;
@@ -152,6 +161,8 @@ export interface SkillScanSnapshot {
   has_scripts: boolean;
   plugin_author: string | null;
   keywords: string[];
+  file_manifest: FileManifestEntry[];
+  manifest_truncated: boolean;
 }
 
 export interface DiscoverResult {

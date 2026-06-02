@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useRef } from "react";
 import { getGithubScan, getGithubDiscover, createSkill, addLabel } from "@/lib/api";
-import type { SkillScanSnapshot, DiscoverResult, LabelOut } from "@/types/skill";
+import type { SkillScanSnapshot, DiscoverResult, LabelOut, FileManifestEntry } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
-import { AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight, File, Folder } from "lucide-react";
 import Link from "next/link";
 import { LabelPicker } from "@/components/label-picker";
 import { platformPillClass } from "@/components/platform-badges";
@@ -430,6 +430,54 @@ function DiscoveryCard({
                 className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
           </div>
+          {draft.snapshot.file_manifest && draft.snapshot.file_manifest.length > 0 && (
+            <FileManifestSection entries={draft.snapshot.file_manifest} truncated={draft.snapshot.manifest_truncated} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FileManifestSection({ entries, truncated }: { entries: FileManifestEntry[]; truncated: boolean }) {
+  const [open, setOpen] = useState(false);
+  const fileCount = entries.filter((e) => !e.is_dir).length;
+  const dirCount = entries.filter((e) => e.is_dir).length;
+  const label = `Files (${fileCount}${dirCount > 0 ? ` + ${dirCount} dir${dirCount !== 1 ? "s" : ""}` : ""})`;
+
+  return (
+    <div className="border-t pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        <span className="font-medium">{label}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-0.5 max-h-48 overflow-y-auto">
+          {entries.map((entry) => (
+            <div key={entry.path} className={`flex items-center gap-2 px-1 py-0.5 rounded text-xs ${entry.is_dir ? "text-muted-foreground/70" : "text-foreground"}`}>
+              {entry.is_dir
+                ? <Folder className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                : <File className="h-3 w-3 shrink-0 text-muted-foreground" />}
+              <span className={`flex-1 font-mono truncate ${entry.is_dir ? "italic" : ""}`}>{entry.path}</span>
+              {entry.is_dir
+                ? <span className="shrink-0 text-muted-foreground/60 text-[10px]">dir</span>
+                : <span className="shrink-0 text-muted-foreground">{formatBytes(entry.size_bytes)}</span>}
+            </div>
+          ))}
+          {truncated && (
+            <p className="text-[10px] text-muted-foreground px-1 pt-1">Showing first 200 files — visit GitHub for the full listing.</p>
+          )}
         </div>
       )}
     </div>

@@ -8,6 +8,8 @@ from beanie import Document, Indexed
 from pymongo import IndexModel, ASCENDING, DESCENDING
 from pydantic import Field, field_validator
 
+from app.services.scanner import FileManifestEntry  # noqa: E402 — scanner is a leaf module
+
 
 class EntryType(str, enum.Enum):
     skill = "skill"
@@ -74,6 +76,10 @@ class Skill(Document):
     # source tracking
     source_type: str = "github"                           # "github" | "local"
     snapshotted_files: Dict[str, str] = Field(default_factory=dict)  # populated for local skills
+
+    # file manifest
+    file_manifest: List[FileManifestEntry] = Field(default_factory=list)
+    manifest_truncated: bool = False
 
     submitter_id: str
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

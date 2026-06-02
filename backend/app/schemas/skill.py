@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from app.models.skill import EntryType, SkillStatus, VisibilityEnum
+from app.services.scanner import FileManifestEntry
 
 
 _GITHUB_URL_RE = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
@@ -105,6 +106,9 @@ class SkillOut(BaseModel):
     plugin_author: Optional[str] = None
     # source tracking
     source_type: str = "github"
+    # file manifest
+    file_manifest: List[FileManifestEntry] = []
+    manifest_truncated: bool = False
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
@@ -203,6 +207,9 @@ class SkillScanSnapshotOut(BaseModel):
     has_scripts: bool = False
     plugin_author: Optional[str] = None
     keywords: List[str] = []
+    # file manifest
+    file_manifest: List[FileManifestEntry] = []
+    manifest_truncated: bool = False
 
 
 class DiscoverOut(BaseModel):

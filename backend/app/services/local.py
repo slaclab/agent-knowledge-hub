@@ -18,10 +18,12 @@ from pathlib import Path
 from typing import Any, List
 
 from app.services.scanner import (
+    FileManifestEntry,
     LocalRef,
     RawScanResult,
     SourceRef,
     SourceScanner,
+    _TEXT_EXTENSIONS,
     scanner_registry,
 )
 
@@ -62,12 +64,27 @@ class LocalScanner(SourceScanner):
                 files["plugin.json"] = content
 
         no_skill_files = not any(f in files for f in _SKILL_MARKERS)
+        all_files = self._build_local_manifest(files)
         return RawScanResult(
             ref=ref,
             files=files,
             snapshotted_files=files,
             no_skill_files=no_skill_files,
+            all_files=all_files,
         )
+
+    def _build_local_manifest(self, files: dict[str, str]) -> list[FileManifestEntry]:
+        entries = []
+        for fname, content in files.items():
+            ext = "." + fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+            is_text = ext in _TEXT_EXTENSIONS
+            entries.append(FileManifestEntry(
+                path=fname,
+                size_bytes=len(content.encode("utf-8")),
+                is_text=is_text,
+                is_dir=False,
+            ))
+        return entries
 
     async def discover(self, ref: SourceRef, **kwargs: Any) -> tuple[List[RawScanResult], bool, bool]:
         assert isinstance(ref, LocalRef), f"LocalScanner requires LocalRef, got {type(ref)}"

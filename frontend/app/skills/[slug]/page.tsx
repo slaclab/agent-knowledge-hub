@@ -117,6 +117,9 @@ export default async function SkillDetailPage({ params }: PageProps) {
             skillMdFilename={skill.skill_md_filename}
             isInternal={isInternal}
             isAuthenticated={!!viewer}
+            fileManifest={skill.file_manifest ?? []}
+            manifestTruncated={skill.manifest_truncated ?? false}
+            slug={params.slug}
           />
         </div>
 

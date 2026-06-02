@@ -143,6 +143,8 @@ class SkillRepository:
         skill_md_filename: Optional[str] = None
         readme_raw: Optional[str] = None
         plugin_meta: dict = {}
+        file_manifest: list = []
+        manifest_truncated: bool = False
         try:
             from app.services.github import github_url_parser, metadata_extractor
             ref = github_url_parser.parse(repo_url)
@@ -150,6 +152,8 @@ class SkillRepository:
             logger.info("[CREATE] scanning ref owner=%s repo=%s branch=%r path=%s",
                         ref.owner, ref.repo, ref.branch, ref.path)
             scan = await github_scanner.scan(ref)
+            file_manifest = scan.all_files
+            manifest_truncated = scan.manifest_truncated
             logger.info("[CREATE] scan complete files=%s root_readme=%s",
                         list(scan.files.keys()), "set" if scan.root_readme else "None")
             for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
@@ -202,6 +206,8 @@ class SkillRepository:
             has_mcp_server=plugin_meta.get("has_mcp_server", False),
             has_scripts=plugin_meta.get("has_scripts", False),
             plugin_author=plugin_meta.get("plugin_author"),
+            file_manifest=file_manifest,
+            manifest_truncated=manifest_truncated,
             submitter_id=submitter_id,
         )
         try:
@@ -262,11 +268,13 @@ class SkillRepository:
     async def _create_local(self, data: SkillCreate, submitter_id: str, skill_path: str) -> Skill:
         """Create a skill from snapshotted local files — no GitHub calls."""
         from app.services.github import metadata_extractor
+        from app.services.local import local_scanner
         from app.services.scanner import LocalRef, RawScanResult
 
         files = data.snapshotted_files
         ref = LocalRef(path=data.repo_url.removeprefix("local://"))
-        scan = RawScanResult(ref=ref, files=files, snapshotted_files=files)
+        local_manifest = local_scanner._build_local_manifest(files)
+        scan = RawScanResult(ref=ref, files=files, snapshotted_files=files, all_files=local_manifest)
         snap = metadata_extractor.extract(scan)
 
         skill_md_raw: Optional[str] = None
@@ -307,6 +315,8 @@ class SkillRepository:
             has_mcp_server=plugin_meta.get("has_mcp_server", False),
             has_scripts=plugin_meta.get("has_scripts", False),
             plugin_author=plugin_meta.get("plugin_author"),
+            file_manifest=snap.file_manifest,
+            manifest_truncated=snap.manifest_truncated,
             submitter_id=submitter_id,
         )
         try:
@@ -396,6 +406,10 @@ class SkillRepository:
                     skill.has_scripts = pm.get("has_scripts", False)
                     skill.plugin_author = pm.get("plugin_author")
                     logger.info("[REFETCH] plugin_meta updated: %s", pm)
+                skill.file_manifest = scan.all_files
+                skill.manifest_truncated = scan.manifest_truncated
+                logger.info("[REFETCH] file_manifest updated: %d entries, truncated=%s",
+                            len(scan.all_files), scan.manifest_truncated)
             except (GitHubFetchError, ValueError) as exc:
                 logger.warning("[REFETCH] scan failed: %s", exc, exc_info=True)
             skill.updated_at = datetime.now(timezone.utc)

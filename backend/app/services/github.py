@@ -16,11 +16,14 @@ from pydantic import BaseModel
 from app.config import settings
 from app.models.skill import VisibilityEnum
 from app.services.scanner import (  # noqa: E402
+    FileManifestEntry,
     GitHubRef,
     LocalRef,
     RawScanResult,
     SourceRef,
     SourceScanner,
+    _MAX_MANIFEST,
+    _TEXT_EXTENSIONS,
     scanner_registry,
 )
 
@@ -29,7 +32,35 @@ __all__ = [
     "GitHubRef",
     "RawScanResult",
     "SourceRef",
+    "build_file_manifest",
 ]
+
+
+def build_file_manifest(
+    contents_data: List[Dict[str, Any]],
+) -> tuple[List[FileManifestEntry], bool]:
+    """Build a FileManifest from a GitHub Contents API directory listing.
+
+    Returns (entries, truncated). Only the first _MAX_MANIFEST items are kept.
+    Uses item["name"] (basename) as the path, not item["path"] (repo-root-relative).
+    """
+    entries: List[FileManifestEntry] = []
+    truncated = False
+    for item in contents_data:
+        if len(entries) >= _MAX_MANIFEST:
+            truncated = True
+            break
+        name = item.get("name", "")
+        item_type = item.get("type", "file")
+        size = item.get("size") or 0
+        is_dir = item_type == "dir"
+        if is_dir:
+            entries.append(FileManifestEntry(path=name, size_bytes=0, is_text=False, is_dir=True))
+        else:
+            ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            is_text = ext in _TEXT_EXTENSIONS
+            entries.append(FileManifestEntry(path=name, size_bytes=int(size), is_text=is_text, is_dir=False))
+    return entries, truncated
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +339,9 @@ class SkillScanSnapshot(BaseModel):
     has_scripts: bool = False
     plugin_author: Optional[str] = None
     keywords: List[str] = []
+    # file manifest
+    file_manifest: List[FileManifestEntry] = []
+    manifest_truncated: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -417,11 +451,15 @@ class GitHubScanner(SourceScanner):
 
         # Fetch recognised files in parallel
         recognised: List[dict] = []
+        all_files_entries: List[FileManifestEntry] = []
+        manifest_truncated_flag: bool = False
         if isinstance(contents_data, list):
             all_names = [f.get("name") for f in contents_data]
             logger.debug("[SCAN] dir listing %d items: %s", len(all_names), all_names)
             recognised = [f for f in contents_data if f.get("type") == "file" and f.get("name") in _SKILL_FILES]
             logger.info("[SCAN] recognised files in dir: %s", [f["name"] for f in recognised])
+            all_files_entries, manifest_truncated_flag = build_file_manifest(contents_data)
+            logger.debug("[SCAN] file manifest: %d entries, truncated=%s", len(all_files_entries), manifest_truncated_flag)
         else:
             logger.warning("[SCAN] contents_data is not a list (got %s) — path may not be a directory",
                            type(contents_data).__name__)
@@ -570,6 +608,8 @@ class GitHubScanner(SourceScanner):
             files=files,
             root_readme=root_readme,
             no_skill_files=len(files) == 0,
+            all_files=all_files_entries,
+            manifest_truncated=manifest_truncated_flag,
         )
         if cache_key:
             _scan_cache[cache_key] = result
@@ -610,6 +650,36 @@ class GitHubScanner(SourceScanner):
         except Exception as exc:
             logger.warning("[FETCH] %s → base64 decode failed: %s", path, exc)
             return None
+
+    async def fetch_file_content(
+        self,
+        owner: str,
+        repo: str,
+        branch: Optional[str],
+        skill_path: str,
+        filename: str,
+        cache_key: Optional[str] = None,
+    ) -> Optional[str]:
+        """Fetch the text content of a single file from GitHub.
+
+        Public API used by the file content endpoint. Wraps _best_token + _fetch_text.
+        Returns None if the file is binary or unavailable.
+        """
+        from app.services.github import _file_content_cache
+        if cache_key and cache_key in _file_content_cache:
+            logger.debug("[FILE_FETCH] cache hit key=%s", cache_key)
+            return _file_content_cache[cache_key]
+
+        token = await self._best_token(owner)
+        dir_prefix = skill_path.strip("/")
+        file_api_path = f"/repos/{owner}/{repo}/contents/{dir_prefix + '/' if dir_prefix else ''}{filename}"
+        if branch:
+            file_api_path += f"?ref={branch}"
+
+        content = await self._fetch_text(file_api_path, token)
+        if cache_key and content is not None:
+            _file_content_cache[cache_key] = content
+        return content
 
     async def discover(self, ref: GitHubRef, cache_key: Optional[str] = None) -> tuple[List[RawScanResult], bool, bool]:
         """Recursively find skill directories (containing skill.md or CLAUDE.md).
@@ -711,6 +781,9 @@ class GitHubScanner(SourceScanner):
 github_scanner = GitHubScanner()
 scanner_registry.register("github", github_scanner)
 
+# 5-minute TTL cache for file content, keyed by (slug, path)
+_file_content_cache: TTLCache = TTLCache(maxsize=1024, ttl=300)
+
 
 # ---------------------------------------------------------------------------
 # MetadataExtractor
@@ -770,6 +843,8 @@ class MetadataExtractor:
             has_scripts=plugin.get("has_scripts", False),
             plugin_author=plugin.get("plugin_author"),
             keywords=keywords,
+            file_manifest=result.all_files,
+            manifest_truncated=result.manifest_truncated,
         )
 
     def _frontmatter(self, content: str) -> tuple[dict, str]:

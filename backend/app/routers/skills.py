@@ -64,6 +64,8 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         has_mcp_server=getattr(skill, "has_mcp_server", False),
         has_scripts=getattr(skill, "has_scripts", False),
         plugin_author=getattr(skill, "plugin_author", None),
+        file_manifest=getattr(skill, "file_manifest", []),
+        manifest_truncated=getattr(skill, "manifest_truncated", False),
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
@@ -256,6 +258,89 @@ async def remove_platform(slug: str, platform: str, user: User = Depends(get_cur
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     skill.compatible_platforms = [p for p in skill.compatible_platforms if p != platform]
     await skill.save()
+
+
+class FileContentOut(BaseModel):
+    content: str
+    path: str
+
+
+class FileBinaryOut(BaseModel):
+    error: Literal["binary_file"]
+    github_url: str
+
+
+@router.get("/{slug}/files/{path:path}")
+@limiter.limit("60/minute")
+async def get_skill_file(
+    slug: str,
+    path: str,
+    request: Request,
+    viewer: Optional[User] = Depends(get_optional_user),
+):
+    from app.models.skill import Skill, VisibilityEnum
+    from app.services.github import github_scanner, GitHubRef
+    from app.services.github import github_url_parser
+
+    skill = await Skill.find_one(Skill.slug == slug)
+    if not skill or skill.status == SkillStatus.deactivated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+
+    # Auth: internal skills require a logged-in user
+    if skill.visibility == VisibilityEnum.internal and not viewer:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    # Path validation: only serve paths present in the manifest (FR-7a)
+    manifest_paths = {e.path for e in getattr(skill, "file_manifest", [])}
+    if path not in manifest_paths:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in manifest")
+
+    # Find the manifest entry to check is_text / is_dir
+    entry = next((e for e in skill.file_manifest if e.path == path), None)
+    if entry and entry.is_dir:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot fetch directory content")
+
+    # Local skills: read from snapshotted_files
+    if skill.source_type == "local":
+        content = skill.snapshotted_files.get(path)
+        if content is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in manifest")
+        if entry and not entry.is_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=FileBinaryOut(error="binary_file", github_url=skill.repo_url).model_dump(),
+            )
+        return FileContentOut(content=content, path=path)
+
+    # GitHub skills: fetch live via public method
+    try:
+        ref = github_url_parser.parse(skill.repo_url)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Cannot parse repo URL")
+
+    if entry and not entry.is_text:
+        # Build a GitHub HTML URL for the binary file
+        branch_part = f"/blob/{ref.branch or 'main'}" if True else ""
+        dir_part = skill.skill_path.strip("/")
+        github_url = f"https://github.com/{ref.owner}/{ref.repo}{branch_part}/{(dir_part + '/' if dir_part else '')}{path}"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "binary_file", "github_url": github_url},
+        )
+
+    cache_key = f"{slug}:{path}"
+    content = await github_scanner.fetch_file_content(
+        owner=ref.owner,
+        repo=ref.repo,
+        branch=ref.branch,
+        skill_path=skill.skill_path,
+        filename=path,
+        cache_key=cache_key,
+    )
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="GitHub fetch failed")
+
+    return FileContentOut(content=content, path=path)
 
 
 @router.get("/{slug}/revisions", response_model=List[RevisionOut])

@@ -116,14 +116,19 @@ class SkillRepository:
         return skill
 
     async def create(self, data: SkillCreate, submitter_id: str) -> Skill:
-        repo_url = extract_repo_root_url(data.repo_url) or data.repo_url
         skill_path = data.skill_path or "/"
 
-        logger.info("[CREATE] submitter=%s repo_url=%s skill_path=%s", submitter_id, repo_url, skill_path)
+        logger.info("[CREATE] submitter=%s source_type=%s repo_url=%s skill_path=%s",
+                    submitter_id, data.source_type, data.repo_url, skill_path)
 
         # Validate skill_path (also enforced by model validator on save)
         if ".." in skill_path.split("/"):
             raise ValueError("skill_path must not contain '..' components")
+
+        if data.source_type == "local":
+            return await self._create_local(data, submitter_id, skill_path)
+
+        repo_url = extract_repo_root_url(data.repo_url) or data.repo_url
 
         github_data = None
         try:
@@ -252,6 +257,72 @@ class SkillRepository:
                     await _Label.find_one(_Label.id == label.id).update({"$inc": {"usage_count": 1}})
                 except _DKE:
                     pass  # already tagged
+        return skill
+
+    async def _create_local(self, data: SkillCreate, submitter_id: str, skill_path: str) -> Skill:
+        """Create a skill from snapshotted local files — no GitHub calls."""
+        from app.services.github import metadata_extractor
+        from app.services.scanner import LocalRef, RawScanResult
+
+        files = data.snapshotted_files
+        ref = LocalRef(path=data.repo_url.removeprefix("local://"))
+        scan = RawScanResult(ref=ref, files=files, snapshotted_files=files)
+        snap = metadata_extractor.extract(scan)
+
+        skill_md_raw: Optional[str] = None
+        skill_md_filename: Optional[str] = None
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
+            if fname in files:
+                skill_md_raw = files[fname][:100_000]
+                skill_md_filename = fname
+                break
+
+        readme_raw = files.get("README.md")
+        plugin_meta: dict = {}
+        if "plugin.json" in files:
+            plugin_meta = metadata_extractor._parse_plugin_json(files["plugin.json"])
+
+        name = data.name or snap.name or ref.path.rsplit("/", 1)[-1]
+        slug = await _unique_slug(name)
+
+        skill = Skill(
+            slug=slug,
+            name=name,
+            repo_url=data.repo_url,
+            skill_path=skill_path,
+            entry_type=data.entry_type,
+            description=data.description or snap.description,
+            skill_md_raw=skill_md_raw,
+            skill_md_filename=skill_md_filename,
+            readme_raw=readme_raw,
+            compatible_platforms=data.compatible_platforms or snap.compatible_platforms,
+            license=data.license,
+            version=data.version or snap.version,
+            uses_agent_gateway=data.uses_agent_gateway,
+            visibility=VisibilityEnum.public,
+            source_type="local",
+            snapshotted_files=files,
+            agent_count=plugin_meta.get("agent_count", 0),
+            agent_names=plugin_meta.get("agent_names", []),
+            has_mcp_server=plugin_meta.get("has_mcp_server", False),
+            has_scripts=plugin_meta.get("has_scripts", False),
+            plugin_author=plugin_meta.get("plugin_author"),
+            submitter_id=submitter_id,
+        )
+        try:
+            await skill.insert()
+        except DuplicateKeyError:
+            existing = await Skill.find_one(
+                Skill.repo_url == data.repo_url,
+                Skill.skill_path == skill_path,
+            )
+            raise DuplicateSkillError(existing.slug if existing else None)
+        await revision_service.record(
+            skill_id=str(skill.id),
+            actor_id=submitter_id,
+            action=RevisionAction.create,
+            snapshot=skill.model_dump(mode="json"),
+        )
         return skill
 
     async def update(

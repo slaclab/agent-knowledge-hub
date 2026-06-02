@@ -338,11 +338,12 @@ Adjust `plugin.json`:
 
 Confirm all created file paths to the user and remind them:
 - Run `/agent-knowledge-hub validate .` to check the plugin before submitting.
-- Submit via `/agent-knowledge-hub submit` once it's in a GitHub repo.
+- Submit immediately from this directory: `/agent-knowledge-hub submit .`
+- Or push to GitHub first and use the web flow: `/agent-knowledge-hub submit`
 
 ---
 
-### Submit to the catalog
+### Submit to the catalog (web)
 `/agent-knowledge-hub submit`
 
 Ask for the GitHub URL of the skill's repo. Then print:
@@ -354,7 +355,63 @@ To submit your skill to the SLAC S3DF catalog, open:
 Click "Submit a skill" and paste your GitHub URL.
 ```
 
-(Direct API submission via Bearer JWT is planned for v2.)
+---
+
+### Submit a local skill directory
+`/agent-knowledge-hub submit <path>`
+
+Submit a skill from a local directory — no GitHub push required.
+
+**Token resolution (in order — stop at first found):**
+1. `AGENT_KNOWLEDGE_HUB_TOKEN` environment variable (CI/automation)
+2. `~/.s3df-access-token` file (written by `s3df login` — same token used by `rate`)
+3. `~/.claude/settings.local.json` field `agent_knowledge_hub_token`
+
+**If no token is found**, print:
+```
+✗ No auth token found.
+  Run 's3df login' to authenticate, then try again.
+  Or set AGENT_KNOWLEDGE_HUB_TOKEN in your environment for CI use.
+```
+
+**Steps:**
+
+1. Resolve `<path>` to an absolute path (`Path(<path>).expanduser().resolve()`).
+
+2. **Validate the directory:**
+   - Path does not exist → `✗ Path not found: <path>`
+   - Path is a file, not a directory → `✗ Expected a directory, got a file: <path>`
+   - Directory has no SKILL.md / skill.md / CLAUDE.md / AGENTS.md → `✗ No skill instruction file found in <path>. Create a SKILL.md first (try /agent-knowledge-hub create).`
+   - SKILL.md has no name in frontmatter and no --name flag given → `✗ SKILL.md has no 'name' field in frontmatter. Add one or pass --name <slug>.`
+
+3. **Read recognised skill files** from the directory (SKILL.md, skill.md, CLAUDE.md, AGENTS.md, README.md, plugin.json, package.json, pyproject.toml). Skip files larger than 100 KB.
+
+4. **POST** to `https://agent-knowledge-hub.slac.stanford.edu/api/skills` with:
+   ```json
+   {
+     "repo_url": "local://<absolute-path>",
+     "source_type": "local",
+     "snapshotted_files": { "<filename>": "<content>", ... }
+   }
+   ```
+   Include header: `Authorization: Bearer <token>`
+
+5. **Handle errors:**
+   - `401` → `✗ Auth token rejected. Run 's3df login' to refresh your token.`
+   - `409` (duplicate) → `✗ A skill from this path is already registered. Use '/agent-knowledge-hub update <slug>' to update it.`
+   - Other error → show HTTP status and API error detail
+
+6. **On success**, print:
+   ```
+   ✓ Submitted "<name>" to the catalog.
+     Slug:    <slug>
+     Source:  local (<N> files snapshotted)
+     View:    https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>
+   ```
+
+**Note:** After submitting a local skill, if you later push it to GitHub you can link it by editing the skill entry and updating the repo URL.
+
+**Coexistence with web submit:** `submit` (no args) → web flow as above. `submit <path>` → local directory flow. The two are distinct sub-commands.
 
 ---
 

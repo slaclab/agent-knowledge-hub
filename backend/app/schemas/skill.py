@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
@@ -35,6 +35,9 @@ class SkillCreate(BaseModel):
     version: Optional[str] = None
     uses_agent_gateway: bool = False
     entry_type: EntryType = EntryType.skill
+    # local submission fields (source_type='local')
+    source_type: str = "github"
+    snapshotted_files: Dict[str, str] = Field(default_factory=dict)
 
 
 class SkillUpdate(BaseModel):

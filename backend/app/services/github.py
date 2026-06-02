@@ -287,7 +287,7 @@ _SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json"
 # ---------------------------------------------------------------------------
 
 class SkillScanSnapshot(BaseModel):
-    ref: GitHubRef
+    ref: SourceRef
     name: Optional[str] = None
     description: Optional[str] = None
     compatible_platforms: List[str] = []
@@ -856,7 +856,7 @@ class MetadataExtractor:
                         result.append(k)
         return result
 
-    def _extract_name(self, files: dict, repo: dict, ref: GitHubRef, plugin: dict = {}) -> Optional[str]:
+    def _extract_name(self, files: dict, repo: dict, ref: SourceRef, plugin: dict = {}) -> Optional[str]:
         for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])

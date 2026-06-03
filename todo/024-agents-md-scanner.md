@@ -12,7 +12,7 @@
 
 ## Problem Statement
 
-The AKH scanner hard-codes the set of recognised skill instruction filenames as `{"SKILL.md", "skill.md", "CLAUDE.md"}`. The Codex CLI (codex-rs) and OpenCode both use `AGENTS.md` as their primary instruction file — OpenCode walks the git tree reading `AGENTS.md` before `CLAUDE.md`; Codex loads `~/.codex/AGENTS.md` as global instructions and a project-level `AGENTS.md` for per-project context.
+The AKH scanner hard-codes the set of recognised skill instruction filenames as `{"SKILL.md", "skill.md", "CLAUDE.md"}`. The Codex CLI (codex-rs) uses `AGENTS.md` as its primary instruction file — Codex loads `~/.codex/AGENTS.md` as global instructions and a project-level `AGENTS.md` walking up from the git root. OpenCode does NOT read `AGENTS.md`; it reads `CLAUDE.md`, `opencode.md`, `OpenCode.md`, and `OPENCODE.md`.
 
 As a result, any skill directory whose author targets Codex-first or OpenCode-first workflows will have an `AGENTS.md` rather than a `SKILL.md` or `CLAUDE.md`. The scanner currently ignores those directories entirely: `discover()` skips them, `MetadataExtractor` never reads their frontmatter, and the catalog never registers them.
 
@@ -22,7 +22,7 @@ As a result, any skill directory whose author targets Codex-first or OpenCode-fi
 |---|---|---|
 | Directory contains only `AGENTS.md` | `discover()` never adds the directory to `skill_file_dirs` — skill silently not found | Treated as a valid skill directory; included in discovery results |
 | `AGENTS.md` frontmatter declares `name`, `description`, `keywords` | Ignored; name falls back to repo name or directory path | Extracted identically to `SKILL.md` frontmatter |
-| `AGENTS.md` present but no `SKILL.md`/`CLAUDE.md` | Platform inference produces empty list | Heuristic infers `codex` and/or `opencode` from AGENTS.md presence |
+| `AGENTS.md` present but no `SKILL.md`/`CLAUDE.md` | Platform inference produces empty list | Heuristic infers `codex` from AGENTS.md presence |
 | `discover()` subdir scan for `"skills": "./skills"` in plugin.json | Only looks for `SKILL.md`, `skill.md`, `CLAUDE.md` inside skill subdirs | Also recognises `AGENTS.md` as a valid skill file inside subdir scans |
 | Skill detail page `skill_md_filename` field | Can be `null`, `"SKILL.md"`, or `"CLAUDE.md"` | Can also be `"AGENTS.md"` |
 
@@ -33,7 +33,7 @@ As a result, any skill directory whose author targets Codex-first or OpenCode-fi
 1. Add `"AGENTS.md"` to `_SKILL_FILES` so the scanner fetches it alongside the existing recognised filenames
 2. Add `"AGENTS.md"` as a fourth skill directory marker in `discover()` so AGENTS.md-only directories are found during multi-skill scans
 3. Update all `MetadataExtractor` extraction methods to read `AGENTS.md` frontmatter — identical treatment to `CLAUDE.md`
-4. Add `AGENTS.md`-based platform heuristic: infer `"codex"` and `"opencode"` when `AGENTS.md` is present and no explicit platform list is declared
+4. Add `AGENTS.md`-based platform heuristic: infer `"codex"` when `AGENTS.md` is present and no explicit platform list is declared (OpenCode does not read AGENTS.md — omit `"opencode"` from this heuristic)
 5. Propagate `skill_md_filename = "AGENTS.md"` correctly in the registration pipeline so the source-file indicator on the detail page shows the right filename
 
 ## Non-Goals
@@ -97,12 +97,11 @@ if "CLAUDE.md" in files or "SKILL.md" in files or "skill.md" in files:
     platforms.append("claude-code")
 ```
 
-When `AGENTS.md` is present, append `"codex"` and `"opencode"`:
+When `AGENTS.md` is present, append `"codex"` only (OpenCode reads `CLAUDE.md`/`opencode.md`, not `AGENTS.md`):
 
 ```python
 if "AGENTS.md" in files:
     platforms.append("codex")
-    platforms.append("opencode")
 ```
 
 This is only reached when `plugin.json` has no explicit `platforms` field and no `platforms` key in the markdown frontmatter — the existing priority chain remains intact.
@@ -153,15 +152,15 @@ All changes are in `backend/app/services/github.py`. The `skill_md_filename` pro
 
 ---
 
-### ADR-002: Infer `codex` and `opencode` platforms from AGENTS.md presence
+### ADR-002: Infer `codex` platform from AGENTS.md presence
 
-**Status:** Accepted
+**Status:** Accepted (amended — `opencode` removed per research review)
 
-**Context:** Platform inference is the fallback when no explicit `platforms` field appears in plugin.json or frontmatter. Currently CLAUDE.md/SKILL.md → `claude-code`. AGENTS.md has two consumers: OpenAI Codex CLI (`codex`) and OpenCode (`opencode`). OpenCode also reads CLAUDE.md, so a repo with both files could legitimately target all three platforms.
+**Context:** Platform inference is the fallback when no explicit `platforms` field appears in plugin.json or frontmatter. Currently CLAUDE.md/SKILL.md → `claude-code`. AGENTS.md is the primary instruction file for OpenAI Codex CLI (`codex-rs`). Research confirmed OpenCode does NOT read `AGENTS.md` — it reads `CLAUDE.md`, `opencode.md`, `OpenCode.md`, `OPENCODE.md`.
 
-**Decision:** When `AGENTS.md` is present and no explicit platform list is declared, append both `"codex"` and `"opencode"` to the inferred platform list. The existing `claude-code` heuristic fires independently if CLAUDE.md/SKILL.md are also present — a multi-file repo gets all applicable platforms. Adding both `codex` and `opencode` avoids having to pick one; authors who care can pin explicitly via frontmatter.
+**Decision:** When `AGENTS.md` is present and no explicit platform list is declared, append `"codex"` only. The existing `claude-code` heuristic fires independently if CLAUDE.md/SKILL.md are also present.
 
-**Consequences:** A repository with only `AGENTS.md` gets `["codex", "opencode"]` as its inferred platforms. A repository with both `CLAUDE.md` and `AGENTS.md` gets `["claude-code", "codex", "opencode"]`. Both outcomes are more informative than the current empty list.
+**Consequences:** A repository with only `AGENTS.md` gets `["codex"]` as its inferred platforms. A repository with both `CLAUDE.md` and `AGENTS.md` gets `["claude-code", "codex"]`.
 
 ---
 
@@ -185,10 +184,10 @@ Choice: Add AGENTS.md as a peer of CLAUDE.md vs. treat it as a lower-priority al
   - Peer: if both AGENTS.md and CLAUDE.md exist, ambiguous which wins
   Decision: Peer in the file set; explicit priority order (SKILL.md > skill.md > CLAUDE.md > AGENTS.md) resolves ambiguity deterministically.
 
-Choice: Infer both "codex" and "opencode" vs. only one
-  + Both: accurate — both tools use AGENTS.md; no information loss
-  - Both: platform list may be longer than expected for a skill targeting only Codex
-  Decision: Both. Authors who want to declare only one platform can add an explicit frontmatter `platforms:` list, which takes priority over heuristic inference.
+Choice: Infer "codex" only vs. "codex" + "opencode"
+  + "codex" only: accurate — OpenCode does NOT read AGENTS.md (confirmed by research review); no false positive platform tags
+  - "codex" only: future tool adopting AGENTS.md would require a plan update
+  Decision: "codex" only. OpenCode reads CLAUDE.md/opencode.md, not AGENTS.md. Authors can add explicit frontmatter `platforms:` to override.
 
 Choice: Scope to github.py only vs. also update plugin.json schema docs
   + github.py only: minimal blast radius; schema docs are a separate concern
@@ -219,7 +218,7 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 | False positives: repo with AGENTS.md that is not a skill | Medium | Low | `no_skill_files` flag and skill detail page give submitter full visibility; no auto-registration |
 | AGENTS.md without frontmatter produces empty name/description | High | Low | Fallback chain (plugin.json, README, repo name) already handles this; same as CLAUDE.md without frontmatter |
 | Priority ambiguity when CLAUDE.md and AGENTS.md coexist | Low | Low | Explicit priority order (CLAUDE.md before AGENTS.md) is consistent and documented in ADR-001 |
-| `"opencode"` not yet in frontend platform lists | Low | Low | Added to Implementation Checklist — platform-badges, platform-section, utils.ts, and submit-form all updated as part of this todo |
+| `"opencode"` not yet in frontend platform lists | Low | Low | Added to Implementation Checklist; note: heuristic only infers "codex" (not "opencode") — opencode can be declared explicitly |
 
 ---
 
@@ -234,7 +233,7 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 - [ ] `_extract_keywords()` (~line 962): add `"AGENTS.md"` to frontmatter iteration tuple
 - [ ] `_extract_name()` (~line 973): add `"AGENTS.md"` to frontmatter iteration tuple
 - [ ] `_extract_description()` (~line 998): add `"AGENTS.md"` to frontmatter iteration tuple
-- [ ] `_extract_platforms()` (~line 1015): add `"AGENTS.md"` to frontmatter iteration tuple; add codex/opencode heuristic branch
+- [ ] `_extract_platforms()` (~line 1015): add `"AGENTS.md"` to frontmatter iteration tuple; add `if "AGENTS.md" in files: platforms.append("codex")` heuristic branch (codex only — not opencode)
 - [ ] `_extract_version()` (~line 1036): add `"AGENTS.md"` to frontmatter iteration tuple
 
 **`backend/app/services/skill.py`**
@@ -245,7 +244,7 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 **Tests**
 - [ ] `discover()` finds a directory with only `AGENTS.md`
 - [ ] frontmatter extraction from `AGENTS.md` (name, description, keywords, version)
-- [ ] platform inference produces `["codex", "opencode"]` for `AGENTS.md`-only dirs
+- [ ] platform inference produces `["codex"]` for `AGENTS.md`-only dirs (not `"opencode"` — OpenCode does not read AGENTS.md)
 - [ ] priority order: when both `CLAUDE.md` and `AGENTS.md` present, `CLAUDE.md` values win
 - [ ] `skill_md_filename` is `"AGENTS.md"` when it's the only instruction file
 
@@ -255,7 +254,7 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 - [ ] `CHANGELOG.md`: add Unreleased entry for AGENTS.md scanner support (recognised filename, codex/opencode inference, skill_md_filename)
 
 **Frontend**
-- [ ] `frontend/components/platform-badges.tsx`: add `"opencode"` entry to `PLATFORM_COLORS`
+- [ ] `frontend/components/platform-badges.tsx`: add `"opencode"` entry to `PLATFORM_COLORS` (authors may declare it explicitly via frontmatter even though the heuristic does not auto-infer it)
 - [ ] `frontend/components/platform-section.tsx`: add `"opencode"` to `KNOWN_PLATFORMS`
 - [ ] `frontend/lib/utils.ts`: add `"opencode"` to `PLATFORM_SUGGESTIONS`
 - [ ] `frontend/components/submit-form.tsx` (~line 279): update "no skills found" hint to mention `AGENTS.md` alongside `SKILL.md` and `CLAUDE.md`
@@ -266,13 +265,13 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 
 - [ ] A GitHub directory containing only `AGENTS.md` (no `SKILL.md`, no `CLAUDE.md`) appears in `discover()` results
 - [ ] `name`, `description`, `keywords` declared in `AGENTS.md` frontmatter are extracted and registered
-- [ ] Platform heuristic produces `["codex", "opencode"]` for an `AGENTS.md`-only directory with no explicit `platforms` declaration
+- [ ] Platform heuristic produces `["codex"]` for an `AGENTS.md`-only directory with no explicit `platforms` declaration
 - [ ] When both `CLAUDE.md` and `AGENTS.md` are present, `CLAUDE.md` frontmatter values win for all fields
 - [ ] `skill_md_filename` is `"AGENTS.md"` for skills where `AGENTS.md` is the only instruction file found
 - [ ] `docs/skill-file-discovery.md` updated to reflect all new filename sets and platform inference
 - [ ] `docs/adr/adr-u02-frontmatter-format.md` scope updated to include `AGENTS.md`
 - [ ] `CHANGELOG.md` Unreleased section includes AGENTS.md scanner support entry
-- [ ] `"opencode"` added to frontend platform lists (badges, picker, suggestions)
+- [ ] `"opencode"` added to frontend platform lists (badges, picker, suggestions) — for explicit author use, not auto-inferred
 - [ ] Submit form "no skills found" hint mentions `AGENTS.md`
 - [ ] All checklist items complete
 
@@ -292,7 +291,7 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 
 | Reviewer | Result | Amended | Key findings |
 |---|---|---|---|
-| research | ⚠️ truncated | — | Output file incomplete (skeleton only) — eng review covered factual verification |
+| research | ⚠️ late | Y | Completed after board closed; found OpenCode does NOT read AGENTS.md — heuristic corrected to `"codex"` only, Problem Statement and ADR-002 amended |
 | codebase-arch-review | — SKIP | — | Single service, no new data stores or service boundaries |
 | codebase-eng-review | ✅ PASS | N | All 12 call sites verified; test plan (23 cases) added; 2 non-blocking observations noted |
 | doc-review | ✅ PASS | Y | 3 blocking doc gaps identified (skill-file-discovery.md, CHANGELOG, adr-u02); added to checklist |

@@ -71,7 +71,7 @@ def _redact_private_key(text: str) -> str:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Agent Knowledge Hub API", version="0.14.0", lifespan=lifespan)
+    app = FastAPI(title="Agent Knowledge Hub API", version="0.15.0", lifespan=lifespan)
 
     # Rate limiter state
     app.state.limiter = limiter

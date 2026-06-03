@@ -23,7 +23,7 @@
 | [019](todo/019-plugin-json-scan-pipeline.md) | plugin.json-first scan pipeline: rich component metadata + structural auto-labels | 🏁 Implementation Done |
 | [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | 🏁 Implementation Done |
 | [021](todo/021-marketplace-monorepo-publish.md) | Marketplace monorepo publish: `/agent-knowledge-hub create` → PR to slac-agent-plugin-marketplace | ⬜ Open |
-| [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | ⬜ Open |
+| [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | 🏁 Implementation Done |
 | [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | ⬜ Open |
 | [024](todo/024-agents-md-scanner.md) | AGENTS.md scanner support: recognise Codex/OpenCode instruction files | ⬜ Open |
 | [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | ⬜ Open |

@@ -40,6 +40,73 @@ Allowed prefixes by component type:
 
 ---
 
+## Shared procedure: git-clone-to-temp
+
+Clones a GitHub repo into a temporary directory. Used by the install flow as the primary
+download mechanism.
+
+```
+git-clone-to-temp(repo_url, ref, slug) → tmp_dir  OR  null (fallback signal):
+  1. Preflight: check that `git` is available on PATH.
+     If not found:
+       print "⚠  git not found on PATH — falling back to GitHub Contents API."
+       return null
+  2. Choose clone strategy:
+     - If ref is a 40-char hex SHA (pinned commit):
+         git clone <repo_url> <tmp_dir>        (full clone, no --depth)
+         git -C <tmp_dir> checkout <ref>
+     - Otherwise:
+         git clone --depth 1 <repo_url> <tmp_dir>
+  3. tmp_dir = /tmp/akh-install-<slug>-<timestamp>/
+     Create it fresh (do not reuse if it already exists).
+  4. If clone exits non-zero:
+     - Auth error (exit code 128 and message contains "Authentication failed" or "could not read"):
+         print "✗  Clone failed: authentication required."
+         print "   For private repos: run 'gh auth login' or set the GITHUB_TOKEN environment variable."
+     - Other error: print the git error message verbatim.
+     delete tmp_dir if it exists.
+     return null   ← triggers full fallback to Contents API
+  5. On success: return tmp_dir.
+```
+
+Set a shell trap so that if execution is interrupted after a successful clone,
+`tmp_dir` is deleted on exit:
+```
+trap "rm -rf <tmp_dir>" EXIT
+```
+
+---
+
+## Shared procedure: copy-from-clone
+
+Copies files from a cloned repo into their install targets. Replaces the per-file
+`fetch-and-write` calls when a git clone is available.
+
+```
+copy-from-clone(tmp_dir, src_relative_path, dest_dir, allowed_prefix):
+  1. Resolve src = tmp_dir / src_relative_path.
+  2. If src is a FILE:
+       Security check: resolve dest_dir/<filename>.
+       Assert it starts with allowed_prefix — abort entire install if not.
+       Create parent dirs of dest as needed, then cp src → dest.
+  3. If src is a DIRECTORY:
+       Walk src recursively. For each file found:
+         rel = path of file relative to src
+         dest = dest_dir / rel
+         Security check: resolve dest — assert starts with allowed_prefix.
+         Create parent dirs, then cp file → dest.
+       Cap at 200 files total; if exceeded → warn and abort install.
+       If 0 files found → warn: "⚠ directory <src_relative_path> is empty — nothing installed."
+  4. Return list of absolute paths written (for manifest).
+```
+
+Allowed prefixes by component type (same as fetch-and-write):
+- `skills` → `~/.claude/skills/<slug>/`
+- `commands` → `~/.claude/commands/`
+- `agents` → `~/.claude/agents/`
+
+---
+
 ## Sub-commands
 
 ### Natural-language search (default)
@@ -63,26 +130,30 @@ If the user says yes, run the install flow for that slug.
 1. Fetch `GET /api/skills/<slug>` — get `repo_url`, `skill_path`, `compatible_platforms`, and `pinned_commit_sha`.
 2. Parse `repo_url` to extract `<owner>/<repo>`. It must be a `https://github.com/` URL.
 3. **Determine the install ref:**
-   - If `pinned_commit_sha` is present (a 40-char lowercase hex SHA), use it as `?ref=<pinned_commit_sha>` on **all** subsequent GitHub Contents API calls.
-   - If absent (legacy/un-backfilled skill): install from HEAD (no `?ref=` parameter) and print:
+   - If `pinned_commit_sha` is present (a 40-char lowercase hex SHA): use it as the clone ref.
+   - If absent (legacy/un-backfilled skill): clone HEAD and print:
      ```
      ℹ  This skill has no pinned version — installing the latest available files.
         File contents may differ from what others have installed.
      ```
 
-4. **Locate plugin.json** (try in order; stop at first success):
-   a. `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/plugin.json[?ref=<sha>]`
-   b. If 404 → `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/.claude-plugin/plugin.json[?ref=<sha>]`
-   c. If 404 → **legacy install** (step 10).
-   If any step returns a non-404 error → abort install with the error message.
-   If GitHub returns 422 (reference not found for the pinned SHA — e.g. force-push deleted it):
+4. **Clone the repository:**
+   Call `git-clone-to-temp(repo_url, ref, slug)`.
+   - On success → `tmp_dir` is set; proceed to step 5.
+   - On null (git unavailable or clone failed) → jump to **step 14 (fallback)**.
+   If `ref` is a pinned SHA and `git checkout` reports "pathspec not found" (force-push deleted it):
    ```
    ✗  Pinned version <short_sha> no longer exists in the repository.
       Ask the skill submitter to update the pin, then try again.
    ```
-   Abort install.
+   Abort install and delete `tmp_dir`.
 
-5. **Platform check** — before writing any files:
+5. **Locate plugin.json** from the clone (try in order; stop at first success):
+   a. `tmp_dir/<skill_path>/plugin.json`
+   b. `tmp_dir/<skill_path>/.claude-plugin/plugin.json`
+   c. If neither exists → **legacy install from clone** (step 13).
+
+6. **Platform check** — before writing any files:
    - Read `compatible_platforms` from plugin.json (falls back to catalog value if absent).
    - If absent from both → treat as `["claude-code"]` (backward compatibility).
    - If `compatible_platforms` does not include `"claude-code"`:
@@ -91,58 +162,78 @@ If the user says yes, run the install flow for that slug.
         Supported platforms: <list>.
         Install anyway? (y/n)
      ```
-     If user says n → abort. If user says y → proceed.
+     If user says n → abort (delete `tmp_dir`). If user says y → proceed.
    - If `compatible_platforms` includes other platforms alongside `claude-code`:
      ```
      ℹ  This skill also supports: <others>. Those components are not installed here.
      ```
 
-6. **Install skills component:**
+7. **Install skills component:**
    - If `plugin.json["skills"]` is a **string** (directory path, e.g. `"./skill/"`):
-     - Resolve the path relative to `skill_path` in the repo.
-     - Fetch directory listing: `GET /repos/<owner>/<repo>/contents/<resolved_path>`
-     - Recursively fetch all files (recurse into any subdirectory entries).
-     - Cap at 200 files total; if exceeded → warn and abort install.
-     - If directory has 0 files → warn: `⚠ skills directory <path> is empty — nothing installed.`
-     - For each file: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<relative_path>, ~/.claude/skills/<slug>/)`.
+     - Resolve the path relative to `skill_path` in the clone: `tmp_dir/<skill_path>/<value>`.
+     - Call `copy-from-clone(tmp_dir, <skill_path>/<value>, ~/.claude/skills/<slug>/, ~/.claude/skills/<slug>/)`.
    - If `plugin.json["skills"]` is an **array** of file paths:
-     - For each path: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
-   - If `plugin.json["skills"]` is absent → skip skills component.
+     - For each path: call `copy-from-clone(tmp_dir, <skill_path>/<file>, ~/.claude/skills/<slug>/, ~/.claude/skills/<slug>/)`.
+   - If absent → skip skills component.
 
-7. **Install commands component** (same string/array logic as skills):
-   - String (directory) → recursively fetch and write to `~/.claude/commands/`, preserving subdirs.
-   - Array → fetch each file, write to `~/.claude/commands/`.
+8. **Install commands component** (same string/array logic as skills):
+   - String (directory) → `copy-from-clone(tmp_dir, <skill_path>/<value>, ~/.claude/commands/, ~/.claude/commands/)`.
+   - Array → one `copy-from-clone` call per file into `~/.claude/commands/`.
    - Allowed prefix: `~/.claude/commands/`.
 
-8. **Install agents component** (same string/array logic):
-   - String (directory) → recursively fetch and write to `~/.claude/agents/`, preserving subdirs.
-   - Array → fetch each file, write to `~/.claude/agents/`.
+9. **Install agents component** (same string/array logic):
+   - String (directory) → `copy-from-clone(tmp_dir, <skill_path>/<value>, ~/.claude/agents/, ~/.claude/agents/)`.
+   - Array → one `copy-from-clone` call per file into `~/.claude/agents/`.
    - Allowed prefix: `~/.claude/agents/`.
 
-9. **Install mcp-servers component:**
-   - For each entry in `plugin.json["mcp-servers"]`:
-     - Entry must have `name` and `command` fields (optional: `args: []`, `env: {}`).
-     - Run: `claude mcp add <name> <command> [args...]`
-     - Confirm each registered MCP server.
+10. **Install mcp-servers component:**
+    - For each entry in `plugin.json["mcp-servers"]`:
+      - Entry must have `name` and `command` fields (optional: `args: []`, `env: {}`).
+      - Run: `claude mcp add <name> <command> [args...]`
+      - Confirm each registered MCP server.
 
-10. **Write installed-files manifest** (after all files confirmed written):
-   ```json
-   {
-     "slug": "<slug>",
-     "installed_at": "<ISO timestamp>",
-     "commands": ["<absolute-path>", ...],
-     "agents":   ["<absolute-path>", ...]
-   }
-   ```
-   Write to `~/.claude/skills/<slug>/.installed-manifest.json`.
-   List every file installed into `commands` and `agents` (not skills — the slug dir is deleted as a whole).
-   If no commands or agents were installed, write an empty manifest anyway (commands: [], agents: []).
+11. **Delete temp directory:** `rm -rf <tmp_dir>` (the EXIT trap handles this if execution was interrupted earlier).
 
-11. Print a summary of all installed paths and registered MCP servers.
+12. **Write installed-files manifest** (after all files confirmed written):
+    ```json
+    {
+      "slug": "<slug>",
+      "installed_at": "<ISO timestamp>",
+      "commands": ["<absolute-path>", ...],
+      "agents":   ["<absolute-path>", ...]
+    }
+    ```
+    Write to `~/.claude/skills/<slug>/.installed-manifest.json`.
+    List every file installed into `commands` and `agents` (not skills — the slug dir is deleted as a whole).
+    If no commands or agents were installed, write an empty manifest anyway (commands: [], agents: []).
+
+13. **Legacy install from clone** (reached when no plugin.json found in step 5):
+    Walk `tmp_dir/<skill_path>/` and copy every file to `~/.claude/skills/<slug>/`
+    using `copy-from-clone(tmp_dir, <skill_path>/, ~/.claude/skills/<slug>/, ~/.claude/skills/<slug>/)`.
+    Write an empty manifest (`commands: [], agents: []`) after install.
+    Go to step 11 (delete tmp_dir), then print a summary of installed paths.
+    If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
+
+14. **Fallback: Contents API install** (reached only when `git-clone-to-temp` returned null):
+    Use the GitHub Contents API to fetch files. This path is identical to the pre-#022 install flow:
+    - Use `?ref=<pinned_commit_sha>` on all calls if pinned SHA is set.
+    - Locate plugin.json via Contents API (try `<skill_path>/plugin.json`, then `.claude-plugin/plugin.json`, then legacy).
+    - Install components via `fetch-and-write` exactly as the pre-#022 flow.
+    - Write manifest as normal.
+    Print: `ℹ  Installed via GitHub Contents API (git fallback).`
+
+    If GitHub returns 422 (reference not found for pinned SHA):
+    ```
+    ✗  Pinned version <short_sha> no longer exists in the repository.
+       Ask the skill submitter to update the pin, then try again.
+    ```
+    Abort install.
+
+    Print a summary of all installed paths and registered MCP servers.
     If `plugin.json` contains a `version` field: `Installed <slug> v<version>`.
     If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
 
-12. **Codex install** (only when `"codex"` is in `compatible_platforms`):
+15. **Codex install** (only when `"codex"` is in `compatible_platforms`):
 
     a. **Check for Codex home.** If `~/.codex/` does not exist, print:
        `ℹ Codex home (~/.codex/) not found — skipping Codex install.`
@@ -158,7 +249,7 @@ If the user says yes, run the install flow for that slug.
            agents/                         ← if agents declared
            commands/                       ← if commands declared
          ```
-       - Copy all files written in steps 6–8 above, preserving relative paths under `~/.akh/plugins/<slug>/`.
+       - Copy all files written in steps 7–9 above, preserving relative paths under `~/.akh/plugins/<slug>/`.
        - Allowed prefix for all writes: `~/.akh/plugins/<slug>/`.
 
     c. **Create/update `~/.akh/plugins/.agents/plugins/marketplace.json`:**
@@ -208,13 +299,6 @@ If the user says yes, run the install flow for that slug.
                 marketplace.json updated
                 ~/.codex/config.toml: marketplace + plugin registered
        ```
-
-13. **Legacy install** (reached only when no plugin.json found at steps 4a or 4b):
-    Fetch the file listing from the GitHub Contents API:
-    `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>[?ref=<sha>]`
-    If `skill_path` is `/` or empty, use the repo root.
-    For each file in the listing: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
-    Write an empty manifest (`commands: [], agents: []`) after install.
 
 If the GitHub API returns a rate-limit error (403 with X-RateLimit-Remaining: 0), suggest the user set a `GITHUB_TOKEN` environment variable.
 

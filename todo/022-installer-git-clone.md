@@ -1,7 +1,7 @@
 # TODO #022 — Installer: Switch to Git Clone for Plugin Installation
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open
+> **Status:** 🏁 Implementation Done
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-05-28

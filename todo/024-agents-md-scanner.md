@@ -1,7 +1,7 @@
 # TODO #024 — AGENTS.md Scanner Support: Recognise Codex/OpenCode Instruction Files
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open
+> **Status:** 🔍 Reviewed
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-06-02
@@ -50,7 +50,7 @@ As a result, any skill directory whose author targets Codex-first or OpenCode-fi
 
 ### Scanner change: add `AGENTS.md` to `_SKILL_FILES`
 
-`github.py` line 277:
+`github.py` line 351:
 
 ```python
 _SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml", "plugin.json"}
@@ -60,7 +60,7 @@ _SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json"
 
 ### `discover()`: AGENTS.md as skill dir marker
 
-The tree-walk at line 659 currently checks:
+The tree-walk at line 764 currently checks:
 
 ```python
 if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json"):
@@ -70,27 +70,27 @@ Add `"AGENTS.md"` to this set. A directory containing only `AGENTS.md` (and no `
 
 Three additional call sites inside `scan()` also need `"AGENTS.md"` added:
 
-1. Line 470 — `has_skill_md` check (decides whether to attempt plugin.json subdir traversal)
-2. Line 493 — direct file lookup inside the `"skills"` directory (plugin.json directory-form traversal)
-3. Line 521 — file lookup inside each subdir of the `"skills"` directory
+1. Line 543 — `has_skill_md` check (decides whether to attempt plugin.json subdir traversal)
+2. Line 566 — direct file lookup inside the `"skills"` directory (plugin.json directory-form traversal)
+3. Line 594 — file lookup inside each subdir of the `"skills"` directory
 
 ### MetadataExtractor: treat AGENTS.md identically to CLAUDE.md
 
 All extraction methods that currently iterate over `("SKILL.md", "skill.md", "CLAUDE.md")` must add `"AGENTS.md"` to the tuple:
 
-| Method | Line range | Change |
+| Method | Approx line | Change |
 |---|---|---|
-| `_extract_keywords()` | 851–858 | Add `"AGENTS.md"` to iteration tuple |
-| `_extract_name()` | 862–866 | Add `"AGENTS.md"` to iteration tuple |
-| `_extract_description()` | 887–892 | Add `"AGENTS.md"` to iteration tuple |
-| `_extract_platforms()` | 903–911 | Add `"AGENTS.md"` to iteration tuple; also extend the heuristic check at line 911 |
-| `_extract_version()` | 926–929 | Add `"AGENTS.md"` to iteration tuple |
+| `_extract_keywords()` | 962 | Add `"AGENTS.md"` to iteration tuple |
+| `_extract_name()` | 973 | Add `"AGENTS.md"` to iteration tuple |
+| `_extract_description()` | 998 | Add `"AGENTS.md"` to iteration tuple |
+| `_extract_platforms()` | 1015 | Add `"AGENTS.md"` to iteration tuple; also extend the heuristic check |
+| `_extract_version()` | 1036 | Add `"AGENTS.md"` to iteration tuple |
 
 Priority rule: `SKILL.md` > `skill.md` > `CLAUDE.md` > `AGENTS.md` for all fields where multiple files might be present. The iteration order in each method already implements priority — `AGENTS.md` is appended last.
 
 ### Platform heuristic for AGENTS.md
 
-The current heuristic at line 910–911:
+The current heuristic at line 1021:
 
 ```python
 if "CLAUDE.md" in files or "SKILL.md" in files or "skill.md" in files:
@@ -109,7 +109,15 @@ This is only reached when `plugin.json` has no explicit `platforms` field and no
 
 ### `skill_md_filename` propagation
 
-The Skill model stores `skill_md_filename` to identify which instruction file was found. The repository layer that populates this field must check `"AGENTS.md"` as a fourth candidate after `SKILL.md`, `skill.md`, and `CLAUDE.md`. No schema change needed — the field is already `Optional[str]`.
+Three call sites in `services/skill.py` populate `skill_md_filename` by iterating over recognised filenames:
+
+| Location | Current tuple | Action |
+|---|---|---|
+| `create()` GitHub path, line 163 | `("SKILL.md", "skill.md", "CLAUDE.md")` | Add `"AGENTS.md"` |
+| `create()` local path, line 288 | `("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")` | Already done ✅ |
+| `refetch()` path, line 402 | `("SKILL.md", "skill.md", "CLAUDE.md")` | Add `"AGENTS.md"` |
+
+No schema change needed — `skill_md_filename` is already `Optional[str]`.
 
 ---
 
@@ -211,24 +219,46 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 | False positives: repo with AGENTS.md that is not a skill | Medium | Low | `no_skill_files` flag and skill detail page give submitter full visibility; no auto-registration |
 | AGENTS.md without frontmatter produces empty name/description | High | Low | Fallback chain (plugin.json, README, repo name) already handles this; same as CLAUDE.md without frontmatter |
 | Priority ambiguity when CLAUDE.md and AGENTS.md coexist | Low | Low | Explicit priority order (CLAUDE.md before AGENTS.md) is consistent and documented in ADR-001 |
-| `"codex"` and `"opencode"` platform values not yet known to the frontend | Low | Low | `compatible_platforms` is a free string list; unknown values are rendered as-is; no enum validation in schemas |
+| `"opencode"` not yet in frontend platform lists | Low | Low | Added to Implementation Checklist — platform-badges, platform-section, utils.ts, and submit-form all updated as part of this todo |
 
 ---
 
 ## Implementation Checklist
 
-- [ ] Add `"AGENTS.md"` to `_SKILL_FILES`
-- [ ] `discover()` tree-walk: add `"AGENTS.md"` to `if fname in (...)` check (line 659)
-- [ ] `scan()` line 470: add `"AGENTS.md"` to `has_skill_md` check
-- [ ] `scan()` line 493: add `"AGENTS.md"` to direct file lookup in skills dir
-- [ ] `scan()` line 521: add `"AGENTS.md"` to subdir file lookup
-- [ ] `_extract_keywords()`: add `"AGENTS.md"` to frontmatter iteration tuple
-- [ ] `_extract_name()`: add `"AGENTS.md"` to frontmatter iteration tuple
-- [ ] `_extract_description()`: add `"AGENTS.md"` to frontmatter iteration tuple
-- [ ] `_extract_platforms()`: add `"AGENTS.md"` to frontmatter iteration tuple; add codex/opencode heuristic branch
-- [ ] `_extract_version()`: add `"AGENTS.md"` to frontmatter iteration tuple
-- [ ] Repository layer: check `"AGENTS.md"` when populating `skill_md_filename`
-- [ ] Tests: `discover()` finds a directory with only `AGENTS.md`; frontmatter extraction from `AGENTS.md`; platform inference for `AGENTS.md`-only dirs; priority order when both `CLAUDE.md` and `AGENTS.md` present
+**`backend/app/services/github.py`**
+- [ ] Add `"AGENTS.md"` to `_SKILL_FILES` (line 351)
+- [ ] `discover()` tree-walk: add `"AGENTS.md"` to `if fname in (...)` check (line 764)
+- [ ] `scan()` line 543: add `"AGENTS.md"` to `has_skill_md` check
+- [ ] `scan()` line 566: add `"AGENTS.md"` to direct file lookup in skills dir
+- [ ] `scan()` line 594: add `"AGENTS.md"` to subdir file lookup
+- [ ] `_extract_keywords()` (~line 962): add `"AGENTS.md"` to frontmatter iteration tuple
+- [ ] `_extract_name()` (~line 973): add `"AGENTS.md"` to frontmatter iteration tuple
+- [ ] `_extract_description()` (~line 998): add `"AGENTS.md"` to frontmatter iteration tuple
+- [ ] `_extract_platforms()` (~line 1015): add `"AGENTS.md"` to frontmatter iteration tuple; add codex/opencode heuristic branch
+- [ ] `_extract_version()` (~line 1036): add `"AGENTS.md"` to frontmatter iteration tuple
+
+**`backend/app/services/skill.py`**
+- [ ] `create()` GitHub path (line 163): add `"AGENTS.md"` to `skill_md_filename` iteration tuple
+- [x] `create()` local path (line 288): already includes `"AGENTS.md"` ✅
+- [ ] `refetch()` path (line 402): add `"AGENTS.md"` to `skill_md_filename` iteration tuple
+
+**Tests**
+- [ ] `discover()` finds a directory with only `AGENTS.md`
+- [ ] frontmatter extraction from `AGENTS.md` (name, description, keywords, version)
+- [ ] platform inference produces `["codex", "opencode"]` for `AGENTS.md`-only dirs
+- [ ] priority order: when both `CLAUDE.md` and `AGENTS.md` present, `CLAUDE.md` values win
+- [ ] `skill_md_filename` is `"AGENTS.md"` when it's the only instruction file
+
+**Documentation**
+- [ ] `docs/skill-file-discovery.md`: update all filename references (7+ locations — fname checks, _SKILL_FILES, has_skill_md, MetadataExtractor priority table, skill_md_filename source, file layout example, non-standard filename section)
+- [ ] `docs/adr/adr-u02-frontmatter-format.md`: add `"AGENTS.md"` to scope statement (line 14)
+- [ ] `CHANGELOG.md`: add Unreleased entry for AGENTS.md scanner support (recognised filename, codex/opencode inference, skill_md_filename)
+
+**Frontend**
+- [ ] `frontend/components/platform-badges.tsx`: add `"opencode"` entry to `PLATFORM_COLORS`
+- [ ] `frontend/components/platform-section.tsx`: add `"opencode"` to `KNOWN_PLATFORMS`
+- [ ] `frontend/lib/utils.ts`: add `"opencode"` to `PLATFORM_SUGGESTIONS`
+- [ ] `frontend/components/submit-form.tsx` (~line 279): update "no skills found" hint to mention `AGENTS.md` alongside `SKILL.md` and `CLAUDE.md`
 
 ---
 
@@ -239,6 +269,11 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 - [ ] Platform heuristic produces `["codex", "opencode"]` for an `AGENTS.md`-only directory with no explicit `platforms` declaration
 - [ ] When both `CLAUDE.md` and `AGENTS.md` are present, `CLAUDE.md` frontmatter values win for all fields
 - [ ] `skill_md_filename` is `"AGENTS.md"` for skills where `AGENTS.md` is the only instruction file found
+- [ ] `docs/skill-file-discovery.md` updated to reflect all new filename sets and platform inference
+- [ ] `docs/adr/adr-u02-frontmatter-format.md` scope updated to include `AGENTS.md`
+- [ ] `CHANGELOG.md` Unreleased section includes AGENTS.md scanner support entry
+- [ ] `"opencode"` added to frontend platform lists (badges, picker, suggestions)
+- [ ] Submit form "no skills found" hint mentions `AGENTS.md`
 - [ ] All checklist items complete
 
 ---
@@ -251,19 +286,75 @@ Choice: Scope to github.py only vs. also update plugin.json schema docs
 
 ## Board Review
 
-> *Populated by `/codebase-board-review` after the board completes. Do not fill manually.*
-
-**Verdict:** —
-**Date:** —
-**Rounds:** —
+**Verdict:** CLEAR TO BUILD
+**Date:** 2026-06-03
+**Rounds:** 1
 
 | Reviewer | Result | Amended | Key findings |
 |---|---|---|---|
-| research-handbook | — | — | — |
-| codebase-arch-review | — | — | — |
-| codebase-eng-review | — | — | — |
-| codebase-doc-review | — | — | — |
-| security-review | — | — | — |
+| research | ⚠️ truncated | — | Output file incomplete (skeleton only) — eng review covered factual verification |
+| codebase-arch-review | — SKIP | — | Single service, no new data stores or service boundaries |
+| codebase-eng-review | ✅ PASS | N | All 12 call sites verified; test plan (23 cases) added; 2 non-blocking observations noted |
+| doc-review | ✅ PASS | Y | 3 blocking doc gaps identified (skill-file-discovery.md, CHANGELOG, adr-u02); added to checklist |
+| security-review | — SKIP | — | No user input, no auth changes, no new endpoints |
+| codebase-ux-review | ✅ PASS | Y | "opencode" missing from frontend platform lists + submit form hint; both added to checklist |
+
+**Accepted warnings:** none
+**Unresolved decisions:** none
+
+### Reviewer output
+
+<details>
+<summary>codebase-eng-review — Round 1 (PASS)</summary>
+
+## Summary
+The plan is well-scoped and targets the correct files. All 10 call sites in github.py and 2 in skill.py verified against source. No blocking issues; 2 observations noted for implementer clarity. Test plan covers 23 cases.
+
+## Issues
+- OBS-1 (non-blocking): `_extract_platforms` has TWO distinct roles — frontmatter iteration tuple (line 1015) AND heuristic block (line 1021). Both need AGENTS.md but are separate if-blocks (not elif), per ADR-002.
+- OBS-2 (non-blocking): Pre-existing `no_skill_files` semantic difference between github.py (len==0) and local.py (marker-based). Not introduced by this change.
+
+## Test Plan (23 cases)
+MetadataExtractor: name/description/keywords/version from AGENTS.md frontmatter; explicit platforms field; heuristic inference; coexistence priority (CLAUDE.md wins; SKILL.md wins). Scanner: scan fetches AGENTS.md; has_skill_md True; discover finds AGENTS.md-only dir; no duplicates when both present. skill.py: create/refetch pick AGENTS.md; prefer CLAUDE.md/SKILL.md when both present. Edge cases: no frontmatter, empty file, subdir lookup, no_skill_files flag. Regression: existing SKILL.md skills unchanged; local.py already works.
+
+## Status
+PASS
+
+</details>
+
+<details>
+<summary>doc-review — Round 1 (PASS)</summary>
+
+## Summary
+3 blocking doc gaps: skill-file-discovery.md (7+ filename references), CHANGELOG.md (missing Unreleased entry), adr-u02-frontmatter-format.md (scope statement). 4 warning-level frontend gaps (opencode missing from platform lists, create-a-skill guide). All blocking gaps added to Implementation Checklist and DoD.
+
+## Issues
+- BLOCKING: `docs/skill-file-discovery.md` — 7+ locations listing filenames must include AGENTS.md
+- BLOCKING: `CHANGELOG.md` — needs Unreleased entry
+- BLOCKING: `docs/adr/adr-u02-frontmatter-format.md` line 14 — scope statement must add AGENTS.md
+- WARNING: frontend platform-badges.tsx, platform-section.tsx, lib/utils.ts — missing opencode
+- WARNING: create-a-skill guide doesn't mention AGENTS.md
+
+## Status
+PASS
+
+</details>
+
+<details>
+<summary>codebase-ux-review — Round 1 (PASS WITH AMENDMENTS)</summary>
+
+## Summary
+Scanner delivers correct AGENTS.md parity. Three frontend gaps: (1) "opencode" renders as grey blob with no picker entry; (2) submit form "no skills found" hint omits AGENTS.md; (3) no platform-based catalog filter (pre-existing, track as follow-up). A-1 and A-2 added to Implementation Checklist.
+
+## Issues
+- UX-1 (MEDIUM): "opencode" missing from PLATFORM_COLORS, KNOWN_PLATFORMS, PLATFORM_SUGGESTIONS — renders grey, cannot be manually added
+- UX-2 (LOW): submit-form.tsx line 279 hint text omits AGENTS.md
+- UX-3 (LOW-MEDIUM): No platform filter in catalog — pre-existing gap, amplified by new values; track as follow-up
+
+## Status
+PASS WITH AMENDMENTS
+
+</details>
 
 ---
 

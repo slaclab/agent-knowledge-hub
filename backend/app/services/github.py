@@ -348,7 +348,7 @@ github_url_parser = GitHubURLParser()
 
 # RawScanResult is imported from scanner.py above.
 
-_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md", "package.json", "pyproject.toml", "plugin.json"}
+_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md", "README.md", "package.json", "pyproject.toml", "plugin.json"}
 
 
 # ---------------------------------------------------------------------------
@@ -540,7 +540,7 @@ class GitHubScanner(SourceScanner):
 
         # If plugin.json declares skills as a directory, look for SKILL.md inside it.
         # Handles patterns like "skills": "./skills" where SKILL.md lives in a subdir.
-        has_skill_md = any(k in files for k in ("SKILL.md", "skill.md", "CLAUDE.md"))
+        has_skill_md = any(k in files for k in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"))
         if "plugin.json" in files and not has_skill_md:
             logger.info("[SCAN] plugin.json present but no SKILL.md yet — checking plugin.json skills field")
             try:
@@ -563,7 +563,7 @@ class GitHubScanner(SourceScanner):
                         skills_names = [f.get("name") for f in skills_listing]
                         logger.debug("[SCAN] skills dir listing (%d items): %s", len(skills_names), skills_names)
                         direct = next(
-                            (f for f in skills_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md")),
+                            (f for f in skills_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")),
                             None,
                         )
                         if direct:
@@ -591,7 +591,7 @@ class GitHubScanner(SourceScanner):
                                     sub_names = [f.get("name") for f in sub_listing]
                                     logger.debug("[SCAN] subdir %s listing: %s", subdir["name"], sub_names)
                                     skill_file = next(
-                                        (f for f in sub_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md")),
+                                        (f for f in sub_listing if f.get("type") == "file" and f.get("name") in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")),
                                         None,
                                     )
                                     if skill_file:
@@ -761,7 +761,7 @@ class GitHubScanner(SourceScanner):
             if item.get("type") == "blob":
                 ipath = item.get("path", "")
                 fname = ipath.rsplit("/", 1)[-1] if "/" in ipath else ipath
-                if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json"):
+                if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md", "plugin.json"):
                     dirpath = ipath.rsplit("/", 1)[0] if "/" in ipath else "/"
                     orig_dirpath = dirpath
                     # .<name>-plugin/plugin.json (e.g. .claude-plugin, .codex-plugin) → use parent
@@ -959,7 +959,7 @@ class MetadataExtractor:
             if k and k not in seen:
                 seen.add(k)
                 result.append(k)
-        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 for kw in meta.get("keywords", []) or []:
@@ -970,7 +970,7 @@ class MetadataExtractor:
         return result
 
     def _extract_name(self, files: dict, repo: dict, ref: SourceRef, plugin: dict = {}) -> Optional[str]:
-        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 candidate = str(meta["name"]) if meta.get("name") else None
@@ -995,7 +995,7 @@ class MetadataExtractor:
         return repo.get("name")
 
     def _extract_description(self, files: dict, repo: dict, plugin: dict = {}) -> Optional[str]:
-        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
             if fname in files:
                 meta, content = self._frontmatter(files[fname])
                 if meta.get("description"):
@@ -1012,7 +1012,7 @@ class MetadataExtractor:
         # plugin.json platforms field takes highest priority
         if plugin.get("platforms"):
             return plugin["platforms"]
-        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("platforms"):
@@ -1020,6 +1020,8 @@ class MetadataExtractor:
         platforms: List[str] = []
         if "CLAUDE.md" in files or "SKILL.md" in files or "skill.md" in files:
             platforms.append("claude-code")
+        if "AGENTS.md" in files:
+            platforms.append("codex")
         if "package.json" in files:
             try:
                 data = json.loads(files["package.json"])
@@ -1033,7 +1035,7 @@ class MetadataExtractor:
         return platforms
 
     def _extract_version(self, files: dict, plugin: dict = {}) -> Optional[str]:
-        for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+        for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
             if fname in files:
                 meta, _ = self._frontmatter(files[fname])
                 if meta.get("version"):

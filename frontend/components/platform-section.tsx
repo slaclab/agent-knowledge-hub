@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { addPlatform, removePlatform } from "@/lib/api";
 import { platformPillClass } from "@/components/platform-badges";
 
-const KNOWN_PLATFORMS = ["claude-code", "codex", "openai", "langchain", "crewai", "autogen", "mcp", "other"];
+const KNOWN_PLATFORMS = ["claude-code", "codex", "opencode", "openai", "langchain", "crewai", "autogen", "mcp", "other"];
 
 interface PlatformSectionProps {
   slug: string;

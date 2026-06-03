@@ -10,7 +10,7 @@ Skills can declare metadata (name, description, platforms, version) inside their
 
 ## Decision
 
-Use YAML frontmatter (Jekyll/Hugo convention) at the top of `skill.md` and `CLAUDE.md` files. Parse with the `python-frontmatter` library.
+Use YAML frontmatter (Jekyll/Hugo convention) at the top of `skill.md`, `CLAUDE.md`, and `AGENTS.md` files. Parse with the `python-frontmatter` library.
 
 ```yaml
 ---

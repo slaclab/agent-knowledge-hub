@@ -62,15 +62,15 @@ from regular files at this level — the tree API does not separate them.
 ### Candidate-detection pass
 
 The scanner iterates every `type == "blob"` item and checks if its basename matches
-`("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json")`.
+`("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md", "plugin.json")`.
 
 ```python
-# github.py:560–574
+# github.py discover()
 for item in tree_items:
     if item.get("type") == "blob":
         ipath  = item.get("path", "")
         fname  = ipath.rsplit("/", 1)[-1] if "/" in ipath else ipath
-        if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "plugin.json"):
+        if fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md", "plugin.json"):
             dirpath = ipath.rsplit("/", 1)[0] if "/" in ipath else "/"
             if fname == "plugin.json" and _plugin_subdir_re.search(dirpath):
                 dirpath = dirpath.rsplit("/", 1)[0] if "/" in dirpath else "/"
@@ -82,7 +82,7 @@ Each hit is classified into one of two sets:
 | Set | Populated when |
 |-----|---------------|
 | `plugin_json_dirs` | `fname == "plugin.json"` |
-| `skill_md_dirs`    | `fname` in `("SKILL.md", "skill.md", "CLAUDE.md")` |
+| `skill_md_dirs`    | `fname` in `("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")` |
 
 ### Plugin subdirectory stripping
 
@@ -154,8 +154,8 @@ directory — one level deep, not recursive. Each entry has `type` (`"file"`, `"
 ### Step 2 — Recognised file filter
 
 ```python
-# github.py:274 (module constant)
-_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "README.md",
+# github.py (module constant)
+_SKILL_FILES = {"SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md", "README.md",
                 "package.json", "pyproject.toml", "plugin.json"}
 
 # github.py:396–398
@@ -217,22 +217,22 @@ nothing, and the scanner proceeds without `plugin.json`.
 
 ```python
 # github.py:425–474
-if "plugin.json" in files and not any(k in files for k in ("SKILL.md", "skill.md", "CLAUDE.md")):
+if "plugin.json" in files and not any(k in files for k in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")):
     plugin_data = json.loads(files["plugin.json"])
     skills_val = plugin_data.get("skills")
     if isinstance(skills_val, str):
         # e.g. "skills": "./skills"
         skills_abs = f"{path}/{skills_rel}"
         skills_listing = await self._api_get(f".../contents/{skills_abs}", token)
-        # Look for SKILL.md directly in skills_abs/
-        direct = next((f for f in skills_listing if f["name"] in ("SKILL.md", ...)), None)
+        # Look for SKILL.md/AGENTS.md directly in skills_abs/
+        direct = next((f for f in skills_listing if f["name"] in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")), None)
         if direct:
             files[direct["name"]] = await self._fetch_text(direct["path"], token)
         else:
-            # One level deeper: skills/<slug>/SKILL.md
+            # One level deeper: skills/<slug>/SKILL.md or AGENTS.md
             for subdir in subdirs[:5]:
                 sub_listing = await self._api_get(f".../contents/{subdir['path']}", token)
-                skill_file = next((f for f in sub_listing if f["name"] in ("SKILL.md", ...)), None)
+                skill_file = next((f for f in sub_listing if f["name"] in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md")), None)
                 if skill_file:
                     files[skill_file["name"]] = await self._fetch_text(skill_file["path"], token)
                     break
@@ -240,7 +240,7 @@ if "plugin.json" in files and not any(k in files for k in ("SKILL.md", "skill.md
 
 This step only runs when:
 1. `plugin.json` is present (either from the directory listing or the fallback), AND
-2. No SKILL.md / skill.md / CLAUDE.md was found in the root directory listing.
+2. No SKILL.md / skill.md / CLAUDE.md / AGENTS.md was found in the root directory listing.
 
 It handles the pattern where `plugin.json` declares skills as a directory path
 string (e.g., `"skills": "./skills"`) rather than a list of file paths. The scanner:
@@ -276,11 +276,11 @@ each field:
 
 | Field         | Priority order |
 |---------------|----------------|
-| `name`        | SKILL.md frontmatter → plugin.json `name` → package.json → pyproject.toml → last path segment → repo name |
-| `description` | SKILL.md frontmatter → plugin.json `description` → README.md first paragraph → repo description |
-| `version`     | SKILL.md frontmatter → plugin.json `version` → package.json → pyproject.toml |
-| `keywords`    | plugin.json `keywords` → SKILL.md frontmatter `keywords` |
-| `platforms`   | plugin.json `platforms` → SKILL.md frontmatter `platforms` → inferred from file presence |
+| `name`        | SKILL.md → skill.md → CLAUDE.md → AGENTS.md frontmatter → plugin.json `name` → package.json → pyproject.toml → last path segment → repo name |
+| `description` | SKILL.md → skill.md → CLAUDE.md → AGENTS.md frontmatter → plugin.json `description` → README.md first paragraph → repo description |
+| `version`     | SKILL.md → skill.md → CLAUDE.md → AGENTS.md frontmatter → plugin.json `version` → package.json → pyproject.toml |
+| `keywords`    | plugin.json `keywords` → all instruction files (additive, deduped): SKILL.md → skill.md → CLAUDE.md → AGENTS.md |
+| `platforms`   | plugin.json `platforms` → instruction file frontmatter `platforms` (SKILL.md → … → AGENTS.md) → inferred: CLAUDE.md/SKILL.md/skill.md → `"claude-code"`, AGENTS.md → `"codex"` |
 | `readme_html` | README.md from skill dir → `root_readme` (repo-root README) |
 
 **`readme_html` naming note:** despite the field name, this stores raw Markdown
@@ -297,8 +297,8 @@ frontend scan and stores the results in the `Skill` document:
 |---------------------|--------|
 | `readme_raw`        | `scan.files.get("README.md") or scan.root_readme` |
 | `readme_html`       | `github_data.readme_html` (GitHub-rendered HTML of repo-root README, from `GitHubFetcher`) |
-| `skill_md_raw`      | First of `scan.files["SKILL.md"]`, `scan.files["skill.md"]`, `scan.files["CLAUDE.md"]` |
-| `skill_md_filename` | Whichever of the three was found |
+| `skill_md_raw`      | First of `scan.files["SKILL.md"]`, `scan.files["skill.md"]`, `scan.files["CLAUDE.md"]`, `scan.files["AGENTS.md"]` |
+| `skill_md_filename` | Whichever of the four was found (`"SKILL.md"`, `"skill.md"`, `"CLAUDE.md"`, or `"AGENTS.md"`) |
 | `plugin_author`     | `plugin_meta.get("plugin_author")` |
 | `agent_count`       | `plugin_meta.get("agent_count", 0)` |
 | `has_mcp_server`    | `plugin_meta.get("has_mcp_server", False)` |
@@ -392,7 +392,7 @@ Fix: Move SKILL.md up to `skills/my-skill/SKILL.md` or `skills/SKILL.md`.
 repo/
 └── my-skill/
     ├── plugin.json
-    └── skill_instructions.md   ← non-standard filename; only SKILL.md / skill.md / CLAUDE.md recognised
+    └── skill_instructions.md   ← non-standard filename; only SKILL.md / skill.md / CLAUDE.md / AGENTS.md recognised
 ```
 Fix: Rename to `SKILL.md`.
 

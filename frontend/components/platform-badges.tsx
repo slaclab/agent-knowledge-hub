@@ -8,6 +8,7 @@ const PLATFORM_COLORS: Record<string, { selected: string; unselected: string }> 
   autogen:       { selected: "bg-pink-100 text-pink-800 border-pink-300",       unselected: "bg-background text-pink-300 border-pink-200 hover:text-pink-500" },
   mcp:           { selected: "bg-gray-100 text-gray-800 border-gray-300",       unselected: "bg-background text-gray-300 border-gray-200 hover:text-gray-500" },
   codex:         { selected: "bg-sky-100 text-sky-800 border-sky-300",          unselected: "bg-background text-sky-300 border-sky-200 hover:text-sky-500" },
+  opencode:      { selected: "bg-teal-100 text-teal-800 border-teal-300",       unselected: "bg-background text-teal-300 border-teal-200 hover:text-teal-500" },
   other:         { selected: "bg-zinc-100 text-zinc-800 border-zinc-300",       unselected: "bg-background text-zinc-300 border-zinc-200 hover:text-zinc-500" },
 };
 

@@ -160,14 +160,14 @@ class SkillRepository:
             manifest_truncated = scan.manifest_truncated
             logger.info("[CREATE] scan complete files=%s root_readme=%s",
                         list(scan.files.keys()), "set" if scan.root_readme else "None")
-            for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+            for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
                 if fname in scan.files:
                     skill_md_raw = scan.files[fname][:100_000]  # cap at 100 KB
                     skill_md_filename = fname
                     logger.info("[CREATE] skill_md_filename=%s length=%d", fname, len(skill_md_raw))
                     break
             if skill_md_filename is None:
-                logger.warning("[CREATE] no SKILL.md/skill.md/CLAUDE.md found in scan")
+                logger.warning("[CREATE] no SKILL.md/skill.md/CLAUDE.md/AGENTS.md found in scan")
             readme_raw = scan.files.get("README.md") or scan.root_readme
             if readme_raw:
                 logger.info("[CREATE] readme_raw set from %s, length=%d",
@@ -399,7 +399,7 @@ class SkillRepository:
                 else:
                     logger.warning("[REFETCH] readme_raw still None after rescan")
                 skill_md_found = False
-                for fname in ("SKILL.md", "skill.md", "CLAUDE.md"):
+                for fname in ("SKILL.md", "skill.md", "CLAUDE.md", "AGENTS.md"):
                     if fname in scan.files:
                         skill.skill_md_raw = scan.files[fname][:100_000]
                         skill.skill_md_filename = fname
@@ -407,7 +407,7 @@ class SkillRepository:
                         logger.info("[REFETCH] skill_md_filename=%s length=%d", fname, len(skill.skill_md_raw))
                         break
                 if not skill_md_found:
-                    logger.warning("[REFETCH] no SKILL.md/skill.md/CLAUDE.md found in rescan")
+                    logger.warning("[REFETCH] no SKILL.md/skill.md/CLAUDE.md/AGENTS.md found in rescan")
                 if "plugin.json" in scan.files:
                     pm = metadata_extractor._parse_plugin_json(scan.files["plugin.json"])
                     skill.agent_count = pm.get("agent_count", 0)

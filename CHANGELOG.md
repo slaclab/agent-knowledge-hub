@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### AGENTS.md scanner support (#024)
+
+Skills authored for [OpenAI Codex CLI](https://github.com/openai/codex) using `AGENTS.md` as their instruction file are now recognised and indexed by the AKH scanner.
+
+- **Discovery**: `AGENTS.md` added as a fourth skill directory marker — repos with only `AGENTS.md` (no `SKILL.md` or `CLAUDE.md`) now appear in discovery results.
+- **Metadata extraction**: `name`, `description`, `keywords`, and `version` are extracted from `AGENTS.md` YAML frontmatter, identical to how `CLAUDE.md` is handled. Priority order: `SKILL.md` > `skill.md` > `CLAUDE.md` > `AGENTS.md`.
+- **Platform inference**: When `AGENTS.md` is present and no explicit `platforms:` field is declared, `"codex"` is inferred. This fires independently alongside `"claude-code"` inference from `CLAUDE.md`/`SKILL.md`.
+- **`skill_md_filename`**: Set to `"AGENTS.md"` when it is the only instruction file found; shown on the skill detail page.
+- **Frontend**: `"opencode"` added to platform badge colours, platform picker, and platform suggestions (for skills that declare it explicitly via frontmatter).
+- **Submit form**: "No skills found" hint now mentions `AGENTS.md` alongside `SKILL.md` and `CLAUDE.md`.
+
 ### /agent-knowledge-hub skill (#007)
 
 Discover, install, rate, and submit catalog skills entirely from within your Claude Code session.

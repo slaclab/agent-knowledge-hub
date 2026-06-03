@@ -1,11 +1,11 @@
 # TODO #012 — Moderation: User Flags and Admin Deactivation
 
 > **Priority:** 🟠 P1 — High
-> **Status:** 🔍 Reviewed
+> **Status:** 🏁 Implementation Done
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-04-22
-> **Shipped:** —
+> **Shipped:** 2026-06-03
 
 ---
 

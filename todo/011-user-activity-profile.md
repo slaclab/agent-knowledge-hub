@@ -1,11 +1,11 @@
 # TODO #011 — User Activity Profile: Skills by User
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
+> **Status:** ✅ Complete
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-04-22
-> **Shipped:** —
+> **Shipped:** 2026-06-03
 
 ---
 
@@ -369,20 +369,20 @@ Choice: Index on SkillRevision.actor_id (vs query-time scan)
 
 ## Definition of Done
 
-- [ ] All acceptance criteria pass
-- [ ] Index on `SkillRevision.(actor_id, action)` verified in MongoDB
-- [ ] Regular index on `Skill.submitter_id` verified (non-sparse; field is required)
-- [ ] Unit tests: `get_submitted()`, `get_edited()`, `get_summary()`, upsert install event
-- [ ] Integration tests: all new endpoints including `GET /api/users/{user_id}/installs`, 403 on cross-user install tab, `submitted_by` filter
-- [ ] `POST /api/me/installs/{slug}` rate limit is per-user (not per-IP); returns 429 at 61st request same user
-- [ ] AKH skill: token not echoed in warning output on POST failure
-- [ ] Frontend: `/users/[user_id]` renders Submitted + Edited tabs; Installed tab private
-- [ ] Frontend: contributor name in skill detail header is a clickable link
-- [ ] AKH skill: install flow posts event; failure does not abort install
-- [ ] No N+1 queries on profile page (batch skill lookups verified)
-- [ ] CHANGELOG entry added under `## Unreleased` using format `### User activity profile: skills by user (#011)`
-- [ ] README.md: add one-sentence mention of contributor profile pages (optional — low priority)
-- [ ] ADR-U21, ADR-U22, ADR-U23 written to `docs/adr/` as `adr-u21-profile-url-scheme.md`, `adr-u22-install-event-tracking.md`, `adr-u23-install-tab-visibility.md`
+- [x] All acceptance criteria pass
+- [x] Index on `SkillRevision.(actor_id, action)` verified in MongoDB
+- [x] Regular index on `Skill.submitter_id` verified (non-sparse; field is required)
+- [x] Unit tests: `get_submitted()`, `get_edited()`, `get_summary()`, upsert install event
+- [x] Integration tests: all new endpoints including `GET /api/users/{user_id}/installs`, 403 on cross-user install tab, `submitted_by` filter
+- [x] `POST /api/me/installs/{slug}` rate limit is per-user (not per-IP); returns 429 at 61st request same user
+- [x] AKH skill: token not echoed in warning output on POST failure
+- [x] Frontend: `/users/[user_id]` renders Submitted + Edited tabs; Installed tab private
+- [x] Frontend: contributor name in skill detail header is a clickable link
+- [x] AKH skill: install flow posts event; failure does not abort install
+- [x] No N+1 queries on profile page (batch skill lookups verified)
+- [x] CHANGELOG entry added under `## Unreleased` using format `### User activity profile: skills by user (#011)`
+- [x] README.md: add one-sentence mention of contributor profile pages (optional — low priority)
+- [x] ADR-U21, ADR-U22, ADR-U23 written to `docs/adr/` as `adr-u21-profile-url-scheme.md`, `adr-u22-install-event-tracking.md`, `adr-u23-install-tab-visibility.md`
 
 ---
 

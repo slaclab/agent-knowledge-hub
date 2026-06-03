@@ -1,8 +1,9 @@
 # 007 — `/agent-knowledge-hub` Agent-Native Discovery & Install Skill
 
-**Status:** ⬜ Open
+**Status:** ✅ Complete
 **Branch:** —
 **PR:** —
+**Shipped:** 2026-04-22
 
 ---
 

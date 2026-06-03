@@ -13,6 +13,42 @@ Skills and plugins now expose a full file listing, visible in the submission pre
 - **Local skills**: `LocalScanner` populates the manifest from `snapshotted_files`. The file content endpoint serves local files directly without a GitHub round-trip.
 - **`refetch()` updates the manifest**: re-scanning a skill via the admin "Rescan" button refreshes `file_manifest` and `manifest_truncated`.
 
+### User activity profile: skills by user (#011)
+
+Each user now has a public profile page at `/users/<user_id>` showing their catalog contributions.
+
+- **Submitted tab** — skills the user has submitted to the catalog, paginated.
+- **Edited tab** — skills the user has edited or re-fetched at least once, deduped by skill.
+- **Installed tab** — private to the profile owner and admins; shows skills installed via the AKH skill with `installed_at` date, an "update available" badge when upstream has changed, and a Re-install link. Deleted skills shown with slug in monospace.
+- **Contributor links** — contributor names on skill detail pages and actor IDs in revision timelines are now clickable links to the relevant profile page. The username in the nav header links to your own profile.
+- **`/users/me`** — server-side redirect to `/users/<your_user_id>` for authenticated users.
+- **Install event tracking** — the AKH skill fires a fire-and-forget `POST /api/me/installs/<slug>` after each successful install. Failures log a warning only; they never abort the install.
+- **New backend endpoints:** `GET /api/users/{user_id}`, `/skills`, `/edits`, `/installs`; `GET /api/me/installs`; `POST /api/me/installs/{slug}` (rate-limited 60/hour per user, per-user key not per-IP). Install events are upserted — re-installing a skill updates `installed_at` rather than adding a duplicate row.
+- **`GET /api/skills?submitted_by=`** — new filter param for programmatic use.
+- **ADRs:** `adr-u21-profile-url-scheme.md`, `adr-u22-install-event-tracking.md`, `adr-u23-install-tab-visibility.md`.
+
+### Installer: git clone replaces GitHub Contents API (#022)
+
+Plugin installation now uses `git clone` instead of per-file GitHub Contents API calls.
+
+- **Single clone per install** — `git clone --depth 1 <repo_url> /tmp/akh-install-<slug>/` replaces the loop of individual file-fetch API calls. No API rate limit exposure; arbitrary directory depth; matches how Claude Code's native `/plugin install` works.
+- **SHA-pinned installs** — when a skill has a pinned commit SHA (from #017), a full clone + `git checkout <sha>` is used instead of `--depth 1`.
+- **Auth** — public repos work with no credentials; private repos use the user's existing git credential helpers (`gh auth login` or SSH keys). Clone auth failures print an actionable error pointing to `gh auth login`.
+- **Fallback** — if `git` is not found on PATH, the installer falls back to the Contents API with a warning.
+- **Cleanup** — temp clone directory is deleted on both success and failure via a shell trap.
+
+### Installer skill extension: directory skills, multi-platform, Codex (#020)
+
+The `/agent-knowledge-hub` installer now handles the full range of real-world plugin layouts.
+
+- **Directory-form install** — `"skills": "./skills"` in `plugin.json` is now handled correctly: all files in the directory are fetched and written preserving subdirectory structure. Applies equally to `"agents"` and `"commands"` directory declarations.
+- **Installed-files manifest** — `~/.claude/skills/<slug>/.installed-manifest.json` written after every install, listing paths of all commands and agents installed into shared directories. `remove` and `update` use it to clean up correctly; falls back to array-form `plugin.json` for old installs.
+- **Platform check** — `compatible_platforms` in `plugin.json` is read at install time. Skills that don't list `claude-code` get a warning + y/n prompt; skills that also support other platforms show an informational note.
+- **Codex install path** — when `compatible_platforms` includes `"codex"`, the installer also copies files to `~/.akh/plugins/<slug>/`, registers an AKH marketplace entry in `~/.codex/config.toml`, and optionally injects skill instructions into `~/.codex/AGENTS.md`. Degrades gracefully if `~/.codex/` is absent.
+- **`validate` update** — accepts both array-form and directory-form component declarations; validates `author` and `compatible_platforms` fields; shows agent count and platform list in summary.
+- **`create` scaffold** — extended question flow for agents, scripts, MCP servers, and target platforms; generates matching directory structure and full `plugin.json` with directory-form `"skills": "./skills"`.
+- **`list`** — shows platform and component summary from locally-cached `plugin.json`.
+
 ### AGENTS.md scanner support (#024)
 
 Skills authored for [OpenAI Codex CLI](https://github.com/openai/codex) using `AGENTS.md` as their instruction file are now recognised and indexed by the AKH scanner.

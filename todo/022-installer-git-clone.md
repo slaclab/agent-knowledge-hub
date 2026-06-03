@@ -1,11 +1,11 @@
 # TODO #022 — Installer: Switch to Git Clone for Plugin Installation
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done
+> **Status:** ✅ Complete
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-05-28
-> **Shipped:** —
+> **Shipped:** 2026-06-02
 > **Depends on:** #020 (installer skill extension)
 
 ---
@@ -157,13 +157,13 @@ Choice: Fallback to Contents API if git unavailable vs hard fail
 
 ## Definition of Done
 
-- [ ] `git` preflight check with graceful Contents API fallback
-- [ ] `git clone --depth 1` replaces Contents API enumeration + download loop
-- [ ] Temp directory cleaned up on success and failure
-- [ ] Auth failure produces actionable error message
-- [ ] No regression in install output or manifest writing
-- [ ] Smoke test: install a skill with nested subdirectories (verify all files present)
-- [ ] Smoke test: install from a private repo via `gh auth login`
+- [x] `git` preflight check with graceful Contents API fallback
+- [x] `git clone --depth 1` replaces Contents API enumeration + download loop
+- [x] Temp directory cleaned up on success and failure
+- [x] Auth failure produces actionable error message
+- [x] No regression in install output or manifest writing
+- [x] Smoke test: install a skill with nested subdirectories (verify all files present)
+- [x] Smoke test: install from a private repo via `gh auth login`
 
 ---
 

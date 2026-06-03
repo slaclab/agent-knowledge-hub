@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from beanie import Document
+from pymongo import IndexModel, ASCENDING
 from pydantic import Field
 
 
@@ -36,5 +37,6 @@ class SkillFlag(Document):
     class Settings:
         name = "skill_flags"
         indexes = [
-            [("skill_id", 1), ("reporter_id", 1)],
+            IndexModel([("skill_id", ASCENDING), ("reporter_id", ASCENDING)], unique=True, name="skill_reporter_unique"),
+            IndexModel([("skill_id", ASCENDING), ("status", ASCENDING)], name="skill_id_status"),
         ]

@@ -7,6 +7,8 @@ import { SkillContentTabs } from "@/components/skill-content-tabs";
 import { RevisionTimeline } from "@/components/revision-timeline";
 import { PlatformSection } from "@/components/platform-section";
 import { FlagIndicator } from "@/components/flag-indicator";
+import { FlagButton } from "@/components/flag-button";
+import { AdminDeactivateButton } from "@/components/admin-deactivate-button";
 import { LabelSection } from "@/components/label-section";
 import { RatingWidget } from "@/components/rating-widget";
 import { formatDate } from "@/lib/utils";
@@ -26,12 +28,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
     h.get("x-vouch-idp-claims-name") ||
     h.get("x-vouch-user") ||
     h.get("x-forwarded-user");
-  const { skill, deactivated, reason } = await getSkill(params.slug, true, viewer ?? undefined);
+  const { skill, deactivated, reason, superseded_by_slug } = await getSkill(params.slug, true, viewer ?? undefined);
 
   if (deactivated) {
     return (
       <div className="max-w-2xl mx-auto py-8">
-        <Tombstone reason={reason} />
+        <Tombstone reason={reason} superseded_by_slug={superseded_by_slug} />
       </div>
     );
   }
@@ -83,17 +85,42 @@ export default async function SkillDetailPage({ params }: PageProps) {
                 SLAC Only
               </a>
             )}
-            <FlagIndicator count={skill.flag_count} />
+            <FlagIndicator
+              count={skill.flag_count}
+              isMine={skill.my_flag?.status === "active"}
+            />
           </div>
           {skill.description && (
             <p className="text-muted-foreground">{skill.description}</p>
           )}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>by {contributors.join(", ")}</span>
+            <span>
+              by{" "}
+              {contributors.map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ", "}
+                  <Link
+                    href={`/users/${encodeURIComponent(c)}`}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {c}
+                  </Link>
+                </span>
+              ))}
+            </span>
             <span>submitted {formatDate(skill.submitted_at)}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <FlagButton
+            skillSlug={skill.slug}
+            initialFlagCount={skill.flag_count}
+            myFlag={skill.my_flag ?? null}
+            isAuthenticated={!!viewer}
+          />
+          {isAdmin && (
+            <AdminDeactivateButton slug={skill.slug} />
+          )}
           <Link
             href={`/skills/${skill.slug}/edit`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"

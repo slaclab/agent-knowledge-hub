@@ -56,10 +56,14 @@ class SkillRepository:
         include_deactivated: bool = False,
         forked_from: Optional[str] = None,
         visibility: Optional[str] = None,
+        submitted_by: Optional[str] = None,
     ) -> Tuple[List[Skill], int]:
         query_parts = []
         if not include_deactivated:
             query_parts.append(Skill.status == SkillStatus.active)
+
+        if submitted_by:
+            query_parts.append(Skill.submitter_id == submitted_by)
 
         if q:
             query_parts.append({"$text": {"$search": q}})
@@ -472,7 +476,73 @@ class SkillRepository:
         await SkillRevision.find(SkillRevision.skill_id == skill_id).delete()
         await SkillFlag.find(SkillFlag.skill_id == skill_id).delete()
 
+        # Null out skill_id on install events so the event record survives
+        from app.models.install_event import SkillInstallEvent
+        collection = SkillInstallEvent.get_motor_collection()
+        await collection.update_many({"skill_id": skill_id}, {"$set": {"skill_id": None}})
+
         await skill.delete()
+
+    async def deactivate(
+        self,
+        slug: str,
+        reason: str,
+        admin_id: str,
+        superseded_by_slug: Optional[str] = None,
+    ) -> tuple[Skill, list[str]]:
+        """Deactivate a skill. Writes revision. Bulk-resolves active flags."""
+        from app.models.skill import SkillStatus
+        import app.services.flag as flag_service
+
+        skill = await self.get(slug, include_deactivated=True)
+        if not skill:
+            raise ValueError("not_found")
+        if skill.status == SkillStatus.deactivated:
+            raise ValueError("already_deactivated")
+
+        skill.status = SkillStatus.deactivated
+        skill.deactivation_reason = reason
+        if superseded_by_slug is not None:
+            skill.superseded_by_slug = superseded_by_slug
+        await skill.save()
+
+        await revision_service.record(
+            skill_id=str(skill.id),
+            actor_id=admin_id,
+            action=RevisionAction.deactivate,
+            snapshot={"reason": reason, "superseded_by_slug": superseded_by_slug},
+        )
+
+        await flag_service.resolve_all_for_skill(str(skill.id), resolved_by=admin_id)
+
+        warnings = []
+        if superseded_by_slug:
+            ref = await self.get(superseded_by_slug, include_deactivated=True)
+            if ref and ref.status == SkillStatus.deactivated:
+                warnings.append(f"superseded_by_slug '{superseded_by_slug}' is itself deactivated")
+        return skill, warnings
+
+    async def reactivate(self, slug: str, reason: Optional[str], admin_id: str) -> Skill:
+        """Reactivate a deactivated skill. Writes revision."""
+        from app.models.skill import SkillStatus
+
+        skill = await self.get(slug, include_deactivated=True)
+        if not skill:
+            raise ValueError("not_found")
+        if skill.status == SkillStatus.active:
+            raise ValueError("already_active")
+
+        skill.status = SkillStatus.active
+        skill.deactivation_reason = None
+        await skill.save()
+
+        await revision_service.record(
+            skill_id=str(skill.id),
+            actor_id=admin_id,
+            action=RevisionAction.reactivate,
+            snapshot={"reason": reason},
+        )
+        return skill
 
 
 skill_repository = SkillRepository()

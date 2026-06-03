@@ -5,12 +5,17 @@ import type {
   SkillUpdate,
   SkillRevision,
   User,
+  UserProfile,
+  PaginatedInstalls,
   GitHubPreview,
   SkillListParams,
   SkillScanSnapshot,
   DiscoverResult,
   LabelOut,
   RateSkillOut,
+  FlagResponse,
+  RetractResponse,
+  PaginatedFlaggedSkills,
 } from "@/types/skill";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
@@ -66,7 +71,7 @@ export async function getSkill(
   slug: string,
   server = false,
   viewerName?: string,
-): Promise<{ skill: Skill | null; deactivated: boolean; reason: string | null }> {
+): Promise<{ skill: Skill | null; deactivated: boolean; reason: string | null; superseded_by_slug?: string | null }> {
   const b = apiBase(server);
   const fetchHeaders: HeadersInit = {};
   if (server && viewerName) {
@@ -77,7 +82,10 @@ export async function getSkill(
   const res = await fetch(`${b}/skills/${slug}`, { cache: "no-store", headers: fetchHeaders });
   if (res.status === 410) {
     const json = await res.json().catch(() => ({}));
-    return { skill: null, deactivated: true, reason: (json as { detail?: string }).detail ?? null };
+    const detail = (json as { detail?: { code?: string; reason?: string; superseded_by_slug?: string } | string }).detail;
+    const reason = typeof detail === "object" ? (detail?.reason ?? null) : (detail ?? null);
+    const superseded_by_slug = typeof detail === "object" ? (detail?.superseded_by_slug ?? null) : null;
+    return { skill: null, deactivated: true, reason, superseded_by_slug };
   }
   if (!res.ok) return { skill: null, deactivated: false, reason: null };
   const skill = (await res.json()) as Skill;
@@ -232,4 +240,113 @@ export async function rateSkill(
     body: JSON.stringify({ value }),
   });
   return { data: r.data, error: r.error };
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const { data } = await request<UserProfile>(CLIENT_BASE, `/users/${encodeURIComponent(userId)}`);
+  return data;
+}
+
+export async function getUserSkills(
+  userId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<PaginatedSkills | null> {
+  const { data } = await request<PaginatedSkills>(
+    CLIENT_BASE,
+    `/users/${encodeURIComponent(userId)}/skills?page=${page}&page_size=${pageSize}`,
+  );
+  return data;
+}
+
+export async function getUserEdits(
+  userId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<PaginatedSkills | null> {
+  const { data } = await request<PaginatedSkills>(
+    CLIENT_BASE,
+    `/users/${encodeURIComponent(userId)}/edits?page=${page}&page_size=${pageSize}`,
+  );
+  return data;
+}
+
+export async function getMyInstalls(page = 1, pageSize = 20): Promise<PaginatedInstalls | null> {
+  const { data } = await request<PaginatedInstalls>(
+    CLIENT_BASE,
+    `/me/installs?page=${page}&page_size=${pageSize}`,
+  );
+  return data;
+}
+
+export async function getUserInstalls(
+  userId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<PaginatedInstalls | null> {
+  const { data } = await request<PaginatedInstalls>(
+    CLIENT_BASE,
+    `/users/${encodeURIComponent(userId)}/installs?page=${page}&page_size=${pageSize}`,
+  );
+  return data;
+}
+
+export async function recordInstall(slug: string): Promise<void> {
+  await request(CLIENT_BASE, `/me/installs/${encodeURIComponent(slug)}`, { method: "POST" });
+}
+
+export async function flagSkill(
+  slug: string,
+  reason: string,
+  note?: string,
+  superseded_by_slug?: string,
+): Promise<FlagResponse | null> {
+  const { data } = await request<FlagResponse>(CLIENT_BASE, `/skills/${encodeURIComponent(slug)}/flag`, {
+    method: "POST",
+    body: JSON.stringify({ reason, note: note ?? null, superseded_by_slug: superseded_by_slug ?? null }),
+  });
+  return data;
+}
+
+export async function retractFlag(slug: string): Promise<RetractResponse | null> {
+  const { data } = await request<RetractResponse>(CLIENT_BASE, `/skills/${encodeURIComponent(slug)}/flag`, {
+    method: "DELETE",
+  });
+  return data;
+}
+
+export async function getAdminFlags(page = 1, pageSize = 20): Promise<PaginatedFlaggedSkills | null> {
+  const { data } = await request<PaginatedFlaggedSkills>(
+    CLIENT_BASE,
+    `/admin/flags?page=${page}&page_size=${pageSize}`,
+  );
+  return data;
+}
+
+export async function deactivateSkill(
+  slug: string,
+  reason: string,
+  superseded_by_slug?: string,
+): Promise<{ slug: string; status: string; warnings: string[] } | null> {
+  const { data } = await request<{ slug: string; status: string; warnings: string[] }>(
+    CLIENT_BASE,
+    `/admin/skills/${encodeURIComponent(slug)}/deactivate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason, superseded_by_slug: superseded_by_slug ?? null }),
+    },
+  );
+  return data;
+}
+
+export async function reactivateSkill(
+  slug: string,
+  reason?: string,
+): Promise<{ slug: string; status: string } | null> {
+  const { data } = await request<{ slug: string; status: string }>(
+    CLIENT_BASE,
+    `/admin/skills/${encodeURIComponent(slug)}/reactivate`,
+    { method: "POST", body: JSON.stringify({ reason: reason ?? null }) },
+  );
+  return data;
 }

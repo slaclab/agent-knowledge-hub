@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.models import ALL_MODELS
-from app.routers import health, me, site_settings, skills
+from app.routers import admin, health, me, site_settings, skills, users
 from app.routers import github_scan
 import app.services.local  # noqa: F401 — registers LocalScanner in scanner_registry
 from app.routers.catalog import router as catalog_router
@@ -71,7 +71,7 @@ def _redact_private_key(text: str) -> str:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Agent Knowledge Hub API", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Agent Knowledge Hub API", version="0.14.0", lifespan=lifespan)
 
     # Rate limiter state
     app.state.limiter = limiter
@@ -103,6 +103,8 @@ def create_app() -> FastAPI:
     app.include_router(labels_router)
     app.include_router(skills_labels_router)
     app.include_router(labels_admin_router)
+    app.include_router(users.router)
+    app.include_router(admin.router)
 
     return app
 

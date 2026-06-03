@@ -9,9 +9,13 @@ from slowapi.util import get_remote_address
 from pydantic import BaseModel
 
 from app.auth import User, get_current_user, get_optional_user
+from app.models.flag import FlagStatus
 from app.models.rating import Rating
 from app.models.revision import SkillRevision
 from app.models.skill import SkillStatus
+from app.schemas.flag import FlagCreate, FlagOut, FlagResponse, RetractResponse
+import app.services.flag as flag_service
+from app.auth import user_id_key_func
 from app.schemas.skill import (
     GitHubPreviewOut,
     LabelOut,
@@ -32,9 +36,10 @@ router = APIRouter(prefix="/api/skills")
 github_router = APIRouter(prefix="/api")
 
 limiter = Limiter(key_func=get_remote_address)
+_flag_limiter = Limiter(key_func=user_id_key_func)
 
 
-def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None, omit_content: bool = False) -> SkillOut:
+def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None, my_flag=None, omit_content: bool = False) -> SkillOut:
     return SkillOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -78,6 +83,7 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         flag_count=skill.flag_count,
         labels=labels or [],
         my_rating=my_rating,
+        my_flag=my_flag,
     )
 
 
@@ -118,11 +124,13 @@ async def list_skills(
     forked_from: Optional[str] = Query(None, description="Filter by upstream fork URL"),
     visibility: Optional[str] = Query(None, description="Filter by visibility: public, internal, all"),
     labels: Optional[str] = Query(None, description="Comma-separated label names (AND filter)"),
+    submitted_by: Optional[str] = Query(None, description="Filter by submitter user_id"),
 ):
     label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else None
     items, total = await skill_repository.list(
         q=q, sort=sort, page=page, page_size=page_size,
         forked_from=forked_from, visibility=visibility, labels=label_list,
+        submitted_by=submitted_by,
     )
     skill_ids = [str(s.id) for s in items]
     labels_by_skill = await label_service.batch_labels_for_skills(skill_ids)
@@ -168,15 +176,24 @@ async def get_skill(slug: str, viewer: Optional[User] = Depends(get_optional_use
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     skill_labels = await label_service.list_for_skill(str(skill.id))
     my_rating = None
+    my_flag_out = None
     if viewer:
         rating = await Rating.find_one(
             Rating.skill_id == str(skill.id),
             Rating.user_id == viewer.user_id,
         )
         my_rating = rating.value if rating else None
+        flag_doc = await flag_service.get_my_flag(str(skill.id), viewer.user_id)
+        if flag_doc:
+            my_flag_out = FlagOut(
+                reason=flag_doc.reason,
+                note=flag_doc.note,
+                status=flag_doc.status,
+                created_at=flag_doc.created_at,
+            )
     from app.models.skill import VisibilityEnum
     omit_content = skill.visibility == VisibilityEnum.internal and not viewer
-    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating, omit_content=omit_content)
+    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating, my_flag=my_flag_out, omit_content=omit_content)
 
 
 @router.post("/{slug}/rate", response_model=RateSkillOut)
@@ -192,6 +209,68 @@ async def rate_skill_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     avg, count = await rate_skill(str(skill.id), user.user_id, body.value)
     return RateSkillOut(avg_rating=avg, rating_count=count, my_rating=body.value)
+
+
+@router.post("/{slug}/flag", response_model=FlagResponse)
+@_flag_limiter.limit("10/hour")
+async def create_flag(
+    request: Request,
+    slug: str,
+    body: FlagCreate,
+    user: User = Depends(get_current_user),
+):
+    skill = await skill_repository.get(slug, include_deactivated=True)
+    if not skill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.status == SkillStatus.deactivated:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={"code": "deactivated"},
+        )
+    # Validate superseded_by_slug if provided
+    warnings = []
+    if body.superseded_by_slug:
+        ref_skill = await skill_repository.get(body.superseded_by_slug, include_deactivated=True)
+        if not ref_skill:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"superseded_by_slug '{body.superseded_by_slug}' not found",
+            )
+        if ref_skill.status == SkillStatus.deactivated:
+            warnings.append(f"superseded_by_slug '{body.superseded_by_slug}' is itself deactivated")
+
+    flag_doc = await flag_service.create_or_update(
+        skill_id=str(skill.id),
+        reporter_id=user.user_id,
+        reason=body.reason,
+        note=body.note,
+        superseded_by_slug=body.superseded_by_slug,
+    )
+    updated_skill = await skill_repository.get(slug)
+    flag_count = updated_skill.flag_count if updated_skill else skill.flag_count
+    my_flag_out = FlagOut(
+        reason=flag_doc.reason,
+        note=flag_doc.note,
+        status=flag_doc.status,
+        created_at=flag_doc.created_at,
+    )
+    return FlagResponse(flag_count=flag_count, my_flag=my_flag_out)
+
+
+@router.delete("/{slug}/flag", response_model=RetractResponse)
+async def retract_flag(
+    slug: str,
+    user: User = Depends(get_current_user),
+):
+    skill = await skill_repository.get(slug, include_deactivated=True)
+    if not skill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    try:
+        await flag_service.retract(str(skill.id), user.user_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active flag to retract")
+    updated_skill = await skill_repository.get(slug, include_deactivated=True)
+    return RetractResponse(flag_count=updated_skill.flag_count if updated_skill else 0)
 
 
 @router.patch("/{slug}", response_model=SkillOut)

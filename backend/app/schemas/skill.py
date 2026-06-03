@@ -123,6 +123,7 @@ class SkillOut(BaseModel):
     flag_count: int
     labels: List[LabelOut] = []
     my_rating: Optional[int] = None
+    my_flag: Optional[object] = None  # FlagOut | None — avoid circular import; typed at route layer
 
     model_config = {"from_attributes": True}
 

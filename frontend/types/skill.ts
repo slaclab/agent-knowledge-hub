@@ -57,6 +57,46 @@ export interface Skill {
   update_available: boolean;
   labels: LabelOut[];
   my_rating: number | null;
+  my_flag: FlagOut | null;
+}
+
+export type FlagReason = "broken" | "stale" | "superseded" | "inappropriate" | "other";
+export type FlagStatus = "active" | "resolved";
+
+export interface FlagOut {
+  reason: FlagReason;
+  note: string | null;
+  status: FlagStatus;
+  created_at: string;
+}
+
+export interface FlagResponse {
+  flag_count: number;
+  my_flag: FlagOut | null;
+}
+
+export interface RetractResponse {
+  flag_count: number;
+}
+
+export interface FlaggedSkillItem {
+  skill_slug: string;
+  skill_name: string;
+  flag_count: number;
+  flags: Array<{
+    reason: FlagReason;
+    note: string | null;
+    status: FlagStatus;
+    created_at: string;
+    reporter_id: string;
+  }>;
+}
+
+export interface PaginatedFlaggedSkills {
+  items: FlaggedSkillItem[];
+  total: number;
+  page: number;
+  pages: number;
 }
 
 export interface RateSkillOut {
@@ -108,6 +148,28 @@ export interface SkillUpdate {
 export interface User {
   user_id: string;
   is_admin: boolean;
+}
+
+export interface UserProfile {
+  user_id: string;
+  submitted_count: number;
+  edited_count: number;
+  install_count?: number; // only present for self or admin viewer
+}
+
+export interface InstallEvent {
+  skill_slug: string;
+  skill_name: string | null;
+  installed_at: string;
+  update_available: boolean;
+  is_deleted: boolean;
+}
+
+export interface PaginatedInstalls {
+  items: InstallEvent[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface GitHubPreview {

@@ -8,7 +8,7 @@ import jwt as pyjwt
 from jwt import PyJWKClient
 from jwt.exceptions import ExpiredSignatureError, PyJWTError
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.config import settings
 
@@ -112,10 +112,12 @@ def get_current_user(request: Request) -> User:
         if secret_match:
             if forwarded_user:
                 logger.debug("AUTH path=2 (internal secret) user=%s", forwarded_user)
-                return User(
+                user = User(
                     user_id=forwarded_user,
                     is_admin=forwarded_user in settings.admin_user_set,
                 )
+                request.state.user = user
+                return user
             else:
                 logger.warning(
                     "AUTH path2 secret matched but X-Forwarded-User is empty — "
@@ -134,7 +136,9 @@ def get_current_user(request: Request) -> User:
         if token:
             logger.debug("AUTH path=3 (Bearer JWT) attempting validation")
             user_id = _validate_slac_jwt(token)
-            return User(user_id=user_id, is_admin=user_id in settings.admin_user_set)
+            user = User(user_id=user_id, is_admin=user_id in settings.admin_user_set)
+            request.state.user = user
+            return user
 
     logger.warning(
         "AUTH no path matched — returning 401. "
@@ -151,6 +155,19 @@ def get_current_user(request: Request) -> User:
     )
 
 
+def user_id_key_func(request: Request) -> str:
+    """slowapi key_func that returns the authenticated user_id.
+
+    Falls back to remote address for unauthenticated requests (rate-limit
+    middleware runs before auth dependencies resolve).
+    """
+    user = getattr(request.state, "user", None)
+    if user is not None:
+        return f"user:{user.user_id}"
+    from slowapi.util import get_remote_address
+    return get_remote_address(request)
+
+
 def get_optional_user(request: Request) -> User | None:
     """FastAPI dependency — returns User if authenticated, None otherwise."""
     try:
@@ -159,8 +176,13 @@ def get_optional_user(request: Request) -> User | None:
         return None
 
 
-def require_admin(user: User) -> User:
-    """FastAPI dependency — requires the caller to have admin rights."""
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """FastAPI dependency — requires the caller to have admin rights.
+
+    Embeds get_current_user so this can be used at router level (Depends(require_admin))
+    without repeating user: User = Depends(get_current_user) on each endpoint.
+    Per-endpoint usage in labels.py still works (backward-compatible).
+    """
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

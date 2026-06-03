@@ -4,6 +4,7 @@
 
 > **Priority:** 🟡 P2 — Medium
 > **Status:** ⬜ Open
+> **Note:** Slices 1–4 shipped in feat(#020) v0.8.0. Slice 5 (Codex install path) is the remaining scope.
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-05-05
@@ -349,10 +350,10 @@ Three options were evaluated (see [`docs/github-api-plugin-installation.md`](../
 
 This is a new delivery slice for #020 — tracked as Slice 5 below.
 
-**Remaining gaps before implementing:**
-- `marketplace.json` manifest schema not yet fully traced in codex-rs source
-- Whether Codex auto-discovers plugins without an explicit `[plugins]` config.toml entry is unconfirmed
-- Project-level `.codex/config.toml` layer existence not fully verified
+**Gaps resolved (2026-06-03):**
+- `marketplace.json` schema verified from `codex-rs/core-plugins/src/marketplace.rs` — required at `.agents/plugins/marketplace.json` within marketplace root; schema: `{ name, plugins: [{ name, source }] }`
+- Explicit `[plugins]` config.toml entry IS required — no auto-discovery without it (confirmed)
+- Project-level `.codex/config.toml` layer exists but not needed for AKH install (confirmed)
 
 ---
 
@@ -400,12 +401,76 @@ Choice: Scaffold with actual agent templates vs empty .md stubs
 - Directory structure generation
 - Full plugin.json template with all supported fields
 
-**Slice 5 — Codex install path** *(unblocked by research 2026-06-02)*
-- When `compatible_platforms` includes `"codex"`: install plugin to `~/.akh/plugins/<slug>/`
-- Append local marketplace + plugin entry to `~/.codex/config.toml`
-- Optionally append skill instructions to `~/.codex/AGENTS.md`
-- `remove`: reverse the config.toml entries and delete `~/.akh/plugins/<slug>/`
-- Blocked on: confirming `marketplace.json` schema and whether explicit `[plugins]` entry is required
+**Slice 5 — Codex install path** *(unblocked by research + schema verification 2026-06-03)*
+
+When `compatible_platforms` includes `"codex"`, after the Claude Code install completes:
+
+**5a. Install plugin files to AKH-managed directory:**
+```
+~/.akh/plugins/
+  .agents/plugins/marketplace.json   ← created/updated by AKH
+  <slug>/
+    .claude-plugin/plugin.json       ← plugin manifest (recognised by Codex cross-compat)
+    skills/<skill-name>/
+      SKILL.md
+    agents/                          ← if agents declared
+    commands/                        ← if commands declared
+```
+
+**5b. Write/update `~/.akh/plugins/.agents/plugins/marketplace.json`:**
+
+`marketplace.json` is required by Codex for `source_type = "local"` marketplaces. It must live at `.agents/plugins/marketplace.json` inside the marketplace root. Schema (verified from codex-rs/core-plugins/src/marketplace.rs):
+
+```json
+{
+  "name": "agent-knowledge-hub",
+  "plugins": [
+    { "name": "<slug>", "source": "./<slug>" },
+    ...existing entries...
+  ]
+}
+```
+
+On first install: create the file with the AKH marketplace entry and this skill as the first plugin.
+On subsequent installs: read the file, append the new plugin entry if not present, write back.
+On remove: read the file, remove the plugin entry, write back. If `plugins` becomes empty, delete the file.
+
+**5c. Register the AKH marketplace in `~/.codex/config.toml`** (once, idempotent):
+```toml
+[marketplaces."agent-knowledge-hub"]
+source_type = "local"
+source = "~/.akh/plugins"
+```
+Check if the `[marketplaces."agent-knowledge-hub"]` key already exists before appending.
+
+**5d. Enable plugin in `~/.codex/config.toml`:**
+```toml
+[plugins."<slug>@agent-knowledge-hub"]
+enabled = true
+```
+Append this block. On remove: delete this block.
+
+**5e. (Optional) inject global instructions into `~/.codex/AGENTS.md`:**
+- If the plugin has a `SKILL.md` or `AGENTS.md` in its skills directory, ask:
+  ```
+  Add skill instructions to ~/.codex/AGENTS.md for global Codex access? (y/n)
+  ```
+- If yes: append a clearly-delimited section:
+  ```markdown
+  <!-- BEGIN agent-knowledge-hub:<slug> -->
+  <SKILL.md content>
+  <!-- END agent-knowledge-hub:<slug> -->
+  ```
+- On remove: delete the delimited section from `~/.codex/AGENTS.md`.
+
+**5f. Print Codex install summary:**
+```
+✓ Codex: installed to ~/.akh/plugins/<slug>/
+         Marketplace: agent-knowledge-hub registered in ~/.codex/config.toml
+         Plugin: <slug>@agent-knowledge-hub enabled
+```
+
+**5g. Remove flow** — reverse in order: delete `~/.codex/AGENTS.md` section, remove `[plugins."<slug>@agent-knowledge-hub"]` from config.toml, update marketplace.json, delete `~/.akh/plugins/<slug>/`. Leave `[marketplaces."agent-knowledge-hub"]` in config.toml if other AKH plugins remain.
 
 ---
 
@@ -420,6 +485,10 @@ Choice: Scaffold with actual agent templates vs empty .md stubs
 | Existing plugins with implicit claude-code support get wrong warning after #019 adds explicit platforms | Low | Low | ADR-002: absent field = claude-code assumed; no warning triggered |
 | Old installs (pre-manifest) leave orphan commands/agents on update/remove | Low | Low | Warn user; fall back to array-form plugin.json parsing; document limitation |
 | Manifest write fails mid-install (e.g. disk full) | Very Low | Low | Write manifest last, after all files confirmed; treat missing manifest as old install |
+| `~/.codex/config.toml` parse fails (malformed TOML by user) | Low | Medium | Read-modify-write with error; if parse fails, append blocks as plaintext with comment warning user to merge manually |
+| Codex not installed — `~/.codex/` absent | Medium | Low | Check for directory existence before writing; skip Codex install path with: `ℹ Codex home (~/.codex/) not found — skipping Codex install.` |
+| `marketplace.json` written mid-update corrupts registry if interrupted | Very Low | Low | Write to temp file, rename atomically |
+| Delimited section in AGENTS.md accidentally deleted by user, remove leaves orphan plugin | Low | Low | Remove only deletes what it finds; warn if section absent |
 
 ---
 
@@ -442,6 +511,14 @@ Choice: Scaffold with actual agent templates vs empty .md stubs
 - [ ] `create`: generate directory structure matching answers
 - [ ] `create`: generate full plugin.json with directory-form `"skills": "./skills"` (not legacy object format)
 - [ ] `list`: show platform + component summary from local plugin.json
+- [ ] **Slice 5 — Codex install path:**
+- [ ] Install (Codex): create `~/.akh/plugins/<slug>/` with plugin manifest + skill files when `"codex"` in `compatible_platforms`
+- [ ] Install (Codex): create/update `~/.akh/plugins/.agents/plugins/marketplace.json` (append plugin entry, idempotent)
+- [ ] Install (Codex): register `[marketplaces."agent-knowledge-hub"]` in `~/.codex/config.toml` (once, idempotent)
+- [ ] Install (Codex): add `[plugins."<slug>@agent-knowledge-hub"] enabled = true` to `~/.codex/config.toml`
+- [ ] Install (Codex): offer to inject SKILL.md content into `~/.codex/AGENTS.md` with delimited section
+- [ ] Install (Codex): skip gracefully if `~/.codex/` directory does not exist
+- [ ] Remove (Codex): delete delimited AGENTS.md section, remove plugin config.toml block, update marketplace.json, delete `~/.akh/plugins/<slug>/`
 - [ ] Smoke tests: run manual checklist below before marking done
 
 ---
@@ -472,6 +549,10 @@ Generated by /codebase-eng-review on 2026-05-06
 | S9 | Validate directory-form | `validate .` on repo with `"skills": "./skills"` | `✓ skills: directory ./skills` instead of `✗ skills is not a non-empty array` |
 | S10 | Create with agents | `create` → answer y to agents question | Generates `agents/` dir, agent stub files, plugin.json with `"agents": [...]` |
 | S11 | List with metadata | `list` after installing a plugin.json skill | Shows platform and component summary line below slug |
+| S12 | Codex install — happy path | `install` a skill with `"compatible_platforms": ["claude-code", "codex"]` | Files in `~/.akh/plugins/<slug>/`, entries in `config.toml`, marketplace.json updated |
+| S13 | Codex install — Codex absent | Same, but `~/.codex/` does not exist | Prints skip message; Claude Code install still succeeds |
+| S14 | Codex remove | `remove` a skill with Codex install | `~/.akh/plugins/<slug>/` deleted, config.toml entries removed, marketplace.json updated |
+| S15 | Codex AGENTS.md inject | Install with Codex + say y to AGENTS.md prompt | Delimited section present in `~/.codex/AGENTS.md`; remove deletes it |
 
 ### Edge cases
 - Install with `"skills": []` (empty array) — should warn "no skills declared" not silently do nothing
@@ -494,6 +575,9 @@ Generated by /codebase-eng-review on 2026-05-06
 - [ ] `list` shows agent count and platform info
 - [ ] Remove correctly cleans up commands and agents (manifest-based)
 - [ ] Update correctly cleans old commands/agents before reinstalling
+- [ ] Codex install: plugin files in `~/.akh/plugins/<slug>/`, marketplace.json updated, config.toml entries added
+- [ ] Codex remove: all Codex-side state cleaned up cleanly (no orphan entries in config.toml or marketplace.json)
+- [ ] Codex absent: installer degrades gracefully without error
 - [ ] All checklist items complete
 
 ---

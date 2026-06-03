@@ -31,6 +31,8 @@ docker-build:
 
 docker-push: docker-build
 	$(CONTAINER_RT) push $(IMAGE):$(TAG)
+	$(CONTAINER_RT) tag $(IMAGE):$(TAG) $(IMAGE):latest
+	$(CONTAINER_RT) push $(IMAGE):latest
 
 clean:
 	rm -rf $(VENV) __pycache__ app/__pycache__ .pytest_cache

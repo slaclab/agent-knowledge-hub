@@ -50,6 +50,11 @@ export interface Skill {
   plugin_author: string | null;
   file_manifest: FileManifestEntry[];
   manifest_truncated: boolean;
+  // version pinning (#017)
+  pinned_commit_sha: string | null;
+  pinned_ref: string | null;
+  upstream_sha: string | null;
+  update_available: boolean;
   labels: LabelOut[];
   my_rating: number | null;
 }
@@ -74,7 +79,7 @@ export interface SkillRevision {
   revision_number: number;
   snapshot: Record<string, unknown>;
   actor_id: string;
-  action: "create" | "edit" | "refetch" | "deactivate" | "reactivate";
+  action: "create" | "edit" | "refetch" | "deactivate" | "reactivate" | "pin";
   changelog_note: string | null;
   created_at: string;
 }

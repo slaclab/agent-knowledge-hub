@@ -1,7 +1,7 @@
 # TODO #017 — Skill Version / Commit Pinning
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
+> **Status:** 🏁 Implementation Done
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-05-05

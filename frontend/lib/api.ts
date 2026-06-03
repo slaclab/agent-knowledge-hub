@@ -117,6 +117,13 @@ export async function refetchSkill(
   return { data: r.data, error: r.error };
 }
 
+export async function pinSkill(
+  slug: string,
+): Promise<{ data: Skill | null; error: string | null }> {
+  const r = await request<Skill>(CLIENT_BASE, `/skills/${slug}/pin`, { method: "POST" });
+  return { data: r.data, error: r.error };
+}
+
 export async function getRevisions(slug: string, server = false): Promise<SkillRevision[]> {
   const { data } = await request<SkillRevision[]>(apiBase(server), `/skills/${slug}/revisions`);
   return data ?? [];

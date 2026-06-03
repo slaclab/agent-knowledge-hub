@@ -109,6 +109,12 @@ class SkillOut(BaseModel):
     # file manifest
     file_manifest: List[FileManifestEntry] = []
     manifest_truncated: bool = False
+    # version pinning (#017)
+    pinned_commit_sha: Optional[str] = None
+    pinned_ref: Optional[str] = None
+    upstream_sha: Optional[str] = None
+    update_available: bool = False
+
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime
@@ -143,6 +149,9 @@ class SkillListOut(BaseModel):
     plugin_author: Optional[str] = None
     # source tracking
     source_type: str = "github"
+    # version pinning (#017)
+    update_available: bool = False
+
     submitter_id: str
     submitted_at: datetime
     updated_at: datetime

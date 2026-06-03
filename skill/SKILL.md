@@ -60,16 +60,29 @@ If the user says yes, run the install flow for that slug.
 ### Install by slug
 `/agent-knowledge-hub install <slug>`
 
-1. Fetch `GET /api/skills/<slug>` — get `repo_url`, `skill_path`, and `compatible_platforms`.
+1. Fetch `GET /api/skills/<slug>` — get `repo_url`, `skill_path`, `compatible_platforms`, and `pinned_commit_sha`.
 2. Parse `repo_url` to extract `<owner>/<repo>`. It must be a `https://github.com/` URL.
+3. **Determine the install ref:**
+   - If `pinned_commit_sha` is present (a 40-char lowercase hex SHA), use it as `?ref=<pinned_commit_sha>` on **all** subsequent GitHub Contents API calls.
+   - If absent (legacy/un-backfilled skill): install from HEAD (no `?ref=` parameter) and print:
+     ```
+     ℹ  This skill has no pinned version — installing the latest available files.
+        File contents may differ from what others have installed.
+     ```
 
-3. **Locate plugin.json** (try in order; stop at first success):
-   a. `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/plugin.json`
-   b. If 404 → `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/.claude-plugin/plugin.json`
-   c. If 404 → **legacy install** (step 9).
+4. **Locate plugin.json** (try in order; stop at first success):
+   a. `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/plugin.json[?ref=<sha>]`
+   b. If 404 → `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>/.claude-plugin/plugin.json[?ref=<sha>]`
+   c. If 404 → **legacy install** (step 10).
    If any step returns a non-404 error → abort install with the error message.
+   If GitHub returns 422 (reference not found for the pinned SHA — e.g. force-push deleted it):
+   ```
+   ✗  Pinned version <short_sha> no longer exists in the repository.
+      Ask the skill submitter to update the pin, then try again.
+   ```
+   Abort install.
 
-4. **Platform check** — before writing any files:
+5. **Platform check** — before writing any files:
    - Read `compatible_platforms` from plugin.json (falls back to catalog value if absent).
    - If absent from both → treat as `["claude-code"]` (backward compatibility).
    - If `compatible_platforms` does not include `"claude-code"`:
@@ -84,7 +97,7 @@ If the user says yes, run the install flow for that slug.
      ℹ  This skill also supports: <others>. Those components are not installed here.
      ```
 
-5. **Install skills component:**
+6. **Install skills component:**
    - If `plugin.json["skills"]` is a **string** (directory path, e.g. `"./skill/"`):
      - Resolve the path relative to `skill_path` in the repo.
      - Fetch directory listing: `GET /repos/<owner>/<repo>/contents/<resolved_path>`
@@ -96,23 +109,23 @@ If the user says yes, run the install flow for that slug.
      - For each path: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
    - If `plugin.json["skills"]` is absent → skip skills component.
 
-6. **Install commands component** (same string/array logic as skills):
+7. **Install commands component** (same string/array logic as skills):
    - String (directory) → recursively fetch and write to `~/.claude/commands/`, preserving subdirs.
    - Array → fetch each file, write to `~/.claude/commands/`.
    - Allowed prefix: `~/.claude/commands/`.
 
-7. **Install agents component** (same string/array logic):
+8. **Install agents component** (same string/array logic):
    - String (directory) → recursively fetch and write to `~/.claude/agents/`, preserving subdirs.
    - Array → fetch each file, write to `~/.claude/agents/`.
    - Allowed prefix: `~/.claude/agents/`.
 
-8. **Install mcp-servers component:**
+9. **Install mcp-servers component:**
    - For each entry in `plugin.json["mcp-servers"]`:
      - Entry must have `name` and `command` fields (optional: `args: []`, `env: {}`).
      - Run: `claude mcp add <name> <command> [args...]`
      - Confirm each registered MCP server.
 
-9. **Write installed-files manifest** (after all files confirmed written):
+10. **Write installed-files manifest** (after all files confirmed written):
    ```json
    {
      "slug": "<slug>",
@@ -125,12 +138,13 @@ If the user says yes, run the install flow for that slug.
    List every file installed into `commands` and `agents` (not skills — the slug dir is deleted as a whole).
    If no commands or agents were installed, write an empty manifest anyway (commands: [], agents: []).
 
-10. Print a summary of all installed paths and registered MCP servers.
+11. Print a summary of all installed paths and registered MCP servers.
     If `plugin.json` contains a `version` field: `Installed <slug> v<version>`.
+    If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
 
-11. **Legacy install** (reached only when no plugin.json found at steps 3a or 3b):
+12. **Legacy install** (reached only when no plugin.json found at steps 4a or 4b):
     Fetch the file listing from the GitHub Contents API:
-    `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>`
+    `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>[?ref=<sha>]`
     If `skill_path` is `/` or empty, use the repo root.
     For each file in the listing: call `fetch-and-write(file_url, ~/.claude/skills/<slug>/<filename>, ~/.claude/skills/<slug>/)`.
     Write an empty manifest (`commands: [], agents: []`) after install.

@@ -75,6 +75,9 @@ class GitHubSnapshot(BaseModel):
     fetched_at: datetime
     visibility: VisibilityEnum = VisibilityEnum.public
     forked_from_url: Optional[str] = None
+    # version pinning (#017)
+    head_sha: Optional[str] = None   # HEAD commit SHA of the default branch
+    head_tag: Optional[str] = None   # tag name at head_sha, if any (display only)
 
 
 _REPO_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$")
@@ -179,15 +182,48 @@ class GitHubFetcher:
         self, owner: str, repo: str, data: dict, token: Optional[str]
     ) -> GitHubSnapshot:
         headers = self._make_headers(token)
+        default_branch = data.get("default_branch", "main")
+
         readme_html: Optional[str] = None
+        head_sha: Optional[str] = None
+        head_tag: Optional[str] = None
+
         async with httpx.AsyncClient(timeout=10) as client:
-            readme_resp = await client.get(
+            # Fetch README and HEAD SHA in parallel
+            readme_task = client.get(
                 f"{self._base}/repos/{owner}/{repo}/readme",
                 headers={**headers, "Accept": "application/vnd.github.html+json"},
             )
+            sha_task = client.get(
+                f"{self._base}/repos/{owner}/{repo}/git/ref/heads/{default_branch}",
+                headers=headers,
+            )
+            readme_resp, sha_resp = await asyncio.gather(readme_task, sha_task)
+
             if readme_resp.status_code == 200:
                 try:
                     readme_html = readme_resp.text
+                except Exception:
+                    pass
+
+            if sha_resp.status_code == 200:
+                try:
+                    head_sha = sha_resp.json()["object"]["sha"]
+                except Exception:
+                    pass
+
+            # Tag lookup: find the first tag pointing to head_sha (best-effort)
+            if head_sha:
+                try:
+                    tags_resp = await client.get(
+                        f"{self._base}/repos/{owner}/{repo}/tags?per_page=10",
+                        headers=headers,
+                    )
+                    if tags_resp.status_code == 200:
+                        for tag in tags_resp.json():
+                            if tag.get("commit", {}).get("sha") == head_sha:
+                                head_tag = tag.get("name")
+                                break
                 except Exception:
                     pass
 
@@ -224,6 +260,8 @@ class GitHubFetcher:
             fetched_at=datetime.now(timezone.utc),
             visibility=visibility,
             forked_from_url=forked_from_url,
+            head_sha=head_sha,
+            head_tag=head_tag,
         )
 
     async def _fetch_with_token(

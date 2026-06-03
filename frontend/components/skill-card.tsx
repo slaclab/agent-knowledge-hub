@@ -58,6 +58,14 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
           </span>
         )}
         <FlagIndicator count={skill.flag_count} />
+        {skill.update_available && (
+          <span
+            className="inline-flex items-center rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 text-xs font-medium"
+            title="A newer version is available upstream"
+          >
+            Update available
+          </span>
+        )}
         {skill.rating_count > 0 && (
           <span className="ml-auto">
             <StarRating value={skill.avg_rating} count={skill.rating_count} readonly />

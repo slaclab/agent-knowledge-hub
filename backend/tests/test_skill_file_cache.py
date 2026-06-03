@@ -88,6 +88,12 @@ async def test_create_no_skill_files_leaves_fields_null():
     respx.get("https://api.github.com/repos/ex/empty/readme").mock(
         return_value=httpx.Response(404)
     )
+    respx.get("https://api.github.com/repos/ex/empty/git/ref/heads/main").mock(
+        return_value=httpx.Response(200, json={"object": {"sha": "a" * 40}})
+    )
+    respx.get("https://api.github.com/repos/ex/empty/tags", params={"per_page": "10"}).mock(
+        return_value=httpx.Response(200, json=[])
+    )
     respx.get("https://api.github.com/repos/ex/empty/contents/").mock(
         return_value=httpx.Response(200, json=[])  # empty directory
     )
@@ -114,6 +120,12 @@ async def test_create_skill_md_capped_at_100kb():
     )
     respx.get("https://api.github.com/repos/ex/big/readme").mock(
         return_value=httpx.Response(404)
+    )
+    respx.get("https://api.github.com/repos/ex/big/git/ref/heads/main").mock(
+        return_value=httpx.Response(200, json={"object": {"sha": "a" * 40}})
+    )
+    respx.get("https://api.github.com/repos/ex/big/tags", params={"per_page": "10"}).mock(
+        return_value=httpx.Response(200, json=[])
     )
     respx.get("https://api.github.com/repos/ex/big/contents/").mock(
         return_value=httpx.Response(200, json=[{
@@ -254,6 +266,16 @@ async def test_create_revision_snapshot_includes_file_content():
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _mock_head_sha_and_tags() -> None:
+    """Mock the two new version-pinning endpoints added in #017."""
+    respx.get("https://api.github.com/repos/ex/repo/git/ref/heads/main").mock(
+        return_value=httpx.Response(200, json={"object": {"sha": "a" * 40}})
+    )
+    respx.get("https://api.github.com/repos/ex/repo/tags", params={"per_page": "10"}).mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+
 def _mock_github_for_create() -> None:
     respx.get("https://api.github.com/repos/ex/repo").mock(
         return_value=httpx.Response(200, json=FAKE_REPO)
@@ -261,6 +283,7 @@ def _mock_github_for_create() -> None:
     respx.get("https://api.github.com/repos/ex/repo/readme").mock(
         return_value=httpx.Response(200, text="<h1>Readme</h1>")
     )
+    _mock_head_sha_and_tags()
     respx.get("https://api.github.com/repos/ex/repo/contents/").mock(
         return_value=httpx.Response(200, json=FAKE_DIR_LISTING)
     )
@@ -286,6 +309,7 @@ def _mock_github_for_refetch(updated_readme: str) -> None:
     respx.get("https://api.github.com/repos/ex/repo/readme").mock(
         return_value=httpx.Response(200, text="<h1>Updated</h1>")
     )
+    _mock_head_sha_and_tags()
     respx.get("https://api.github.com/repos/ex/repo/contents/").mock(
         return_value=httpx.Response(200, json=FAKE_DIR_LISTING)
     )

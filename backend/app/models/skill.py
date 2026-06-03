@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from beanie import Document, Indexed
 from pymongo import IndexModel, ASCENDING, DESCENDING
 from pydantic import Field, field_validator
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 from app.services.scanner import FileManifestEntry  # noqa: E402 — scanner is a leaf module
 
@@ -80,6 +83,26 @@ class Skill(Document):
     # file manifest
     file_manifest: List[FileManifestEntry] = Field(default_factory=list)
     manifest_truncated: bool = False
+
+    # version pinning (#017)
+    pinned_commit_sha: Optional[str] = None   # SHA pinned for installs; set at create + pin
+    pinned_ref: Optional[str] = None           # tag name at pinned_commit_sha, display only
+    upstream_sha: Optional[str] = None         # latest HEAD; updated on refetch
+
+    @property
+    def update_available(self) -> bool:
+        return (
+            self.upstream_sha is not None
+            and self.pinned_commit_sha is not None
+            and self.upstream_sha != self.pinned_commit_sha
+        )
+
+    @field_validator("pinned_commit_sha", "upstream_sha", mode="before")
+    @classmethod
+    def validate_sha(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _SHA_RE.match(v):
+            raise ValueError("Must be a 40-character lowercase hex SHA-1")
+        return v
 
     submitter_id: str
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

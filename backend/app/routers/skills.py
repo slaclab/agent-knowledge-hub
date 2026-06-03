@@ -26,7 +26,7 @@ from app.schemas.skill import (
 )
 from app.services.label import label_service
 from app.services.rating import rate_skill
-from app.services.skill import DuplicateSkillError, SortField, skill_repository
+from app.services.skill import DuplicateSkillError, PinNotSupportedError, SortField, skill_repository
 
 router = APIRouter(prefix="/api/skills")
 github_router = APIRouter(prefix="/api")
@@ -66,6 +66,10 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         plugin_author=getattr(skill, "plugin_author", None),
         file_manifest=getattr(skill, "file_manifest", []),
         manifest_truncated=getattr(skill, "manifest_truncated", False),
+        pinned_commit_sha=getattr(skill, "pinned_commit_sha", None),
+        pinned_ref=getattr(skill, "pinned_ref", None),
+        upstream_sha=getattr(skill, "upstream_sha", None),
+        update_available=getattr(skill, "update_available", False),
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
@@ -97,6 +101,7 @@ def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillL
         has_mcp_server=getattr(skill, "has_mcp_server", False),
         has_scripts=getattr(skill, "has_scripts", False),
         plugin_author=getattr(skill, "plugin_author", None),
+        update_available=getattr(skill, "update_available", False),
         submitter_id=skill.submitter_id,
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
@@ -230,6 +235,22 @@ async def refetch_skill(slug: str, user: User = Depends(get_current_user)):
     return _skill_to_out(skill, labels=skill_labels)
 
 
+@router.post("/{slug}/pin", response_model=SkillOut)
+@limiter.limit("10/minute")
+async def pin_skill(slug: str, request: Request, user: User = Depends(get_current_user)):
+    skill = await skill_repository.get(slug, include_deactivated=True)
+    if not skill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.submitter_id != user.user_id and not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
+    try:
+        skill = await skill_repository.pin(skill, actor_id=user.user_id)
+    except PinNotSupportedError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    skill_labels = await label_service.list_for_skill(str(skill.id))
+    return _skill_to_out(skill, labels=skill_labels)
+
+
 class AddPlatformIn(BaseModel):
     platform: str
 
@@ -328,11 +349,13 @@ async def get_skill_file(
             detail={"error": "binary_file", "github_url": github_url},
         )
 
-    cache_key = f"{slug}:{path}"
+    # Use pinned SHA as the ref for deterministic content; fall back to branch
+    file_ref = getattr(skill, "pinned_commit_sha", None) or ref.branch
+    cache_key = f"{slug}:{path}:{file_ref or 'head'}"
     content = await github_scanner.fetch_file_content(
         owner=ref.owner,
         repo=ref.repo,
-        branch=ref.branch,
+        branch=file_ref,
         skill_path=skill.skill_path,
         filename=path,
         cache_key=cache_key,

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getSkill, getRevisions, listSkills, getSettings } from "@/lib/api";
+import { getSkill, getRevisions, listSkills, getSettings, getMe } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { SkillContentTabs } from "@/components/skill-content-tabs";
@@ -13,6 +13,7 @@ import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
 import { DeleteSkillButton } from "@/components/delete-skill-button";
+import { PinSkillButton } from "@/components/pin-skill-button";
 
 interface PageProps {
   params: { slug: string };
@@ -36,10 +37,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
   const revisions = await getRevisions(params.slug, true);
 
   // Fetch forks of this skill in the catalog (FR-P16)
-  const [forksData, siteSettings] = await Promise.all([
+  const [forksData, siteSettings, me] = await Promise.all([
     listSkills({ forked_from: skill.repo_url, page_size: 3, server: true }),
     getSettings(true),
+    getMe(true),
   ]);
+  const isAdmin = me?.is_admin ?? false;
   const forkCount = forksData?.total ?? 0;
   const accessInstructionsUrl = siteSettings.github_access_instructions_url;
 
@@ -137,8 +140,41 @@ export default async function SkillDetailPage({ params }: PageProps) {
               )}
               {skill.version && (
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Version</dt>
+                  <dt className="text-muted-foreground">Declared version</dt>
                   <dd className="font-mono">{skill.version}</dd>
+                </div>
+              )}
+              {(skill.pinned_ref || skill.pinned_commit_sha) && (
+                <div className="flex justify-between items-start">
+                  <dt className="text-muted-foreground">Pinned git tag</dt>
+                  <dd className="text-right">
+                    {skill.pinned_ref && (
+                      <span className="font-mono text-xs">{skill.pinned_ref}</span>
+                    )}
+                    {skill.pinned_commit_sha && (
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {skill.pinned_commit_sha.slice(0, 7)}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {skill.update_available && (
+                <div className="rounded-md bg-sky-50 border border-sky-200 px-3 py-2 space-y-1.5">
+                  <p className="text-xs text-sky-800">
+                    A newer version is available upstream.
+                    {viewer
+                      ? null
+                      : " Contact the skill submitter or an admin to update."}
+                  </p>
+                  {viewer && (viewer === skill.submitter_id || isAdmin) && (
+                    <PinSkillButton slug={skill.slug} />
+                  )}
+                  {viewer && viewer !== skill.submitter_id && !isAdmin && (
+                    <p className="text-xs text-sky-700">
+                      Only the submitter (<span className="font-medium">{skill.submitter_id}</span>) or an admin can update.
+                    </p>
+                  )}
                 </div>
               )}
               {skill.license && (

@@ -18,7 +18,7 @@
 | [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 📋 Preparing |
 | [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 📋 Preparing |
 | [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | 🏁 Implementation Done |
-| [017](todo/017-skill-version-pinning.md) | Skill version / commit pinning: reproducible installs + update-available badge | 🔍 Reviewed |
+| [017](todo/017-skill-version-pinning.md) | Skill version / commit pinning: reproducible installs + update-available badge | 🏁 Implementation Done |
 | [018](todo/018-skill-file-cache.md) | Skill file cache: store SKILL.md + README in DB; tabbed detail view + diff | 🏁 Implementation Done |
 | [019](todo/019-plugin-json-scan-pipeline.md) | plugin.json-first scan pipeline: rich component metadata + structural auto-labels | 🏁 Implementation Done |
 | [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | ⬜ Open |

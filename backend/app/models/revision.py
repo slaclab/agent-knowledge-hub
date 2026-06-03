@@ -14,6 +14,7 @@ class RevisionAction(str, enum.Enum):
     refetch = "refetch"
     deactivate = "deactivate"
     reactivate = "reactivate"
+    pin = "pin"
 
 
 class SkillRevision(Document):

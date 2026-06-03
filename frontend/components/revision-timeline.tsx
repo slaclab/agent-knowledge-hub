@@ -8,6 +8,7 @@ const ACTION_LABELS: Record<SkillRevision["action"], string> = {
   refetch: "Re-fetched from GitHub",
   deactivate: "Deactivated",
   reactivate: "Reactivated",
+  pin: "Pinned to latest",
 };
 
 interface RevisionTimelineProps {

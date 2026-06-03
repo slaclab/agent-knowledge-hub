@@ -31,6 +31,10 @@ class DuplicateSkillError(Exception):
         super().__init__("Skill already exists")
 
 
+class PinNotSupportedError(Exception):
+    pass
+
+
 async def _unique_slug(base: str) -> str:
     slug = slugify(base)
     if not await Skill.find_one(Skill.slug == slug):
@@ -208,6 +212,8 @@ class SkillRepository:
             plugin_author=plugin_meta.get("plugin_author"),
             file_manifest=file_manifest,
             manifest_truncated=manifest_truncated,
+            pinned_commit_sha=github_data.head_sha if github_data else None,
+            pinned_ref=github_data.head_tag if github_data else None,
             submitter_id=submitter_id,
         )
         try:
@@ -370,7 +376,11 @@ class SkillRepository:
             skill.visibility = gh.visibility
             if not skill.description:
                 skill.description = gh.description
-            logger.info("[REFETCH] github_fetcher ok stars=%s visibility=%s", gh.stars, gh.visibility)
+            # Update upstream_sha so update_available stays current
+            if gh.head_sha:
+                skill.upstream_sha = gh.head_sha
+            logger.info("[REFETCH] github_fetcher ok stars=%s visibility=%s head_sha=%s",
+                        gh.stars, gh.visibility, gh.head_sha)
             # Refresh readme_raw and plugin.json fields from HEAD
             try:
                 from app.services.github import github_url_parser, metadata_extractor
@@ -423,6 +433,35 @@ class SkillRepository:
             logger.info("[REFETCH] done slug=%s", skill.slug)
         except GitHubFetchError as exc:
             logger.warning("[REFETCH] github_fetcher failed: %s", exc)
+        return skill
+
+    async def pin(self, skill: Skill, actor_id: str) -> Skill:
+        """Advance the install pin to the current HEAD. Self-contained — no prior refetch needed."""
+        if skill.source_type != "github":
+            raise PinNotSupportedError("Version pinning is not available for locally-submitted skills.")
+
+        logger.info("[PIN] slug=%s actor=%s", skill.slug, actor_id)
+        try:
+            force_app = skill.visibility == VisibilityEnum.internal
+            gh = await github_fetcher.fetch(skill.repo_url, force_app_token=force_app)
+            if not gh.head_sha:
+                logger.warning("[PIN] could not fetch HEAD SHA for slug=%s", skill.slug)
+                return skill
+            skill.pinned_commit_sha = gh.head_sha
+            skill.pinned_ref = gh.head_tag
+            skill.upstream_sha = gh.head_sha
+            skill.updated_at = datetime.now(timezone.utc)
+            await skill.save()
+            await revision_service.record(
+                skill_id=str(skill.id),
+                actor_id=actor_id,
+                action=RevisionAction.pin,
+                snapshot=skill.model_dump(mode="json"),
+            )
+            logger.info("[PIN] done slug=%s pinned_commit_sha=%s pinned_ref=%s",
+                        skill.slug, skill.pinned_commit_sha, skill.pinned_ref)
+        except GitHubFetchError as exc:
+            logger.warning("[PIN] github_fetcher failed: %s", exc)
         return skill
 
     async def delete(self, skill: Skill) -> None:

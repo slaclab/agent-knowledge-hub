@@ -13,10 +13,10 @@
 | [009](todo/009-duplicate-skill-detection.md) | Duplicate & similar skill detection: near-duplicate warnings in discovery and submit flows | ⬜ Open |
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |
 | [011](todo/011-user-activity-profile.md) | User activity profile: skills submitted, edited, and downloaded by a user | ⬜ Open |
-| [012](todo/012-moderation-flags-and-admin-deactivation.md) | Moderation: user flags and admin deactivation/reactivation | 📋 Preparing |
+| [012](todo/012-moderation-flags-and-admin-deactivation.md) | Moderation: user flags and admin deactivation/reactivation | ⬜ Open |
 | [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | 🔍 Reviewed |
 | [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 🔍 Reviewed |
-| [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 📋 Preparing |
+| [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 🔍 Reviewed |
 | [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | 🏁 Implementation Done |
 | [017](todo/017-skill-version-pinning.md) | Skill version / commit pinning: reproducible installs + update-available badge | 🏁 Implementation Done |
 | [018](todo/018-skill-file-cache.md) | Skill file cache: store SKILL.md + README in DB; tabbed detail view + diff | 🏁 Implementation Done |

@@ -94,21 +94,7 @@ def get_current_user(request: Request) -> User:
     }
     logger.debug("AUTH get_current_user headers: %s", safe_headers)
 
-    if settings.auth_mode == "dev":
-        user_id = settings.dev_user
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="AUTH_MODE=dev but DEV_USER is not set",
-            )
-        logger.debug("AUTH path=dev user=%s", user_id)
-        return User(user_id=user_id, is_admin=user_id in settings.admin_user_set)
-
     # Path 1 (VouchProxy headers) is intentionally removed — see ADR-P10.
-    # After the ingress split (ADR-P08), the API ingress has no Vouch gate and any
-    # client can forge X-Vouch-Idp-Claims-Name. Path 1 is also unreachable for browser
-    # writes (all go through the Next.js proxy / Path 2). Removing it eliminates the
-    # spoofing attack surface entirely.
 
     # Path 2: Next.js proxy — requires matching internal secret
     # X-Forwarded-User is only trusted after the secret check passes.
@@ -133,9 +119,9 @@ def get_current_user(request: Request) -> User:
             else:
                 logger.warning(
                     "AUTH path2 secret matched but X-Forwarded-User is empty — "
-                    "Vouch header not injected? Received headers: %s",
+                    "frontend did not inject the user header. Received headers: %s",
                     {k: v for k, v in request.headers.items()
-                     if k.lower().startswith(("x-vouch", "x-forwarded"))},
+                     if k.lower().startswith("x-")},
                 )
     else:
         logger.debug("AUTH path2 disabled: internal_api_secret not configured")

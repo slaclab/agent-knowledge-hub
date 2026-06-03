@@ -13,11 +13,6 @@ class Settings(BaseSettings):
     github_api_url: str = "https://api.github.com"
     github_token: Optional[str] = None
 
-    # "vouchproxy" | "dev"
-    auth_mode: str = "vouchproxy"
-    # Used when auth_mode=dev; value becomes the authenticated user identity
-    dev_user: Optional[str] = None
-
     # Comma-separated list of SLAC usernames with admin rights
     admin_users: str = ""
 

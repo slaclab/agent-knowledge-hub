@@ -358,42 +358,13 @@ class TestGetCurrentUser:
         from app.auth import get_current_user
         return get_current_user
 
-    def test_dev_mode_returns_dev_user(self):
-        import app.config as cfg
-        get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "dev"), \
-             patch.object(cfg.settings, "dev_user", "alice"), \
-             patch.object(cfg.settings, "admin_users", ""):
-            user = get_current_user(make_request())
-            assert user.user_id == "alice"
-            assert user.is_admin is False
-
-    def test_dev_mode_no_dev_user_raises_500(self):
-        import app.config as cfg
-        get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "dev"), \
-             patch.object(cfg.settings, "dev_user", None):
-            with pytest.raises(HTTPException) as exc:
-                get_current_user(make_request())
-            assert exc.value.status_code == 500
-
-    def test_dev_mode_admin_flag(self):
-        import app.config as cfg
-        get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "dev"), \
-             patch.object(cfg.settings, "dev_user", "carol"), \
-             patch.object(cfg.settings, "admin_users", "carol"):
-            user = get_current_user(make_request())
-            assert user.is_admin is True
-
     # Path 1 (Vouch headers) — REMOVED per ADR-P10; must return 401 ------------
 
     def test_vouch_idp_claims_name_returns_401(self):
         """T-JWT-20 / AC-13: Spoofed X-Vouch-Idp-Claims-Name -> 401 (Path 1 removed)."""
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([(b"x-vouch-idp-claims-name", b"bob@slac.stanford.edu")])
@@ -405,8 +376,7 @@ class TestGetCurrentUser:
         """Path 1 X-Vouch-User also removed — must return 401."""
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([(b"x-vouch-user", b"dave")])
@@ -419,8 +389,7 @@ class TestGetCurrentUser:
     def test_correct_secret_and_forwarded_user(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""):
             req = make_request([
                 (b"x-internal-secret", b"mysecret"),
@@ -432,8 +401,7 @@ class TestGetCurrentUser:
     def test_wrong_secret_raises_401(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([
@@ -447,8 +415,7 @@ class TestGetCurrentUser:
     def test_empty_secret_header_raises_401(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([
@@ -462,8 +429,7 @@ class TestGetCurrentUser:
     def test_secret_none_disables_path2(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([
@@ -478,8 +444,7 @@ class TestGetCurrentUser:
         """T-JWT-05: No Authorization header -> 401."""
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None):
+        with patch.object(cfg.settings, "internal_api_secret", None):
             with pytest.raises(HTTPException) as exc:
                 get_current_user(make_request())
             assert exc.value.status_code == 401
@@ -487,8 +452,7 @@ class TestGetCurrentUser:
     def test_path2_no_forwarded_user_falls_through_to_401(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", ""), \
              _mock_jwks_unreachable():
             req = make_request([(b"x-internal-secret", b"mysecret")])
@@ -499,8 +463,7 @@ class TestGetCurrentUser:
     def test_admin_flag_via_path2(self):
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "admin_users", "svc-account"):
             req = make_request([
                 (b"x-internal-secret", b"mysecret"),
@@ -517,8 +480,7 @@ class TestGetCurrentUser:
         private_pem, public_pem = rsa_keypair
         token = _make_jwt(private_pem)
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "jwt_algorithm", "RS256"), \
              patch.object(cfg.settings, "jwt_issuer", "https://dex-dev.slac.stanford.edu"), \
              patch.object(cfg.settings, "jwt_audience", "s3df"), \
@@ -534,8 +496,7 @@ class TestGetCurrentUser:
         private_pem, public_pem = rsa_keypair
         token = _make_jwt(private_pem)
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "jwt_algorithm", "RS256"), \
              patch.object(cfg.settings, "jwt_issuer", "https://dex-dev.slac.stanford.edu"), \
              patch.object(cfg.settings, "jwt_audience", "s3df"), \
@@ -545,28 +506,13 @@ class TestGetCurrentUser:
             user = get_current_user(req)
         assert user.is_admin is True
 
-    def test_dev_mode_ignores_bearer_jwt(self, rsa_keypair):
-        """T-JWT-07 / AC-7: auth_mode=dev -> dev_user wins, Bearer never checked."""
-        import app.config as cfg
-        private_pem, public_pem = rsa_keypair
-        token = _make_jwt(private_pem)
-        get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "dev"), \
-             patch.object(cfg.settings, "dev_user", "devuser"), \
-             patch.object(cfg.settings, "admin_users", ""):
-            # No JWKS mock needed — dev path short-circuits before Bearer check
-            req = make_request([(b"authorization", f"Bearer {token}".encode())])
-            user = get_current_user(req)
-        assert user.user_id == "devuser"
-
     def test_path2_wins_over_bearer(self, rsa_keypair):
         """T-JWT-21: Internal secret + Bearer -> Path 2 wins (checked first)."""
         import app.config as cfg
         private_pem, public_pem = rsa_keypair
         token = _make_jwt(private_pem)
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
+        with patch.object(cfg.settings, "internal_api_secret", "mysecret"), \
              patch.object(cfg.settings, "jwt_algorithm", "RS256"), \
              patch.object(cfg.settings, "jwt_issuer", "https://dex-dev.slac.stanford.edu"), \
              patch.object(cfg.settings, "jwt_audience", "s3df"), \
@@ -584,8 +530,7 @@ class TestGetCurrentUser:
         """T-JWT-11: 'Bearer ' (empty token after strip) -> 401, no JWKS call made."""
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None):
+        with patch.object(cfg.settings, "internal_api_secret", None):
             req = make_request([(b"authorization", b"Bearer ")])
             with pytest.raises(HTTPException) as exc:
                 get_current_user(req)
@@ -595,8 +540,7 @@ class TestGetCurrentUser:
         """T-JWT-13: 'Basic ...' (non-Bearer) -> skipped, 401."""
         import app.config as cfg
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None):
+        with patch.object(cfg.settings, "internal_api_secret", None):
             req = make_request([(b"authorization", b"Basic dXNlcjpwYXNz")])
             with pytest.raises(HTTPException) as exc:
                 get_current_user(req)
@@ -608,8 +552,7 @@ class TestGetCurrentUser:
         private_pem, public_pem = rsa_keypair
         token = _make_jwt(private_pem)
         get_current_user = self._auth()
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              patch.object(cfg.settings, "jwt_algorithm", "RS256"), \
              patch.object(cfg.settings, "jwt_issuer", "https://dex-dev.slac.stanford.edu"), \
              patch.object(cfg.settings, "jwt_audience", "s3df"), \
@@ -625,8 +568,7 @@ class TestGetCurrentUser:
         """T-JWT-22: get_optional_user + bad Bearer -> None (not exception)."""
         import app.config as cfg
         from app.auth import get_optional_user
-        with patch.object(cfg.settings, "auth_mode", "vouchproxy"), \
-             patch.object(cfg.settings, "internal_api_secret", None), \
+        with patch.object(cfg.settings, "internal_api_secret", None), \
              _mock_jwks_unreachable():
             req = make_request([(b"authorization", b"Bearer notavalidtoken")])
             result = get_optional_user(req)

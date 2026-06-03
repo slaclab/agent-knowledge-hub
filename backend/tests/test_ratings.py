@@ -28,12 +28,17 @@ async def _make_skill(slug: str = "test-skill") -> Skill:
     return skill
 
 
+_TEST_SECRET = "test-internal-secret"
+
+
 def _auth_headers(user_id: str = "user1") -> dict:
-    return {"X-Vouch-User": user_id}
+    return {"X-Internal-Secret": _TEST_SECRET, "X-Forwarded-User": user_id}
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client(monkeypatch):
+    from app import config
+    monkeypatch.setattr(config.settings, "internal_api_secret", _TEST_SECRET)
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
@@ -139,9 +144,7 @@ class TestRateSkillRoute:
 
     @pytest.mark.asyncio
     async def test_rate_route_401_unauthed(self, client, monkeypatch):
-        """T8: POST without auth returns 401 when not in dev mode."""
-        from app import config
-        monkeypatch.setattr(config.settings, "auth_mode", "vouchproxy")
+        """T8: POST without auth returns 401."""
         skill = await _make_skill("rate-401")
         r = await client.post(
             f"/api/skills/{skill.slug}/rate",

@@ -283,19 +283,23 @@ class TestBatchHydration:
 # Router integration tests (via ASGI transport)
 # ---------------------------------------------------------------------------
 
+_TEST_SECRET = "test-internal-secret"
+
+
 @pytest_asyncio.fixture
-async def client():
+async def client(monkeypatch):
+    from app import config
+    monkeypatch.setattr(config.settings, "internal_api_secret", _TEST_SECRET)
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
 def _auth_headers(user_id: str = "user1", is_admin: bool = False) -> dict:
-    from app.config import settings
-    headers = {"X-Vouch-User": user_id}
+    from app import config
+    headers = {"X-Internal-Secret": _TEST_SECRET, "X-Forwarded-User": user_id}
     if is_admin:
-        # patch admin_user_set for test
-        settings.admin_user_set = {user_id}
+        config.settings.admin_users = user_id
     return headers
 
 

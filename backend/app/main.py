@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initialising Beanie...")
     await beanie.init_beanie(database=db, document_models=ALL_MODELS)
     logger.info("Beanie ready.")
-    if settings.auth_mode != "dev" and settings.internal_api_secret is None:
+    if settings.internal_api_secret is None:
         logger.warning(
             "INTERNAL_API_SECRET is not configured — Next.js proxy auth path is disabled. "
             "Set INTERNAL_API_SECRET in Vault and redeploy to enable."

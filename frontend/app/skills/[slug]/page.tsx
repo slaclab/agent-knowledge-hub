@@ -21,7 +21,11 @@ interface PageProps {
 
 export default async function SkillDetailPage({ params }: PageProps) {
   const h = headers();
-  const viewer = h.get("x-vouch-idp-claims-name") || h.get("x-vouch-user") || h.get("x-forwarded-user");
+  const viewer =
+    h.get(process.env.AUTH_USER_HEADER ?? "x-auth-request-user") ||
+    h.get("x-vouch-idp-claims-name") ||
+    h.get("x-vouch-user") ||
+    h.get("x-forwarded-user");
   const { skill, deactivated, reason } = await getSkill(params.slug, true, viewer ?? undefined);
 
   if (deactivated) {

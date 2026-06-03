@@ -29,4 +29,4 @@
 | [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | ⬜ Open |
 | [026](todo/026-package-embedded-skills.md) | Package-embedded skill discovery: `.agents/skills/` convention in Python/npm packages | ⬜ Open |
 | [027](todo/027-mcp-registry-integration.md) | MCP Registry integration: Pass 0 autodiscovery from modelcontextprotocol.io/registry | ⬜ Open |
-| [028](todo/028-skill-file-manifest.md) | Skill file manifest: browsable file listing + inline viewer for skill/plugin repos | 🔍 Reviewed |
+| [028](todo/028-skill-file-manifest.md) | Skill file manifest: browsable file listing + inline viewer for skill/plugin repos | 🏁 Implementation Done |

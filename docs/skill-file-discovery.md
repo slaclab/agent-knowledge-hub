@@ -1,8 +1,8 @@
 # Skill File Discovery Algorithm
 
-**Module:** `backend/app/services/github.py`  
-**Classes:** `GitHubScanner`, `MetadataExtractor`  
-**Updated:** 2026-05-06 (auth gate section + server-side content auth fix)
+**Module:** `backend/app/services/github.py`, `backend/app/services/scanner.py`  
+**Classes:** `GitHubScanner`, `MetadataExtractor`, `LocalScanner`  
+**Updated:** 2026-06-03 (file manifest pipeline, LocalScanner, file content endpoint)
 
 ---
 
@@ -33,6 +33,16 @@ User submits URL
 The same pipeline runs twice: once during the **submit form preview** (via
 `POST /api/github-scan`) and once during **skill creation** (`skill_repository.create()`),
 which issues a fresh scan to ensure the stored content reflects what is saved.
+
+**File manifest** (`all_files: List[FileManifestEntry]`) is produced as a side effect
+of Phase 2 — every item in the Contents API directory listing is captured as a
+`FileManifestEntry(path, size_bytes, is_text, is_dir)`, capped at 200 entries.
+This manifest is stored in MongoDB and exposed via `SkillOut.file_manifest` and
+`GET /api/skills/{slug}/files/{path}`.
+
+**LocalScanner** follows the same interface for skills submitted from local directories
+(`source_type="local"`). It reads recognised files from disk and builds `all_files`
+from `snapshotted_files` keys. See the LocalScanner section below.
 
 ---
 
@@ -266,6 +276,33 @@ as a fallback when the skill directory has no `README.md` of its own.
 
 ---
 
+### Step 2b — File manifest population
+
+During the directory listing step, `build_file_manifest(contents_data)` iterates
+every entry and builds a `FileManifestEntry` for each:
+
+```python
+# scanner.py / github.py
+class FileManifestEntry(BaseModel):
+    path: str       # basename (item["name"]), not repo-relative path
+    size_bytes: int
+    is_text: bool   # extension-based; False for dirs and unknown extensions
+    is_dir: bool    # True when GitHub API returns type:"dir"
+```
+
+`is_text` is determined by `_TEXT_EXTENSIONS` (a frozenset in `scanner.py`).
+Files with no extension or an extension not in the set get `is_text=False`.
+Directories get `size_bytes=0` and `is_text=False`.
+
+The manifest is capped at 200 entries (`_MAX_MANIFEST`); when more items exist
+`manifest_truncated=True` is set on `RawScanResult`.
+
+**Important:** `path` is the **basename** (`item["name"]`), not the full repo-relative
+path (`item["path"]`). This keeps manifest entries consistent with the
+`snapshotted_files` dict keys (also basenames) used for local skills.
+
+---
+
 ## Phase 3 — Metadata Extraction (`MetadataExtractor.extract`)
 
 **Code:** `github.py:614–665`
@@ -288,21 +325,82 @@ text from `README.md`, not rendered HTML. The frontend renders it client-side.
 
 ---
 
+---
+
+## LocalScanner — local directory skills
+
+**Module:** `backend/app/services/local.py`  
+**Class:** `LocalScanner`
+
+Skills submitted from local directories (via `agent-knowledge-hub submit <path>`) use
+`LocalScanner` rather than `GitHubScanner`. The interface is identical (`scan()`,
+`discover()`, returns `RawScanResult`) but reads from the filesystem with strict
+security constraints:
+
+- **Path containment:** every candidate file is `resolve()`d and checked with
+  `is_relative_to(root)` before reading. Symlinks escaping the skill directory are skipped.
+- **Size limit:** `_MAX_FILE_SIZE = 100_000` (100 KB) checked before `read_text()`.
+- **Directory depth:** `discover()` uses `os.walk(followlinks=False)` with a 5-level cap.
+- **Skip set:** `.git`, `node_modules`, `.venv`, `__pycache__`, `dist`, `build`, `.tox`.
+
+`all_files` is built from the `snapshotted_files` dict (keys are filenames, values are
+decoded text). `size_bytes` is `len(content.encode("utf-8"))`.
+
+**Important:** in v1, `snapshotted_files` only contains *recognised* skill files
+(`SKILL.md`, `README.md`, `plugin.json`, etc.) — not the full directory listing.
+The manifest for local skills is therefore partial. The Files tab shows an empty-state
+message acknowledging this for pre-existing local submissions.
+
+The `GET /api/skills/{slug}/files/{path}` endpoint serves local skill content directly
+from `skill.snapshotted_files[path]` — no GitHub call is made.
+
+---
+
+## File Content Endpoint
+
+**Route:** `GET /api/skills/{slug}/files/{path:path}`  
+**Code:** `backend/app/routers/skills.py`
+
+Serves the decoded text content of a single file from a skill's repository.
+
+**Path validation:** manifest-based allowlist — only paths present in
+`skill.file_manifest` are served. Any other path (including `../../etc/passwd`)
+returns HTTP 404. No `pathlib.resolve()` traversal check is needed because the
+validation never touches the filesystem.
+
+**Rate limit:** 60 requests/minute per IP (`@limiter.limit("60/minute")`).
+
+**Auth:** `get_optional_user`. Anonymous access is allowed for public skills.
+Internal skills require authentication (HTTP 401 for anonymous callers).
+
+**Binary files:** if `entry.is_text is False`, returns HTTP 400 with
+`{"error": "binary_file", "github_url": "<github-web-url>"}`.
+
+**Caching:** GitHub skill responses are cached in `_file_content_cache` (TTL 300 s,
+same as `_MARKETPLACE_TTL`), keyed by `"{slug}:{filename}:{ref}"`. Local skill
+responses are served directly from `snapshotted_files` with no cache needed.
+
+---
+
 ## Storage in the Database
 
 `skill_repository.create()` (`skill.py:115–233`) calls `scan()` independently of the
 frontend scan and stores the results in the `Skill` document:
 
-| DB field            | Source |
-|---------------------|--------|
-| `readme_raw`        | `scan.files.get("README.md") or scan.root_readme` |
-| `readme_html`       | `github_data.readme_html` (GitHub-rendered HTML of repo-root README, from `GitHubFetcher`) |
-| `skill_md_raw`      | First of `scan.files["SKILL.md"]`, `scan.files["skill.md"]`, `scan.files["CLAUDE.md"]`, `scan.files["AGENTS.md"]` |
-| `skill_md_filename` | Whichever of the four was found (`"SKILL.md"`, `"skill.md"`, `"CLAUDE.md"`, or `"AGENTS.md"`) |
-| `plugin_author`     | `plugin_meta.get("plugin_author")` |
-| `agent_count`       | `plugin_meta.get("agent_count", 0)` |
-| `has_mcp_server`    | `plugin_meta.get("has_mcp_server", False)` |
-| `has_scripts`       | `plugin_meta.get("has_scripts", False)` |
+| DB field              | Source |
+|-----------------------|--------|
+| `readme_raw`          | `scan.files.get("README.md") or scan.root_readme` |
+| `readme_html`         | `github_data.readme_html` (GitHub-rendered HTML of repo-root README, from `GitHubFetcher`) |
+| `skill_md_raw`        | First of `scan.files["SKILL.md"]`, `scan.files["skill.md"]`, `scan.files["CLAUDE.md"]`, `scan.files["AGENTS.md"]` |
+| `skill_md_filename`   | Whichever of the four was found (`"SKILL.md"`, `"skill.md"`, `"CLAUDE.md"`, or `"AGENTS.md"`) |
+| `plugin_author`       | `plugin_meta.get("plugin_author")` |
+| `agent_count`         | `plugin_meta.get("agent_count", 0)` |
+| `has_mcp_server`      | `plugin_meta.get("has_mcp_server", False)` |
+| `has_scripts`         | `plugin_meta.get("has_scripts", False)` |
+| `file_manifest`       | `scan.all_files` (capped at 200 `FileManifestEntry` objects) |
+| `manifest_truncated`  | `scan.manifest_truncated` |
+| `source_type`         | `"github"` (default) or `"local"` for local-directory submissions |
+| `snapshotted_files`   | Populated for `source_type="local"` with recognised file content |
 
 For an existing skill, `skill_repository.refetch()` (`skill.py:255–300`) re-runs
 `scan()` and updates the same fields. Trigger this via the **Rescan from GitHub**

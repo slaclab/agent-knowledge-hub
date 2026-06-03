@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Skill file manifest: browsable file listing + inline viewer (#028)
+
+Skills and plugins now expose a full file listing, visible in the submission preview and on the skill detail page.
+
+- **File manifest stored at scan time**: `GitHubScanner.scan()` captures every file and directory in the skill path from the GitHub Contents API as a `FileManifestEntry(path, size_bytes, is_text, is_dir)`. Manifest is capped at 200 entries; `manifest_truncated` flag set when the directory has more.
+- **Scan preview**: the submit form shows a collapsible "Files (N)" section listing all discovered files with size badges. Collapsed by default; directory entries shown greyed-out.
+- **Files tab on skill detail page**: new "Files" tab always shown. Flat file list with size badges; clicking a text file fetches and renders it inline. Binary files show a "View on GitHub" link. Empty state shown for skills that pre-date file indexing.
+- **`GET /api/skills/{slug}/files/{path:path}`**: new endpoint serving file content with manifest-based path allowlist (traversal attacks return 404 by design), 60/min rate limit, auth gating for internal skills, 5-min TTL cache for GitHub content.
+- **Local skills**: `LocalScanner` populates the manifest from `snapshotted_files`. The file content endpoint serves local files directly without a GitHub round-trip.
+- **`refetch()` updates the manifest**: re-scanning a skill via the admin "Rescan" button refreshes `file_manifest` and `manifest_truncated`.
+
 ### AGENTS.md scanner support (#024)
 
 Skills authored for [OpenAI Codex CLI](https://github.com/openai/codex) using `AGENTS.md` as their instruction file are now recognised and indexed by the AKH scanner.

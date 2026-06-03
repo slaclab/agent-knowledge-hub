@@ -1,6 +1,6 @@
 # 028 — Skill File Manifest: browsable file listing for skill/plugin repos
 
-**Status:** 🔍 Reviewed
+**Status:** 🏁 Implementation Done
 **Branch:** —
 **Priority:** 🟡 P2 — Medium
 **Created:** 2026-06-02

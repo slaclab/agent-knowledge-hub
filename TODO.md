@@ -25,7 +25,7 @@
 | [021](todo/021-marketplace-monorepo-publish.md) | Marketplace monorepo publish: `/agent-knowledge-hub create` → PR to slac-agent-plugin-marketplace | ⬜ Open |
 | [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | 🏁 Implementation Done |
 | [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | ⬜ Open |
-| [024](todo/024-agents-md-scanner.md) | AGENTS.md scanner support: recognise Codex/OpenCode instruction files | 🔍 Reviewed |
+| [024](todo/024-agents-md-scanner.md) | AGENTS.md scanner support: recognise Codex/OpenCode instruction files | 🏁 Implementation Done |
 | [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | ⬜ Open |
 | [026](todo/026-package-embedded-skills.md) | Package-embedded skill discovery: `.agents/skills/` convention in Python/npm packages | ⬜ Open |
 | [027](todo/027-mcp-registry-integration.md) | MCP Registry integration: Pass 0 autodiscovery from modelcontextprotocol.io/registry | ⬜ Open |

@@ -1,7 +1,7 @@
 # TODO #024 — AGENTS.md Scanner Support: Recognise Codex/OpenCode Instruction Files
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
+> **Status:** 🏁 Implementation Done
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-06-02

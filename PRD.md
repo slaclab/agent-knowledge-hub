@@ -355,8 +355,8 @@ POST   /api/skills/:slug/labels     # add label to skill (auth required)
 DELETE /api/skills/:slug/labels/:name  # remove label applied by caller
 
 # Flagging
-POST   /api/skills/:slug/flags      # submit a flag (auth required)
-PATCH  /api/skills/:slug/flags/me   # update or retract caller's own flag (auth required)
+POST   /api/skills/:slug/flag       # submit or update a flag (auth required; upsert semantics)
+DELETE /api/skills/:slug/flag       # retract caller's own active flag (auth required)
 
 # Admin
 GET    /api/admin/labels            # label list with rename/merge/delete tools
@@ -452,7 +452,7 @@ Auth identity: all write endpoints read `X-Forwarded-User` (VouchProxy) or valid
 | `SkillDetailPage` | SSR Next.js page: full skill info, README render, rating widget, label editor, revision timeline, flag button | Props: `skill`, `userRating`, `revisions[]`, `userFlag` | New |
 | `SubmitForm` | CSR form: repo URL input → auto-fill from GitHub fetch → optional metadata fields | Calls `POST /api/skills` | New |
 | `AdminLabelDashboard` | CSR page: label list, usage counts, rename/merge/delete actions | Calls admin label endpoints | New |
-| `AdminFlagQueue` | CSR page: moderation queue, flag details, resolve/dismiss actions | Calls `GET /api/admin/flags`, `PATCH /api/admin/flags/:id` | New |
+| `AdminFlagQueue` | CSR page: moderation queue, flag details, inline deactivate action | Calls `GET /api/admin/flags`, `POST /api/admin/skills/:slug/deactivate` | New |
 
 ---
 

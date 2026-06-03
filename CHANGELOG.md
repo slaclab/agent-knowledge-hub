@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Moderation: user flags and admin deactivation (#012)
+
+The community can now flag broken or stale skills, and admins have a full moderation loop to act on those reports.
+
+- **Flag a skill** — authenticated users can flag any active skill with a reason (broken, stale, superseded, inappropriate, other) and an optional note. Flagging is one flag per user per skill; re-flagging updates your existing flag rather than creating a duplicate. The flag count on the skill card and detail page now reflects real data.
+- **"Flagged by you" indicator** — the flag button shows a filled orange state when you have an active flag on a skill, so you can see your own reports at a glance.
+- **Retract a flag** — changed your mind? Click the "Flagged — click to retract" button and confirm to remove your flag.
+- **Admin flag queue** — `/admin/flags` shows all active flagged skills sorted by flag count, with each flag's reason, note, reporter, and timestamp. Inline deactivate action on every row.
+- **Admin deactivate/reactivate** — admins now have a Deactivate button directly on every skill detail page. Deactivating requires a reason (free text); the button is disabled until a reason is entered. Deactivation auto-resolves all active flags for the skill and resets the flag count to zero. Reactivation is one click.
+- **Tombstone page** — deactivated skills now show the reason and a link to the replacement skill (when `superseded_by_slug` is set) instead of returning 404.
+- **Rate limit** — flag creation is rate-limited to 10 per user per hour, keyed on user ID (not IP) so the Next.js proxy hop doesn't pool everyone into the same bucket.
+- **`GET /api/skills/{slug}`** — response now includes `my_flag` for authenticated users showing their current flag reason and status.
+- **New endpoints:** `POST /api/skills/{slug}/flag`, `DELETE /api/skills/{slug}/flag`, `GET /api/admin/flags`, `POST /api/admin/skills/{slug}/deactivate`, `POST /api/admin/skills/{slug}/reactivate`.
+
 ### Skill file manifest: browsable file listing + inline viewer (#028)
 
 Skills and plugins now expose a full file listing, visible in the submission preview and on the skill detail page.

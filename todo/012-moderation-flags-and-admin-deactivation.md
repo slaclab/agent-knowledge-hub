@@ -1,7 +1,7 @@
 # TODO #012 — Moderation: User Flags and Admin Deactivation
 
 > **Priority:** 🟠 P1 — High
-> **Status:** 🏁 Implementation Done
+> **Status:** ✅ Complete
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-04-22
@@ -398,26 +398,26 @@ The current `require_admin` signature is `def require_admin(user: User) -> User:
 
 ## Definition of Done
 
-- [ ] `POST /api/skills/{slug}/flag` creates / upserts flag and updates flag_count
-- [ ] `DELETE /api/skills/{slug}/flag` retracts flag and updates flag_count
-- [ ] `GET /api/admin/flags` returns flagged skills sorted by count (admin only, 403 for non-admin)
-- [ ] `POST /api/admin/skills/{slug}/deactivate` deactivates skill, writes revision, resolves active flags
-- [ ] `POST /api/admin/skills/{slug}/reactivate` reactivates skill, writes revision
-- [ ] `GET /api/skills/{slug}` response includes `my_flag` when user is authenticated
-- [ ] `FlagButton` component renders on skill detail for authenticated users; unauthenticated users see sign-in prompt
-- [ ] `FlagIndicator` shows real count and "flagged by you" state
-- [ ] `/admin/flags` page renders flagged skill queue with inline deactivate action
-- [ ] Admin deactivate/reactivate button visible on skill detail for admins
-- [ ] Deactivated skill shows `Tombstone` on detail page (existing component, now wired up)
-- [ ] `SkillFlag` compound index `(skill_id, reporter_id)` uses `IndexModel(..., unique=True)` — enforced at DB layer, not just application layer
-- [ ] Unit tests (see `test_flag_service.py`): **[ENG-AMD-6]** U-01 through U-32 as specified in round-1-er.md — flag upsert (new, re-flag same reason, re-flag different reason, re-flag after retract), retract (floor guard, not-found, already-resolved), resolve_all_for_skill (3-flag bulk reset flag_count=0, no-op for 0 active flags, mixed active/resolved, resolved_by set), list_flagged_skills (active-skills-only filter, sort order, field presence)
-- [ ] Integration tests (see `test_flag_routes.py`): **[ENG-AMD-6]** I-01 through E-01 as specified in round-1-er.md — POST flag (auth, upsert, 401, 404, 410 for deactivated, 422 on bad note/reason), DELETE flag (retract, 404 no flag, 401), GET skill my_flag field (null unauthed, null no-flag, set after flag, resolved after retract), GET admin/flags (200 admin, 403 non-admin, 401 unauthed, deactivated-skill excluded), POST deactivate (200 + revision + flags resolved + flag_count=0 + 410 on subsequent GET, 403, 409 on already-deactivated, superseded_by_slug stored), POST reactivate (200 + revision + 200 on subsequent GET, 403, 409 on already-active), end-to-end flow E-01
-- [ ] Test: per-user rate limit fires on 11th flag from same user within 1 hour → 429; different user can still flag the same skill
-- [ ] Test: POST flag with `superseded_by_slug` pointing to a deactivated skill → 200 with `warnings` field in response (flag still accepted)
-- [ ] Test: POST admin/deactivate with `superseded_by_slug` pointing to a deactivated skill → 200 with `warnings` field; admin UI must surface warning
-- [ ] ADRs written: `docs/adr/adr-u29-flag-upsert.md`, `docs/adr/adr-u30-admin-router.md`, `docs/adr/adr-u31-flag-count-sync.md`
-- [ ] `CHANGELOG.md` Unreleased section updated with #012 entry (flag routes, admin routes, FlagButton, FlagIndicator, /admin/flags page, tombstone wiring)
-- [ ] `PRD.md` API table updated to match implemented endpoint shapes (`POST /api/skills/{slug}/flag`, `DELETE /api/skills/{slug}/flag`, `GET /api/admin/flags`, `POST /api/admin/skills/{slug}/deactivate`, `POST /api/admin/skills/{slug}/reactivate`)
+- [x] `POST /api/skills/{slug}/flag` creates / upserts flag and updates flag_count
+- [x] `DELETE /api/skills/{slug}/flag` retracts flag and updates flag_count
+- [x] `GET /api/admin/flags` returns flagged skills sorted by count (admin only, 403 for non-admin)
+- [x] `POST /api/admin/skills/{slug}/deactivate` deactivates skill, writes revision, resolves active flags
+- [x] `POST /api/admin/skills/{slug}/reactivate` reactivates skill, writes revision
+- [x] `GET /api/skills/{slug}` response includes `my_flag` when user is authenticated
+- [x] `FlagButton` component renders on skill detail for authenticated users; unauthenticated users see sign-in prompt
+- [x] `FlagIndicator` shows real count and "flagged by you" state
+- [x] `/admin/flags` page renders flagged skill queue with inline deactivate action
+- [x] Admin deactivate/reactivate button visible on skill detail for admins
+- [x] Deactivated skill shows `Tombstone` on detail page (existing component, now wired up)
+- [x] `SkillFlag` compound index `(skill_id, reporter_id)` uses `IndexModel(..., unique=True)` — enforced at DB layer, not just application layer
+- [x] Unit tests (see `test_flag_service.py`): **[ENG-AMD-6]** U-01 through U-32 as specified in round-1-er.md — flag upsert (new, re-flag same reason, re-flag different reason, re-flag after retract), retract (floor guard, not-found, already-resolved), resolve_all_for_skill (3-flag bulk reset flag_count=0, no-op for 0 active flags, mixed active/resolved, resolved_by set), list_flagged_skills (active-skills-only filter, sort order, field presence)
+- [x] Integration tests (see `test_flag_routes.py`): **[ENG-AMD-6]** I-01 through E-01 as specified in round-1-er.md — POST flag (auth, upsert, 401, 404, 410 for deactivated, 422 on bad note/reason), DELETE flag (retract, 404 no flag, 401), GET skill my_flag field (null unauthed, null no-flag, set after flag, resolved after retract), GET admin/flags (200 admin, 403 non-admin, 401 unauthed, deactivated-skill excluded), POST deactivate (200 + revision + flags resolved + flag_count=0 + 410 on subsequent GET, 403, 409 on already-deactivated, superseded_by_slug stored), POST reactivate (200 + revision + 200 on subsequent GET, 403, 409 on already-active), end-to-end flow E-01
+- [x] Test: per-user rate limit fires on 11th flag from same user within 1 hour → 429; different user can still flag the same skill
+- [x] Test: POST flag with `superseded_by_slug` pointing to a deactivated skill → 200 with `warnings` field in response (flag still accepted)
+- [x] Test: POST admin/deactivate with `superseded_by_slug` pointing to a deactivated skill → 200 with `warnings` field; admin UI must surface warning
+- [x] ADRs written: `docs/adr/adr-u29-flag-upsert.md`, `docs/adr/adr-u30-admin-router.md`, `docs/adr/adr-u31-flag-count-sync.md`
+- [x] `CHANGELOG.md` Unreleased section updated with #012 entry (flag routes, admin routes, FlagButton, FlagIndicator, /admin/flags page, tombstone wiring)
+- [x] `PRD.md` API table updated to match implemented endpoint shapes (`POST /api/skills/{slug}/flag`, `DELETE /api/skills/{slug}/flag`, `GET /api/admin/flags`, `POST /api/admin/skills/{slug}/deactivate`, `POST /api/admin/skills/{slug}/reactivate`)
 
 ---
 

@@ -142,7 +142,74 @@ If the user says yes, run the install flow for that slug.
     If `plugin.json` contains a `version` field: `Installed <slug> v<version>`.
     If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
 
-12. **Legacy install** (reached only when no plugin.json found at steps 4a or 4b):
+12. **Codex install** (only when `"codex"` is in `compatible_platforms`):
+
+    a. **Check for Codex home.** If `~/.codex/` does not exist, print:
+       `ℹ Codex home (~/.codex/) not found — skipping Codex install.`
+       and skip the rest of this step.
+
+    b. **Install plugin files** to the AKH-managed directory:
+       - Mirror the same files just installed for Claude Code into `~/.akh/plugins/<slug>/`.
+       - Directory structure:
+         ```
+         ~/.akh/plugins/<slug>/
+           .claude-plugin/plugin.json
+           skills/<skill-name>/SKILL.md   ← same files as ~/.claude/skills/<slug>/
+           agents/                         ← if agents declared
+           commands/                       ← if commands declared
+         ```
+       - Copy all files written in steps 6–8 above, preserving relative paths under `~/.akh/plugins/<slug>/`.
+       - Allowed prefix for all writes: `~/.akh/plugins/<slug>/`.
+
+    c. **Create/update `~/.akh/plugins/.agents/plugins/marketplace.json`:**
+       - If the file does not exist, create it:
+         ```json
+         {
+           "name": "agent-knowledge-hub",
+           "plugins": [
+             { "name": "<slug>", "source": "./<slug>" }
+           ]
+         }
+         ```
+       - If it exists, parse it, add `{ "name": "<slug>", "source": "./<slug>" }` to the `plugins` array if not already present, and write back.
+       - Create parent directories (`~/.akh/plugins/.agents/plugins/`) as needed.
+
+    d. **Register AKH marketplace in `~/.codex/config.toml`** (once, idempotent):
+       - If `[marketplaces."agent-knowledge-hub"]` is not already present, append:
+         ```toml
+         [marketplaces."agent-knowledge-hub"]
+         source_type = "local"
+         source = "~/.akh/plugins"
+         ```
+
+    e. **Enable plugin in `~/.codex/config.toml`:**
+       - Append:
+         ```toml
+         [plugins."<slug>@agent-knowledge-hub"]
+         enabled = true
+         ```
+
+    f. **(Optional) Inject skill instructions into `~/.codex/AGENTS.md`:**
+       - If the plugin has a SKILL.md, ask:
+         ```
+         Add skill instructions to ~/.codex/AGENTS.md for global Codex access? (y/n)
+         ```
+       - If yes, append a clearly-delimited section:
+         ```markdown
+         <!-- BEGIN agent-knowledge-hub:<slug> -->
+         <SKILL.md content>
+         <!-- END agent-knowledge-hub:<slug> -->
+         ```
+       - Create `~/.codex/AGENTS.md` if it does not exist.
+
+    g. Print:
+       ```
+       ✓ Codex: installed to ~/.akh/plugins/<slug>/
+                marketplace.json updated
+                ~/.codex/config.toml: marketplace + plugin registered
+       ```
+
+13. **Legacy install** (reached only when no plugin.json found at steps 4a or 4b):
     Fetch the file listing from the GitHub Contents API:
     `GET https://api.github.com/repos/<owner>/<repo>/contents/<skill_path>[?ref=<sha>]`
     If `skill_path` is `/` or empty, use the repo root.
@@ -178,6 +245,11 @@ Omit `v<version>` if no version frontmatter. Omit the second line if no `plugin.
    b. If manifest absent: read `~/.claude/skills/<slug>/plugin.json["commands"]` and `["agents"]` as string arrays (fallback for pre-manifest installs).
    c. Delete every path collected in steps a–b from `~/.claude/commands/` and `~/.claude/agents/`.
    d. For each MCP server in the old `plugin.json["mcp-servers"]`: run `claude mcp remove <name>`.
+   e. **Codex cleanup** (if `~/.akh/plugins/<slug>/` exists):
+      - Delete the `<!-- BEGIN agent-knowledge-hub:<slug> -->…<!-- END agent-knowledge-hub:<slug> -->` section from `~/.codex/AGENTS.md` if present.
+      - Remove the `[plugins."<slug>@agent-knowledge-hub"]` block from `~/.codex/config.toml`.
+      - Update `~/.akh/plugins/.agents/plugins/marketplace.json`: remove the entry for `<slug>`. If `plugins` becomes empty, delete the file.
+      - Delete `~/.akh/plugins/<slug>/` entirely.
 3. Delete `~/.claude/skills/<slug>/` entirely.
 4. Re-run the full install flow for that slug.
 5. After install, read the new `version` from the freshly installed SKILL.md → `<new_version>`.
@@ -200,7 +272,12 @@ Ask the user to confirm, then — **in this exact order** (manifest is inside sl
 3. Delete every path collected in steps 1–2 from `~/.claude/commands/` and `~/.claude/agents/`.
    Skip any path that no longer exists (do not abort).
 4. For each MCP server in `plugin.json["mcp-servers"]`: run `claude mcp remove <name>`.
-5. Delete `~/.claude/skills/<slug>/` entirely.
+5. **Codex cleanup** (if `~/.akh/plugins/<slug>/` exists):
+   a. Delete the `<!-- BEGIN agent-knowledge-hub:<slug> -->…<!-- END agent-knowledge-hub:<slug> -->` section from `~/.codex/AGENTS.md` if present. Skip if file doesn't exist.
+   b. Remove the `[plugins."<slug>@agent-knowledge-hub"]` block from `~/.codex/config.toml`. Skip if not present. Leave `[marketplaces."agent-knowledge-hub"]` in place if other AKH plugins remain.
+   c. Update `~/.akh/plugins/.agents/plugins/marketplace.json`: remove the `<slug>` entry. If `plugins` becomes empty, delete the file.
+   d. Delete `~/.akh/plugins/<slug>/` entirely.
+6. Delete `~/.claude/skills/<slug>/` entirely.
 
 ---
 

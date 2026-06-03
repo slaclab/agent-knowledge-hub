@@ -3,8 +3,7 @@
 > **Scope:** Changes are confined to `skill/SKILL.md` — the Claude-side installer skill that users invoke locally. No backend (`github.py`, database, API) changes are required or included.
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open
-> **Note:** Slices 1–4 shipped in feat(#020) v0.8.0. Slice 5 (Codex install path) is the remaining scope.
+> **Status:** 🏁 Implementation Done
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-05-05

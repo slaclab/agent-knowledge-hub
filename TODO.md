@@ -21,7 +21,7 @@
 | [017](todo/017-skill-version-pinning.md) | Skill version / commit pinning: reproducible installs + update-available badge | 🏁 Implementation Done |
 | [018](todo/018-skill-file-cache.md) | Skill file cache: store SKILL.md + README in DB; tabbed detail view + diff | 🏁 Implementation Done |
 | [019](todo/019-plugin-json-scan-pipeline.md) | plugin.json-first scan pipeline: rich component metadata + structural auto-labels | 🏁 Implementation Done |
-| [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | ⬜ Open |
+| [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | 🏁 Implementation Done |
 | [021](todo/021-marketplace-monorepo-publish.md) | Marketplace monorepo publish: `/agent-knowledge-hub create` → PR to slac-agent-plugin-marketplace | ⬜ Open |
 | [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | ⬜ Open |
 | [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | ⬜ Open |

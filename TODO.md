@@ -14,8 +14,8 @@
 | [010](todo/010-document-to-skill-conversion.md) | Document-to-skill conversion: convert runbooks, SOPs, and guides into skill entries | ⬜ Open |
 | [011](todo/011-user-activity-profile.md) | User activity profile: skills submitted, edited, and downloaded by a user | ✅ Complete |
 | [012](todo/012-moderation-flags-and-admin-deactivation.md) | Moderation: user flags and admin deactivation/reactivation | ✅ Complete |
-| [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | 🔍 Reviewed |
-| [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | 🔍 Reviewed |
+| [013](todo/013-revision-history-detail.md) | Rich revision history: field diffs, label changes, upstream links | ✅ Complete |
+| [014](todo/014-skill-provenance-tree.md) | Skill provenance tree: fork lineage and supersession graph | ✅ Complete |
 | [015](todo/015-catalog-scale-search-pagination.md) | Catalog scale: search quality, keyset pagination, and performance | 🔍 Reviewed |
 | [016](todo/016-bearer-jwt-auth.md) | Bearer JWT auth: CLI authentication path for the backend API | ✅ Complete |
 | [017](todo/017-skill-version-pinning.md) | Skill version / commit pinning: reproducible installs + update-available badge | ✅ Complete |
@@ -24,9 +24,10 @@
 | [020](todo/020-installer-skill-extension.md) | Installer skill extension: directory skills, multi-platform, richer scaffold | ✅ Complete |
 | [021](todo/021-marketplace-monorepo-publish.md) | Marketplace monorepo publish: `/agent-knowledge-hub create` → PR to slac-agent-plugin-marketplace | ⬜ Open |
 | [022](todo/022-installer-git-clone.md) | Installer: switch from GitHub Contents API to git clone for plugin installation | ✅ Complete |
-| [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | ⬜ Open |
+| [023](todo/023-mcp-server-registry.md) | MCP server registry: rich metadata, autodiscovery, and GUI registration flow | 🔍 Reviewed |
 | [024](todo/024-agents-md-scanner.md) | AGENTS.md scanner support: recognise Codex/OpenCode instruction files | ✅ Complete |
-| [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | ⬜ Open |
+| [025](todo/025-platform-filter.md) | Platform filter: compatible_platforms as a searchable, filterable catalog dimension | 🔍 Reviewed |
 | [026](todo/026-package-embedded-skills.md) | Package-embedded skill discovery: `.agents/skills/` convention in Python/npm packages | ⬜ Open |
 | [027](todo/027-mcp-registry-integration.md) | MCP Registry integration: Pass 0 autodiscovery from modelcontextprotocol.io/registry | ⬜ Open |
 | [028](todo/028-skill-file-manifest.md) | Skill file manifest: browsable file listing + inline viewer for skill/plugin repos | ✅ Complete |
+| [029](todo/029-skillset-cross-ownership-add.md) | Skillset cross-ownership: request flow for adding skills to another user's skillset | ⬜ Open |

@@ -1,11 +1,11 @@
 # TODO #013 — Rich Revision History: Diffs, Labels, and Upstream Links
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
-> **Branch:** —
+> **Status:** ✅ Done
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-04-22
-> **Shipped:** —
+> **Shipped:** 2026-06-03
 
 ---
 
@@ -290,26 +290,26 @@ Choice: Exclude readme_html from diff (vs show indicator)
 
 ## Definition of Done
 
-- [ ] All acceptance criteria pass
-- [ ] `revision_service.record()` accepts and embeds `labels` param; strips large fields from snapshot
-- [ ] All 4 `skill_service` call sites pass current labels to `record()` (create after label application, edit, refetch, pin)
-- [ ] Create flow restructured: labels applied BEFORE `revision_service.record()`
-- [ ] Revisions endpoints auth-gated: internal skills return 401 for unauthenticated viewers
-- [ ] `RevisionOut.snapshot` strips `snapshotted_files`, `readme_html`, `readme_raw`, `skill_md_raw` from response
-- [ ] Unit tests: `computeDiff` covers scalar, array add/remove, array reorder (no diff), null→value, value→null, null vs [] (no diff), legacy snapshot (no labels key), excluded fields absent
-- [ ] Integration test: revision snapshot includes `labels`, excludes large fields
-- [ ] Integration test: GET revisions for internal skill without auth → 401
-- [ ] Frontend: `edit`/`refetch` revisions show collapsible diff with chevron affordance
-- [ ] Frontend: array diffs use color-coded items with text accessibility labels
-- [ ] Frontend: stacked diff layout (field name above values) for narrow sidebar
-- [ ] Frontend: empty refetch shows "Re-fetched — no changes detected"
-- [ ] Frontend: `create` revision shows genesis state
-- [ ] Frontend: `repo_url`/`forked_from_url` changes visually distinguished
-- [ ] Frontend: no crash on legacy snapshots (missing `labels` key)
-- [ ] Frontend: 10-revision cap with "Show all N revisions" toggle
-- [ ] CHANGELOG entry added (`### Rich revision history: field diffs and label tracking (#013)` under `## Unreleased`)
-- [ ] ADR-U24 written to `docs/adr/adr-u24-labels-in-snapshot.md`
-- [ ] ADR-U25 written to `docs/adr/adr-u25-client-side-diff.md`
+- [x] All acceptance criteria pass
+- [x] `revision_service.record()` accepts and embeds `labels` param; strips large fields from snapshot
+- [x] All 4 `skill_service` call sites pass current labels to `record()` (create after label application, edit, refetch, pin)
+- [x] Create flow restructured: labels applied BEFORE `revision_service.record()`
+- [x] Revisions endpoints auth-gated: internal skills return 401 for unauthenticated viewers
+- [x] `RevisionOut.snapshot` strips `snapshotted_files`, `readme_html`, `readme_raw`, `skill_md_raw` from response
+- [x] Unit tests: `computeDiff` covers scalar, array add/remove, array reorder (no diff), null→value, value→null, null vs [] (no diff), legacy snapshot (no labels key), excluded fields absent
+- [x] Integration test: revision snapshot includes `labels`, excludes large fields
+- [x] Integration test: GET revisions for internal skill without auth → 401
+- [x] Frontend: `edit`/`refetch` revisions show collapsible diff with chevron affordance
+- [x] Frontend: array diffs use color-coded items with text accessibility labels
+- [x] Frontend: stacked diff layout (field name above values) for narrow sidebar
+- [x] Frontend: empty refetch shows "Re-fetched — no changes detected"
+- [x] Frontend: `create` revision shows genesis state
+- [x] Frontend: `repo_url`/`forked_from_url` changes visually distinguished
+- [x] Frontend: no crash on legacy snapshots (missing `labels` key)
+- [x] Frontend: 10-revision cap with "Show all N revisions" toggle
+- [x] CHANGELOG entry added (`### Rich revision history: field diffs and label tracking (#013)` under `## Unreleased`)
+- [x] ADR-U24 written to `docs/adr/adr-u24-labels-in-snapshot.md`
+- [x] ADR-U25 written to `docs/adr/adr-u25-client-side-diff.md`
 
 ---
 

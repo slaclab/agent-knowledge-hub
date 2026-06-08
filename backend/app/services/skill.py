@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from typing import List, Literal, Optional, Tuple
+
+import bson
+import bson.errors
+from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +31,66 @@ from app.services import label as label_module
 
 
 SortField = Literal["newest", "highest_rated", "most_rated", "most_stars"]
+
+# In-process count cache: keyed by filter fingerprint, 30s TTL, bounded at 1000 entries (LRU eviction)
+_count_cache: TTLCache = TTLCache(maxsize=1000, ttl=30)
+
+_OID_RE = re.compile(r"^[0-9a-f]{24}$")
+
+
+def _encode_cursor(sv: datetime, oid: str) -> str:
+    if sv.tzinfo is None:
+        sv = sv.replace(tzinfo=timezone.utc)
+    payload = {"sv": sv.isoformat(), "id": oid}
+    return base64.b64encode(json.dumps(payload).encode()).decode()
+
+
+def _decode_cursor(token: str) -> Tuple[datetime, str]:
+    """Decode and validate an opaque base64 cursor. Raises ValueError with a safe message on any failure."""
+    try:
+        raw = base64.b64decode(token.encode())
+        data = json.loads(raw)
+    except Exception:
+        raise ValueError("Invalid or expired cursor")
+
+    sv = data.get("sv")
+    oid = data.get("id")
+
+    # sv must be a non-null scalar string (submitted_at is non-nullable)
+    if sv is None or not isinstance(sv, str):
+        raise ValueError("Invalid or expired cursor")
+
+    # id must match the 24-hex ObjectId regex (anchored)
+    if not isinstance(oid, str) or not _OID_RE.fullmatch(oid):
+        raise ValueError("Invalid or expired cursor")
+
+    # Parse sv as a UTC datetime; assume UTC if no tz (cursor was encoded from UTC-aware datetime)
+    try:
+        dt = datetime.fromisoformat(sv)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        raise ValueError("Invalid or expired cursor")
+
+    # Validate oid as a real ObjectId
+    try:
+        bson.ObjectId(oid)
+    except bson.errors.InvalidId:
+        raise ValueError("Invalid or expired cursor")
+
+    return dt, oid
+
+
+def _filter_fingerprint(
+    q, labels, visibility, forked_from, sort, submitted_by, include_deactivated,
+    platforms=None,
+) -> str:
+    key = json.dumps(
+        [q, sorted(labels or []), visibility, forked_from, sort, submitted_by,
+         include_deactivated, sorted(platforms or [])],
+        sort_keys=True,
+    )
+    return hashlib.md5(key.encode()).hexdigest()
 
 
 class DuplicateSkillError(Exception):
@@ -46,18 +114,17 @@ async def _unique_slug(base: str) -> str:
 
 
 class SkillRepository:
-    async def list(
+    async def _build_query_parts(
         self,
-        q: Optional[str] = None,
-        labels: Optional[List[str]] = None,
-        sort: SortField = "newest",
-        page: int = 1,
-        page_size: int = 20,
-        include_deactivated: bool = False,
-        forked_from: Optional[str] = None,
-        visibility: Optional[str] = None,
-        submitted_by: Optional[str] = None,
-    ) -> Tuple[List[Skill], int]:
+        q: Optional[str],
+        labels: Optional[List[str]],
+        sort: SortField,
+        include_deactivated: bool,
+        forked_from: Optional[str],
+        visibility: Optional[str],
+        submitted_by: Optional[str],
+    ):
+        """Build and return (query_parts, early_empty) where early_empty=True means zero results."""
         query_parts = []
         if not include_deactivated:
             query_parts.append(Skill.status == SkillStatus.active)
@@ -75,13 +142,11 @@ class SkillRepository:
         if visibility and visibility != "all":
             query_parts.append(Skill.visibility == VisibilityEnum(visibility))
 
-        # AND label filter: find skills that carry ALL requested labels
         if labels:
             label_names = [n.strip().lower() for n in labels if n.strip()]
             label_docs = await Label.find(In(Label.name, label_names)).to_list()
             if len(label_docs) < len(label_names):
-                # At least one label doesn't exist → zero results
-                return [], 0
+                return None, True
             label_ids = [str(l.id) for l in label_docs]
             collection = SkillLabel.get_motor_collection()
             pipeline = [
@@ -90,32 +155,220 @@ class SkillRepository:
                 {"$group": {"_id": "$_id.skill_id", "cnt": {"$sum": 1}}},
                 {"$match": {"cnt": len(label_ids)}},
             ]
-            cursor = collection.aggregate(pipeline)
-            matching_skill_ids = [doc["_id"] async for doc in cursor]
+            agg_cursor = collection.aggregate(pipeline)
+            matching_skill_ids = [doc["_id"] async for doc in agg_cursor]
             if not matching_skill_ids:
-                return [], 0
-            import bson
+                return None, True
             query_parts.append({"_id": {"$in": [
                 bson.ObjectId(sid) for sid in matching_skill_ids
             ]}})
 
-        base_query = Skill.find(*query_parts) if query_parts else Skill.find()
+        return query_parts, False
 
-        sort_expr = {
-            "newest": [("submitted_at", -1)],
-            "highest_rated": [("avg_rating", -1)],
-            "most_rated": [("rating_count", -1)],
-            "most_stars": [("github_stars", -1)],
-        }[sort]
+    async def _get_total(
+        self,
+        base_query,
+        q: Optional[str],
+        labels: Optional[List[str]],
+        visibility: Optional[str],
+        forked_from: Optional[str],
+        sort: SortField,
+        submitted_by: Optional[str],
+        include_deactivated: bool,
+        platforms: Optional[List[str]] = None,
+    ) -> int:
+        """Return total count, using estimatedDocumentCount for unfiltered or cache for filtered."""
+        is_filtered = bool(
+            q or labels or (visibility and visibility != "all") or forked_from
+            or submitted_by or include_deactivated or platforms
+        )
+        if not is_filtered:
+            # O(1) — reads collection metadata; may slightly over-count deactivated docs
+            try:
+                collection = Skill.get_motor_collection()
+                return await collection.estimated_document_count()
+            except Exception:
+                pass  # fall through to count()
+
+        fingerprint = _filter_fingerprint(
+            q, labels, visibility, forked_from, sort, submitted_by, include_deactivated, platforms
+        )
+        if fingerprint in _count_cache:
+            return _count_cache[fingerprint]
 
         total = await base_query.count()
-        items = (
-            await base_query.sort(sort_expr)
-            .skip((page - 1) * page_size)
-            .limit(page_size)
-            .to_list()
+        _count_cache[fingerprint] = total
+        return total
+
+    async def list(
+        self,
+        q: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        sort: SortField = "newest",
+        page: int = 1,
+        page_size: int = 20,
+        include_deactivated: bool = False,
+        forked_from: Optional[str] = None,
+        visibility: Optional[str] = None,
+        submitted_by: Optional[str] = None,
+        cursor: Optional[str] = None,
+        platforms: Optional[List[str]] = None,
+    ) -> Tuple[List[Skill], int]:
+        items, total, _, _, _ = await self.list_with_cursors(
+            q=q, labels=labels, sort=sort, page=page, page_size=page_size,
+            include_deactivated=include_deactivated, forked_from=forked_from,
+            visibility=visibility, submitted_by=submitted_by, cursor=cursor,
+            platforms=platforms,
         )
         return items, total
+
+    async def _platform_counts_aggregation(
+        self,
+        raw_match: dict,
+    ) -> dict[str, int]:
+        """Compute per-platform skill counts via $unwind + $group.
+
+        raw_match is a plain MongoDB filter dict (no Beanie operator objects).
+        """
+        pipeline: list = [{"$match": raw_match}] if raw_match else []
+        pipeline += [
+            {"$unwind": "$compatible_platforms"},
+            {"$group": {"_id": "$compatible_platforms", "count": {"$sum": 1}}},
+        ]
+        collection = Skill.get_motor_collection()
+        cursor = collection.aggregate(pipeline)
+        return {doc["_id"]: doc["count"] async for doc in cursor}
+
+    async def list_with_cursors(
+        self,
+        q: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        sort: SortField = "newest",
+        page: int = 1,
+        page_size: int = 20,
+        include_deactivated: bool = False,
+        forked_from: Optional[str] = None,
+        visibility: Optional[str] = None,
+        submitted_by: Optional[str] = None,
+        cursor: Optional[str] = None,
+        platforms: Optional[List[str]] = None,
+    ) -> Tuple[List[Skill], int, Optional[str], Optional[str], dict]:
+        """Return (items, total, next_cursor, prev_cursor, platform_counts)."""
+        sort_exprs = {
+            "newest": [("submitted_at", -1), ("_id", -1)],
+            "highest_rated": [("avg_rating", -1), ("submitted_at", -1)],
+            "most_rated": [("rating_count", -1), ("submitted_at", -1)],
+            "most_stars": [("github_stars", -1), ("submitted_at", -1)],
+        }
+        sort_expr = sort_exprs[sort]
+
+        # Normalise platforms: lowercase, strip, cap at 20, drop empties
+        platform_list: Optional[List[str]] = None
+        if platforms:
+            platform_list = [p.strip().lower() for p in platforms if p.strip()][:20] or None
+
+        query_parts, early_empty = await self._build_query_parts(
+            q=q, labels=labels, sort=sort, include_deactivated=include_deactivated,
+            forked_from=forked_from, visibility=visibility, submitted_by=submitted_by,
+        )
+        if early_empty:
+            return [], 0, None, None, {}
+
+        # Apply platforms filter AFTER _build_query_parts so base_query_parts
+        # can be reused for the platform_counts aggregation without the platforms clause.
+        base_query_parts = list(query_parts) if query_parts else []
+        if platform_list:
+            query_parts = base_query_parts + [{"compatible_platforms": {"$in": platform_list}}]
+
+        base_query = Skill.find(*query_parts) if query_parts else Skill.find()
+        total = await self._get_total(
+            base_query, q=q, labels=labels, visibility=visibility,
+            forked_from=forked_from, sort=sort, submitted_by=submitted_by,
+            include_deactivated=include_deactivated, platforms=platform_list,
+        )
+
+        # Build raw $match for aggregation — mirrors base_query_parts but as plain dicts
+        # only (no Beanie operator objects). Skips $text (not safe in aggregation $match).
+        agg_raw_match: dict = {}
+        if not include_deactivated:
+            agg_raw_match["status"] = SkillStatus.active.value
+        if submitted_by:
+            agg_raw_match["submitter_id"] = submitted_by
+        if visibility and visibility != "all":
+            agg_raw_match["visibility"] = VisibilityEnum(visibility).value
+        if forked_from:
+            normalized = _normalize_github_url(forked_from)
+            if normalized:
+                agg_raw_match["forked_from_url"] = normalized
+        # label filter produces an _id $in — extract it from base_query_parts if present
+        for part in base_query_parts:
+            if isinstance(part, dict) and "_id" in part:
+                agg_raw_match["_id"] = part["_id"]
+                break
+
+        # platform_counts: skip when q= active ($text in aggregation $match is complex)
+        platform_counts: dict[str, int] = {}
+        if not q:
+            platform_counts = await self._platform_counts_aggregation(agg_raw_match)
+
+        # Atlas Search path (feature-flagged — dead-letter on self-hosted PSMDB, ADR-U34)
+        atlas_used = False
+        items = None
+        if q and os.environ.get("MONGODB_ATLAS_SEARCH", "0").strip() == "1":
+            from app.services import search as search_svc
+            try:
+                extra_filters = {}
+                if not include_deactivated:
+                    extra_filters["status"] = SkillStatus.active.value
+                if platform_list:
+                    extra_filters["compatible_platforms"] = {"$in": platform_list}
+                atlas_pipeline = search_svc.build_atlas_pipeline(q, extra_filters)
+                collection = Skill.get_motor_collection()
+                raw = await collection.aggregate(atlas_pipeline).to_list(length=page_size)
+                items = [Skill.model_validate(doc) for doc in raw]
+                atlas_used = True
+            except Exception as exc:
+                logger.warning("[SEARCH] Atlas Search fallback to $text: %s", exc)
+                items = None
+
+        if not atlas_used:
+            # Keyset path — only for sort=newest when cursor is provided
+            if cursor is not None and sort == "newest":
+                sv, oid = _decode_cursor(cursor)
+                keyset_filter = {"$or": [
+                    {"submitted_at": {"$lt": sv}},
+                    {"submitted_at": sv, "_id": {"$lt": bson.ObjectId(oid)}},
+                ]}
+                keyset_parts = list(query_parts) + [keyset_filter] if query_parts else [keyset_filter]
+                keyset_query = Skill.find(*keyset_parts)
+                items = await keyset_query.sort(sort_expr).limit(page_size).to_list()
+            else:
+                items = (
+                    await base_query.sort(sort_expr)
+                    .skip((page - 1) * page_size)
+                    .limit(page_size)
+                    .to_list()
+                )
+
+        # Apply name boost when q is present (skip if atlas already ranked results)
+        if q and items is not None and not atlas_used:
+            from app.services import search as search_svc
+            items = await search_svc.name_boost(q, items)
+
+        # Compute next_cursor (only for sort=newest)
+        next_cursor = None
+        prev_cursor = None  # deferred per ADR-U32 Slice 2
+        if sort == "newest" and items:
+            last = items[-1]
+            fetched_count = (page - 1) * page_size + len(items) if cursor is None else len(items)
+            has_more = fetched_count < total if cursor is None else len(items) == page_size
+            if has_more:
+                sv = last.submitted_at
+                if sv.tzinfo is None:
+                    sv = sv.replace(tzinfo=timezone.utc)
+                next_cursor = _encode_cursor(sv, str(last.id))
+
+        return items, total, next_cursor, prev_cursor, platform_counts
 
     async def get(self, slug: str, include_deactivated: bool = False) -> Optional[Skill]:
         skill = await Skill.find_one(Skill.slug == slug)
@@ -229,12 +482,8 @@ class SkillRepository:
             )
             existing_slug = existing.slug if existing else None
             raise DuplicateSkillError(existing_slug)
-        await revision_service.record(
-            skill_id=str(skill.id),
-            actor_id=submitter_id,
-            action=RevisionAction.create,
-            snapshot=skill.model_dump(mode="json"),
-        )
+        _count_cache.clear()
+
         # Auto-labels from plugin.json structural metadata
         auto_labels: list[str] = []
         if plugin_meta.get("has_mcp_server"):
@@ -251,7 +500,7 @@ class SkillRepository:
                 all_label_names.append(kw)
         data = data.model_copy(update={"keywords": all_label_names})
 
-        # Convert keywords → labels (system-applied, bypass rate limit)
+        # Convert keywords → labels BEFORE recording revision so labels appear in snapshot
         if data.keywords:
             from app.services.label import label_service as _ls
             from pymongo.errors import DuplicateKeyError as _DKE
@@ -273,6 +522,21 @@ class SkillRepository:
                     await _Label.find_one(_Label.id == label.id).update({"$inc": {"usage_count": 1}})
                 except _DKE:
                     pass  # already tagged
+
+        # Fetch applied label names for snapshot embedding
+        try:
+            applied = await label_module.label_service.list_for_skill(str(skill.id))
+            label_names = [l.name for l in applied]
+        except Exception:
+            label_names = []
+
+        await revision_service.record(
+            skill_id=str(skill.id),
+            actor_id=submitter_id,
+            action=RevisionAction.create,
+            snapshot=skill.model_dump(mode="json"),
+            labels=label_names,
+        )
         return skill
 
     async def _create_local(self, data: SkillCreate, submitter_id: str, skill_path: str) -> Skill:
@@ -337,11 +601,13 @@ class SkillRepository:
                 Skill.skill_path == skill_path,
             )
             raise DuplicateSkillError(existing.slug if existing else None)
+        _count_cache.clear()
         await revision_service.record(
             skill_id=str(skill.id),
             actor_id=submitter_id,
             action=RevisionAction.create,
             snapshot=skill.model_dump(mode="json"),
+            labels=[],
         )
         return skill
 
@@ -356,12 +622,18 @@ class SkillRepository:
             setattr(skill, k, v)
         skill.updated_at = datetime.now(timezone.utc)
         await skill.save()
+        try:
+            applied = await label_module.label_service.list_for_skill(str(skill.id))
+            label_names = [l.name for l in applied]
+        except Exception:
+            label_names = []
         await revision_service.record(
             skill_id=str(skill.id),
             actor_id=actor_id,
             action=RevisionAction.edit,
             snapshot=skill.model_dump(mode="json"),
             changelog_note=data.changelog_note,
+            labels=label_names,
         )
         return skill
 
@@ -428,11 +700,17 @@ class SkillRepository:
                 logger.warning("[REFETCH] scan failed: %s", exc, exc_info=True)
             skill.updated_at = datetime.now(timezone.utc)
             await skill.save()
+            try:
+                applied = await label_module.label_service.list_for_skill(str(skill.id))
+                label_names = [l.name for l in applied]
+            except Exception:
+                label_names = []
             await revision_service.record(
                 skill_id=str(skill.id),
                 actor_id=actor_id,
                 action=RevisionAction.refetch,
                 snapshot=skill.model_dump(mode="json"),
+                labels=label_names,
             )
             logger.info("[REFETCH] done slug=%s", skill.slug)
         except GitHubFetchError as exc:
@@ -456,11 +734,17 @@ class SkillRepository:
             skill.upstream_sha = gh.head_sha
             skill.updated_at = datetime.now(timezone.utc)
             await skill.save()
+            try:
+                applied = await label_module.label_service.list_for_skill(str(skill.id))
+                label_names = [l.name for l in applied]
+            except Exception:
+                label_names = []
             await revision_service.record(
                 skill_id=str(skill.id),
                 actor_id=actor_id,
                 action=RevisionAction.pin,
                 snapshot=skill.model_dump(mode="json"),
+                labels=label_names,
             )
             logger.info("[PIN] done slug=%s pinned_commit_sha=%s pinned_ref=%s",
                         skill.slug, skill.pinned_commit_sha, skill.pinned_ref)
@@ -505,6 +789,7 @@ class SkillRepository:
         if superseded_by_slug is not None:
             skill.superseded_by_slug = superseded_by_slug
         await skill.save()
+        _count_cache.clear()
 
         await revision_service.record(
             skill_id=str(skill.id),
@@ -535,6 +820,7 @@ class SkillRepository:
         skill.status = SkillStatus.active
         skill.deactivation_reason = None
         await skill.save()
+        _count_cache.clear()
 
         await revision_service.record(
             skill_id=str(skill.id),

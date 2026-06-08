@@ -1,11 +1,11 @@
 # TODO #017 — Skill Version / Commit Pinning
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done
-> **Branch:** —
+> **Status:** ✅ Complete
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
-> **Shipped:** —
+> **Shipped:** 2026-06-02 (`31e1d38`)
 
 ---
 
@@ -202,37 +202,37 @@ Additive-only MongoDB model changes — no schema migration required. Existing d
 
 ## Implementation Checklist
 
-- [ ] `Skill` model: add `pinned_commit_sha`, `pinned_ref`, `upstream_sha`
-- [ ] `GitHubSnapshot`: add `head_sha`
-- [ ] `github_fetcher.fetch()`: fetch HEAD SHA via `git/ref/heads/<branch>`; tag lookup in parallel
-- [ ] `skill_repository.create()`: set `pinned_commit_sha`
-- [ ] `skill_repository.refetch()`: update `upstream_sha`
-- [ ] `skill_repository.pin()`: new method; sets `pinned_commit_sha`, `pinned_ref`; records revision
-- [ ] `POST /{slug}/pin` endpoint (submitter/admin auth)
-- [ ] `SkillOut` / `SkillListOut`: add new fields + `update_available`
-- [ ] Frontend: "Update available" badge on skill card
-- [ ] Frontend: pinned SHA + tag display on detail page
-- [ ] Frontend: "Update to latest" button (submitter/admin only)
-- [ ] Install skill: pass `?ref=<pinned_commit_sha>` in GitHub Contents API calls
-- [ ] Backfill script for existing skills
-- [ ] Tests: pin endpoint auth, `update_available` logic, installer ref passthrough
-- [ ] CHANGELOG.md: add "Skill version pinning (#017)" section under Unreleased
-- [ ] skill/SKILL.md: update "Install by slug" to document `?ref=<pinned_commit_sha>` and fallback advisory
-- [ ] docs/adr/: persist ADR-001 (separate refetch/pin) and ADR-002 (SHA over tag) as files (adr-u11, adr-u12)
-- [ ] docs/github-api-plugin-installation.md: update "Current approach" to note ref pinning (post-ship)
+- [x] `Skill` model: add `pinned_commit_sha`, `pinned_ref`, `upstream_sha`
+- [x] `GitHubSnapshot`: add `head_sha`
+- [x] `github_fetcher.fetch()`: fetch HEAD SHA via `git/ref/heads/<branch>`; tag lookup in parallel
+- [x] `skill_repository.create()`: set `pinned_commit_sha`
+- [x] `skill_repository.refetch()`: update `upstream_sha`
+- [x] `skill_repository.pin()`: new method; sets `pinned_commit_sha`, `pinned_ref`; records revision
+- [x] `POST /{slug}/pin` endpoint (submitter/admin auth)
+- [x] `SkillOut` / `SkillListOut`: add new fields + `update_available`
+- [x] Frontend: "Update available" badge on skill card
+- [x] Frontend: pinned SHA + tag display on detail page
+- [x] Frontend: "Update to latest" button (submitter/admin only)
+- [x] Install skill: pass `?ref=<pinned_commit_sha>` in GitHub Contents API calls
+- [x] Backfill script for existing skills
+- [x] Tests: pin endpoint auth, `update_available` logic, installer ref passthrough
+- [x] CHANGELOG.md: add "Skill version pinning (#017)" section under Unreleased
+- [x] skill/SKILL.md: update "Install by slug" to document `?ref=<pinned_commit_sha>` and fallback advisory
+- [x] docs/adr/: persist ADR-001 (separate refetch/pin) and ADR-002 (SHA over tag) as files (adr-u11, adr-u12)
+- [x] docs/github-api-plugin-installation.md: update "Current approach" to note ref pinning (post-ship)
 
 ---
 
 ## Definition of Done
 
-- [ ] New skills capture `pinned_commit_sha` at registration
-- [ ] `install <slug>` fetches files at pinned SHA, not HEAD
-- [ ] "Update available" badge appears when upstream has moved ahead
-- [ ] Submitter/admin can pin to latest via UI button
-- [ ] Existing (unpinned) skills install from HEAD with an advisory — no regression
-- [ ] CHANGELOG entry written
-- [ ] skill/SKILL.md install docs match new behavior
-- [ ] All checklist items complete
+- [x] New skills capture `pinned_commit_sha` at registration
+- [x] `install <slug>` fetches files at pinned SHA, not HEAD
+- [x] "Update available" badge appears when upstream has moved ahead
+- [x] Submitter/admin can pin to latest via UI button
+- [x] Existing (unpinned) skills install from HEAD with an advisory — no regression
+- [x] CHANGELOG entry written
+- [x] skill/SKILL.md install docs match new behavior
+- [x] All checklist items complete
 
 ---
 

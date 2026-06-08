@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { Skill } from "@/types/skill";
 import Link from "next/link";
 import { GitFork, ArrowRight, Lock } from "lucide-react";
-import { PlatformBadges } from "./platform-badges";
+import { platformPillClass } from "@/components/platform-badges";
 import { labelColor } from "@/lib/label-color";
 import { StarRating } from "./star-rating";
 import { FlagIndicator } from "./flag-indicator";
@@ -123,9 +123,16 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
                 AI Gateway
               </span>
             )}
-            {skill.compatible_platforms.length > 0 && (
-              <PlatformBadges platforms={skill.compatible_platforms} />
-            )}
+            {skill.compatible_platforms.map((p) => (
+              <Link
+                key={p}
+                href={`/skills?platforms=${encodeURIComponent(p)}`}
+                onClick={(e) => e.stopPropagation()}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${platformPillClass(p, true)}`}
+              >
+                {p}
+              </Link>
+            ))}
           </div>
         </div>
       )}

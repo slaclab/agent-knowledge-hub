@@ -1,11 +1,11 @@
 # TODO #014 — Skill Provenance Tree: Fork and Evolution Graph
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
-> **Branch:** —
+> **Status:** ✅ Done
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-04-22
-> **Shipped:** —
+> **Shipped:** 2026-06-03
 
 ---
 
@@ -326,8 +326,8 @@ Choice: 5-min TTL cache on endpoint
 
 ## Definition of Done
 
-- [ ] All acceptance criteria pass
-- [ ] Unit tests (services/provenance.py):
+- [x] All acceptance criteria pass
+- [x] Unit tests (services/provenance.py):
   - upstream chain catalog-only (3 hops)
   - upstream chain with external node (best-effort fetch, 1-call cap)
   - upstream chain depth cap (5-hop chain → 3 returned)
@@ -346,18 +346,18 @@ Choice: 5-min TTL cache on endpoint
   - internal skill redacted for unauthenticated viewer
 - [ ] Integration tests: GET /provenance returns correct shape; 404 for nonexistent slug; empty:true for orphan skill; internal node redacted when unauthenticated; rate limit enforced
 - [ ] 5-min TTL cache verified (second call, no DB queries)
-- [ ] Frontend: `ProvenanceTree` renders adaptive collapsed summary (partial segments)
-- [ ] Frontend: supersession NOT in collapsed summary (banner handles it)
-- [ ] Frontend: existing "Fork Provenance" + "Forks in Catalog" sidebar cards removed
-- [ ] Frontend: CSS border-left tree indentation (no ASCII characters)
+- [x] Frontend: `ProvenanceTree` renders adaptive collapsed summary (partial segments)
+- [x] Frontend: supersession NOT in collapsed summary (banner handles it)
+- [x] Frontend: existing "Fork Provenance" + "Forks in Catalog" sidebar cards removed
+- [x] Frontend: CSS border-left tree indentation (no ASCII characters)
 - [ ] Frontend: mobile-stack layout verified at sm breakpoint
-- [ ] Frontend: fork display cap (max 5 shown, overflow link)
-- [ ] Frontend: non-catalog nodes use GitHub icon + repo path label
-- [ ] Frontend: section hidden when `empty: true`
-- [ ] CHANGELOG entry added (`### Skill provenance tree: fork and supersession lineage (#014)` under `## Unreleased`)
-- [ ] ADR-U26 → `docs/adr/adr-u26-provenance-backend-endpoint.md`
-- [ ] ADR-U27 → `docs/adr/adr-u27-css-indented-tree.md`
-- [ ] ADR-U28 → `docs/adr/adr-u28-external-node-metadata.md`
+- [x] Frontend: fork display cap (max 5 shown, overflow link)
+- [x] Frontend: non-catalog nodes use GitHub icon + repo path label
+- [x] Frontend: section hidden when `empty: true`
+- [x] CHANGELOG entry added (`### Skill provenance tree: fork and supersession lineage (#014)` under `## Unreleased`)
+- [x] ADR-U26 → `docs/adr/adr-u26-provenance-backend-endpoint.md`
+- [x] ADR-U27 → `docs/adr/adr-u27-css-indented-tree.md`
+- [x] ADR-U28 → `docs/adr/adr-u28-external-node-metadata.md`
 
 ---
 

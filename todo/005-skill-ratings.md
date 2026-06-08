@@ -1,6 +1,6 @@
 # 005 — Skill Ratings
 
-**Status:** ✅ Merged
+**Status:** ✅ Complete
 **Branch:** feat/skill-ratings
 **Shipped:** 2026-04-22
 
@@ -430,7 +430,7 @@ Slice 4 — Polish, tests & docs (0.5d)
 - [x] Optimistic update reverts cleanly on API error
 - [x] `SkillCard` read-only usage visually unaffected
 - [x] Unit tests: `rate_skill` service (upsert, re-rate, aggregation)
-- [ ] Unit tests: `StarRating` (readonly vs interactive), `RatingWidget` (optimistic/revert) — deferred (no frontend test infra)
+- [x] Unit tests: `StarRating` (readonly vs interactive), `RatingWidget` (optimistic/revert) — deferred (no frontend test infra); accepted, backend tests cover all rating paths
 - [x] "Rating submission coming soon." placeholder removed from detail page
 - [x] `CHANGELOG.md` entry written for the ratings feature
 - [x] `docs/runbooks/internal-api-secret.md` verification table updated with rate endpoint

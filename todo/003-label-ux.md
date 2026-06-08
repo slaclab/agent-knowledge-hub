@@ -1,6 +1,6 @@
 # 003 — Label UX: Community Tagging System
 
-**Status:** 🏁 Implementation Done
+**Status:** ✅ Complete
 **Branch:** feat/label-ux
 
 ---
@@ -372,7 +372,7 @@ All slices ship in one branch (`feat/label-ux`), one PR. Order of implementation
 - [x] ADRs 001–004 filed in `docs/adr/` as `adr-u07` through `adr-u10`
 - [x] CHANGELOG.md created with label UX entry
 - [x] README updated to mention `/labels`, label combobox, `/admin/labels`
-- [ ] AC-L1 through AC-L7 pass in staging
+- [x] AC-L1 through AC-L7 pass in staging
 
 ---
 

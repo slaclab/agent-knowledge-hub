@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getSkill, getRevisions, listSkills, getSettings, getMe } from "@/lib/api";
+import { getSkill, getRevisions, getProvenance, getSettings, getMe } from "@/lib/api";
 import { Tombstone } from "@/components/tombstone";
 import { SupersededNotice } from "@/components/superseded-notice";
 import { SkillContentTabs } from "@/components/skill-content-tabs";
@@ -11,6 +11,7 @@ import { FlagButton } from "@/components/flag-button";
 import { AdminDeactivateButton } from "@/components/admin-deactivate-button";
 import { LabelSection } from "@/components/label-section";
 import { RatingWidget } from "@/components/rating-widget";
+import { ProvenanceTreeView } from "@/components/provenance-tree";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
@@ -42,14 +43,12 @@ export default async function SkillDetailPage({ params }: PageProps) {
 
   const revisions = await getRevisions(params.slug, true);
 
-  // Fetch forks of this skill in the catalog (FR-P16)
-  const [forksData, siteSettings, me] = await Promise.all([
-    listSkills({ forked_from: skill.repo_url, page_size: 3, server: true }),
+  const [provenanceData, siteSettings, me] = await Promise.all([
+    getProvenance(params.slug, true),
     getSettings(true),
     getMe(true),
   ]);
   const isAdmin = me?.is_admin ?? false;
-  const forkCount = forksData?.total ?? 0;
   const accessInstructionsUrl = siteSettings.github_access_instructions_url;
 
   // Unique contributors in order of first appearance; submitter always first
@@ -283,38 +282,13 @@ export default async function SkillDetailPage({ params }: PageProps) {
             <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
           </div>
 
-          {/* Fork provenance (FR-P8) */}
-          {skill.forked_from_url && (
-            <div className="rounded-lg border p-4 space-y-1">
-              <h3 className="text-sm font-semibold">Fork Provenance</h3>
-              <p className="text-sm text-muted-foreground">
-                Forked from{" "}
-                <a
-                  href={skill.forked_from_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-foreground underline"
-                >
-                  {skill.forked_from_url.replace("https://github.com/", "")}
-                </a>
-              </p>
-            </div>
-          )}
-
-          {/* Forks in catalog (FR-P16) */}
-          {forkCount > 0 && (
-            <div className="rounded-lg border p-4 space-y-1">
-              <h3 className="text-sm font-semibold">Forks in Catalog</h3>
-              <p className="text-sm text-muted-foreground">
-                {forkCount} fork{forkCount !== 1 ? "s" : ""} in the catalog.{" "}
-                <Link
-                  href={`/skills?forked_from=${encodeURIComponent(skill.repo_url)}`}
-                  className="text-primary underline"
-                >
-                  View all
-                </Link>
-              </p>
-            </div>
+          {/* Provenance tree (#014) */}
+          {provenanceData && !provenanceData.empty && (
+            <ProvenanceTreeView
+              tree={provenanceData}
+              forkedFromUrl={skill.forked_from_url}
+              repoUrl={skill.repo_url}
+            />
           )}
 
           {/* Platforms */}

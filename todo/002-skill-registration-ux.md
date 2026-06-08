@@ -1,6 +1,7 @@
 # 002 — Improved Skill Registration UX: Directory-Aware Submission
 
-**Status:** 🏁 Implementation Done
+**Status:** ✅ Complete
+**Shipped:** 2026-04-21 (`1ada51f`)
 
 ---
 

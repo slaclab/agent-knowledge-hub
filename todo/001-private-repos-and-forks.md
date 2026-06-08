@@ -1,8 +1,9 @@
 # 001 — Private/Internal GitHub Repos, Access Model, and Fork Provenance
 
-**Status:** 🏁 Implementation Done
+**Status:** ✅ Complete
 **Depends on:** #002 (Slice 2 requires GitHubScanner from #002 to be in place)
 **Branch:** feat/private-repos-and-forks
+**Shipped:** 2026-04-20 (`c8a26cd`)
 
 ---
 
@@ -286,7 +287,7 @@ A bool `is_private` doesn't capture the distinction between "slaclab internal" (
 
 - [x] `visibility` and `forked_from_url` fields on Skill, indexed
 - [x] GitHubFetcher fallback chain tested with mocks (unauth → PAT → App)
-- [ ] GitHubScanner (#002) uses shared GitHubAppClient — fallback chain tested for scan + discovery
+- [x] GitHubScanner (#002) uses shared GitHubAppClient — fallback chain tested for scan + discovery
 - [x] App token generation + caching unit tested (including expiry + refresh)
 - [x] `forked_from` filter on list endpoint tested
 - [x] "SLAC Members Only" badge shown in frontend for `visibility=internal`
@@ -300,8 +301,8 @@ A bool `is_private` doesn't capture the distinction between "slaclab internal" (
 - [x] `GET /api/github-preview` rate-limited (slowapi or equivalent, 10 req/min per IP)
 - [x] `forked_from_url` validated as `https://github.com/*` URL in `SkillUpdate` Pydantic schema
 - [x] `github_access_instructions_url` validated as http/https URL in SiteSettings schema (Pydantic `HttpUrl`)
-- [ ] Private repo scan via `/api/github-scan` returns `visibility: internal` in SkillSnapshot
-- [ ] Discovery mode (`discover=true`) works on private repos when App is configured
+- [x] Private repo scan via `/api/github-scan` returns `visibility: internal` in SkillSnapshot
+- [x] Discovery mode (`discover=true`) works on private repos when App is configured
 - [x] ADRs committed to `docs/adr/`: adr-p01-github-app-over-oauth.md, adr-p02-visibility-enum.md, adr-p03-shared-github-app-client.md
 - [x] GitHub App setup runbook written to `docs/runbooks/github-app-setup.md` (GitHub Enterprise App creation, vault secrets, k8s secret injection, verification)
 - [x] `backend/.env.example` updated with `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` (with comments noting they are optional)

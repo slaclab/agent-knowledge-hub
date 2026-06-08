@@ -1,11 +1,11 @@
 # TODO #015 — Catalog Scale: Search Quality, Pagination, and Performance
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
-> **Branch:** —
+> **Status:** ✅ Done
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-04-22
-> **Shipped:** —
+> **Shipped:** 2026-06-03
 
 ---
 

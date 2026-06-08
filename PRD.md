@@ -143,7 +143,7 @@
 - FR-17b: Semantic/vector search over skill name, description, and README content using an embeddings index, so consumers can find skills by describing their problem in plain English.
 - FR-18: Filter by one or more labels (AND or OR, configurable).
 - FR-19: Sort by: newest, highest rated, most rated, most GitHub stars.
-- FR-20: Pagination: 20 skills per page, cursor-based.
+- FR-20: Pagination: 20 skills per page. Hybrid skip/cursor strategy — pages 1–10 use offset-based skip (at most 180 docs scanned); pages 11+ pass an opaque `cursor` param to use keyset (`$gt` on `submitted_at, _id`) when `sort=newest`. The `?page=N` URL contract is fully preserved for bookmarkability. `most_stars` keyset is deferred (nullable field). See ADR-U32.
 - FR-20b: Deactivated skills are excluded from all browse, search, and filter results; they are only visible to admins and to the original submitter on their own profile/edit page.
 
 **Guides**

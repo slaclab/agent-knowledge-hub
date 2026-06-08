@@ -11,13 +11,13 @@ Never rely on the ambient `~/.kube/config`.
 
 | Environment | KUBECONFIG |
 |-------------|-----------|
-| dev         | `/sdf/home/y/ytl/.kube/contexts/agent-knowledge-hub-dev/dev` |
+| dev         | `/sdf/home/y/ytl/.kube/config.sage-dev` |
 | stage       | (TBD — ask user) |
 | prod        | (TBD — ask user) |
 
 Example:
 ```bash
-KUBECONFIG=/sdf/home/y/ytl/.kube/contexts/agent-knowledge-hub-dev/dev kubectl get pods -n dev
+KUBECONFIG=/sdf/home/y/ytl/.kube/config.sage-dev kubectl get pods -n dev
 ```
 
 ---

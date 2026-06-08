@@ -166,6 +166,10 @@ class PaginatedSkills(BaseModel):
     total: int
     page: int
     page_size: int
+    pages: int = 1
+    next_cursor: Optional[str] = None
+    prev_cursor: Optional[str] = None
+    platform_counts: dict = {}  # dict[str, int] — per-platform skill counts
 
 
 class RevisionOut(BaseModel):

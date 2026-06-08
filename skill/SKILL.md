@@ -140,7 +140,7 @@ If the user says yes, run the install flow for that slug.
 4. **Clone the repository:**
    Call `git-clone-to-temp(repo_url, ref, slug)`.
    - On success → `tmp_dir` is set; proceed to step 5.
-   - On null (git unavailable or clone failed) → jump to **step 14 (fallback)**.
+   - On null (git unavailable or clone failed) → jump to **step 15 (fallback)**.
    If `ref` is a pinned SHA and `git checkout` reports "pathspec not found" (force-push deleted it):
    ```
    ✗  Pinned version <short_sha> no longer exists in the repository.
@@ -151,7 +151,7 @@ If the user says yes, run the install flow for that slug.
 5. **Locate plugin.json** from the clone (try in order; stop at first success):
    a. `tmp_dir/<skill_path>/plugin.json`
    b. `tmp_dir/<skill_path>/.claude-plugin/plugin.json`
-   c. If neither exists → **legacy install from clone** (step 13).
+   c. If neither exists → **legacy install from clone** (step 14).
 
 6. **Platform check** — before writing any files:
    - Read `compatible_platforms` from plugin.json (falls back to catalog value if absent).
@@ -207,19 +207,27 @@ If the user says yes, run the install flow for that slug.
     List every file installed into `commands` and `agents` (not skills — the slug dir is deleted as a whole).
     If no commands or agents were installed, write an empty manifest anyway (commands: [], agents: []).
 
-13. **Legacy install from clone** (reached when no plugin.json found in step 5):
+13. **Record install event** (fire-and-forget — never aborts the install):
+    POST `<hub_url>/api/me/installs/<slug>` with `Authorization: Bearer <token>` if a token is available.
+    - If the request fails for any reason (network error, 4xx, 5xx, no token), log a warning only:
+      `⚠  Could not record install event (HTTP <status>). Your install is complete.`
+      Never echo the token value in any output.
+    - If successful (204), no output.
+
+14. **Legacy install from clone** (reached when no plugin.json found in step 5):
     Walk `tmp_dir/<skill_path>/` and copy every file to `~/.claude/skills/<slug>/`
     using `copy-from-clone(tmp_dir, <skill_path>/, ~/.claude/skills/<slug>/, ~/.claude/skills/<slug>/)`.
     Write an empty manifest (`commands: [], agents: []`) after install.
-    Go to step 11 (delete tmp_dir), then print a summary of installed paths.
+    Go to step 11 (delete tmp_dir), then go to step 13 (record install event), then print a summary of installed paths.
     If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
 
-14. **Fallback: Contents API install** (reached only when `git-clone-to-temp` returned null):
+15. **Fallback: Contents API install** (reached only when `git-clone-to-temp` returned null — step 4):
     Use the GitHub Contents API to fetch files. This path is identical to the pre-#022 install flow:
     - Use `?ref=<pinned_commit_sha>` on all calls if pinned SHA is set.
     - Locate plugin.json via Contents API (try `<skill_path>/plugin.json`, then `.claude-plugin/plugin.json`, then legacy).
     - Install components via `fetch-and-write` exactly as the pre-#022 flow.
     - Write manifest as normal.
+    - Go to step 13 (record install event).
     Print: `ℹ  Installed via GitHub Contents API (git fallback).`
 
     If GitHub returns 422 (reference not found for pinned SHA):
@@ -233,7 +241,7 @@ If the user says yes, run the install flow for that slug.
     If `plugin.json` contains a `version` field: `Installed <slug> v<version>`.
     If `pinned_commit_sha` was used: `Installed at commit <short_sha>`.
 
-15. **Codex install** (only when `"codex"` is in `compatible_platforms`):
+16. **Codex install** (only when `"codex"` is in `compatible_platforms`):
 
     a. **Check for Codex home.** If `~/.codex/` does not exist, print:
        `ℹ Codex home (~/.codex/) not found — skipping Codex install.`

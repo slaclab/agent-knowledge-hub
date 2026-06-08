@@ -119,26 +119,39 @@ def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillL
 async def list_skills(
     q: Optional[str] = Query(None, description="Full-text search query"),
     sort: SortField = Query("newest"),
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=1000),
     page_size: int = Query(20, ge=1, le=100),
     forked_from: Optional[str] = Query(None, description="Filter by upstream fork URL"),
     visibility: Optional[str] = Query(None, description="Filter by visibility: public, internal, all"),
     labels: Optional[str] = Query(None, description="Comma-separated label names (AND filter)"),
     submitted_by: Optional[str] = Query(None, description="Filter by submitter user_id"),
+    cursor: Optional[str] = Query(None, description="Opaque keyset cursor for sort=newest pagination"),
+    platforms: Optional[str] = Query(None, max_length=500, description="Comma-separated platform names (OR filter)"),
 ):
+    import math
+    from fastapi import HTTPException as _HTTPException
     label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else None
-    items, total = await skill_repository.list(
-        q=q, sort=sort, page=page, page_size=page_size,
-        forked_from=forked_from, visibility=visibility, labels=label_list,
-        submitted_by=submitted_by,
-    )
+    platform_list = [p.strip() for p in platforms.split(",") if p.strip()] if platforms else None
+    try:
+        items, total, next_cursor, prev_cursor, platform_counts = await skill_repository.list_with_cursors(
+            q=q, sort=sort, page=page, page_size=page_size,
+            forked_from=forked_from, visibility=visibility, labels=label_list,
+            submitted_by=submitted_by, cursor=cursor, platforms=platform_list,
+        )
+    except ValueError as exc:
+        raise _HTTPException(status_code=422, detail=str(exc))
     skill_ids = [str(s.id) for s in items]
     labels_by_skill = await label_service.batch_labels_for_skills(skill_ids)
+    pages = max(1, math.ceil(total / page_size))
     return PaginatedSkills(
         items=[_skill_to_list_out(s, labels=labels_by_skill.get(str(s.id), [])) for s in items],
         total=total,
         page=page,
         page_size=page_size,
+        pages=pages,
+        next_cursor=next_cursor,
+        prev_cursor=prev_cursor,
+        platform_counts=platform_counts,
     )
 
 
@@ -445,12 +458,21 @@ async def get_skill_file(
     return FileContentOut(content=content, path=path)
 
 
+_SNAPSHOT_STRIP = {"snapshotted_files", "readme_html", "readme_raw", "skill_md_raw"}
+
+
+def _sanitize_snapshot(snapshot: dict) -> dict:
+    return {k: v for k, v in snapshot.items() if k not in _SNAPSHOT_STRIP}
+
+
 @router.get("/{slug}/revisions", response_model=List[RevisionOut])
-async def list_revisions(slug: str):
-    from app.models.skill import Skill
+async def list_revisions(slug: str, viewer: Optional[User] = Depends(get_optional_user)):
+    from app.models.skill import Skill, VisibilityEnum
     skill = await Skill.find_one(Skill.slug == slug)
     if not skill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.visibility == VisibilityEnum.internal and not viewer:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     revisions = (
         await SkillRevision.find(SkillRevision.skill_id == str(skill.id))
         .sort([("revision_number", 1)])
@@ -463,18 +485,20 @@ async def list_revisions(slug: str):
             action=r.action,
             changelog_note=r.changelog_note,
             created_at=r.created_at,
-            snapshot=r.snapshot,
+            snapshot=_sanitize_snapshot(r.snapshot),
         )
         for r in revisions
     ]
 
 
 @router.get("/{slug}/revisions/{n}", response_model=RevisionOut)
-async def get_revision(slug: str, n: int):
-    from app.models.skill import Skill
+async def get_revision(slug: str, n: int, viewer: Optional[User] = Depends(get_optional_user)):
+    from app.models.skill import Skill, VisibilityEnum
     skill = await Skill.find_one(Skill.slug == slug)
     if not skill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.visibility == VisibilityEnum.internal and not viewer:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     rev = await SkillRevision.find_one(
         SkillRevision.skill_id == str(skill.id),
         SkillRevision.revision_number == n,
@@ -487,8 +511,34 @@ async def get_revision(slug: str, n: int):
         action=rev.action,
         changelog_note=rev.changelog_note,
         created_at=rev.created_at,
-        snapshot=rev.snapshot,
+        snapshot=_sanitize_snapshot(rev.snapshot),
     )
+
+
+@router.get("/{slug}/provenance")
+@limiter.limit("30/minute")
+async def get_provenance(
+    slug: str,
+    request: Request,
+    viewer: Optional[User] = Depends(get_optional_user),
+):
+    from app.models.skill import Skill
+    from app.services.provenance import build_tree
+    from cachetools import TTLCache
+    skill = await Skill.find_one(Skill.slug == slug)
+    if not skill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    # Cache unfiltered tree; apply visibility per-viewer at response time
+    if not hasattr(get_provenance, "_cache"):
+        get_provenance._cache = TTLCache(maxsize=512, ttl=300)  # type: ignore[attr-defined]
+    cache_key = str(skill.id)
+    if cache_key not in get_provenance._cache:  # type: ignore[attr-defined]
+        get_provenance._cache[cache_key] = await build_tree(skill, viewer_authenticated=True)  # type: ignore[attr-defined]
+    tree = get_provenance._cache[cache_key]  # type: ignore[attr-defined]
+    # Apply per-viewer visibility (re-run with viewer flag for non-authed callers)
+    if not viewer:
+        tree = await build_tree(skill, viewer_authenticated=False)
+    return tree
 
 
 @github_router.get("/github-preview", response_model=GitHubPreviewOut)

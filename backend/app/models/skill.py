@@ -120,4 +120,11 @@ class Skill(Document):
             IndexModel([("forked_from_url", ASCENDING)], sparse=True, name="forked_from_url_sparse"),
             IndexModel([("visibility", ASCENDING), ("submitted_at", DESCENDING)], name="visibility_submitted_at"),
             IndexModel([("repo_url", ASCENDING), ("skill_path", ASCENDING)], unique=True, name="repo_url_skill_path_unique"),
+            IndexModel([("submitter_id", ASCENDING)], name="submitter_id"),
+            IndexModel([("compatible_platforms", ASCENDING)], sparse=True, name="compatible_platforms_multikey"),
+            # Compound sort indexes for catalog list — cover skip() for pages 1–10 and keyset cursor queries
+            IndexModel([("status", ASCENDING), ("submitted_at", DESCENDING), ("_id", DESCENDING)], name="sort_newest"),
+            IndexModel([("status", ASCENDING), ("github_stars", DESCENDING), ("submitted_at", DESCENDING)], name="sort_most_stars"),
+            IndexModel([("status", ASCENDING), ("avg_rating", DESCENDING), ("submitted_at", DESCENDING)], name="sort_highest_rated"),
+            IndexModel([("status", ASCENDING), ("rating_count", DESCENDING), ("submitted_at", DESCENDING)], name="sort_most_rated"),
         ]

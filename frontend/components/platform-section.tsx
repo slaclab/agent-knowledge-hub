@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { X } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { addPlatform, removePlatform } from "@/lib/api";
 import { platformPillClass } from "@/components/platform-badges";
@@ -58,9 +59,13 @@ export function PlatformSection({ slug, initialPlatforms }: PlatformSectionProps
     return platforms.length > 0 ? (
       <div className="flex flex-wrap gap-1">
         {platforms.map((p) => (
-          <span key={p} className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${platformPillClass(p, true)}`}>
+          <Link
+            key={p}
+            href={`/skills?platforms=${encodeURIComponent(p)}`}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium hover:opacity-80 transition-opacity ${platformPillClass(p, true)}`}
+          >
             {p}
-          </span>
+          </Link>
         ))}
       </div>
     ) : null;

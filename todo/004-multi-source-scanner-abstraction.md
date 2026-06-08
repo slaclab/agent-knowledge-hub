@@ -1,11 +1,11 @@
 # TODO #004 — Multi-Source Scanner Abstraction: Local Directories, GitLab, and Beyond
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔍 Reviewed
-> **Branch:** —
+> **Status:** ✅ Complete
+> **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
-> **Shipped:** —
+> **Shipped:** 2026-06-02 (`ff074a0`)
 > **Depends on:** #002 (GitHubScanner is the first concrete implementation — already shipped)
 
 ---
@@ -405,31 +405,31 @@ Choice: `submit` command in SKILL.md vs a separate CLI binary
 
 ## Implementation Checklist
 
-- [ ] `scanner.py`: `SourceRef`, `LocalRef`, `GitHubRef` (with `source_type` literal), `RawScanResult`, `SourceScanner` ABC, `SourceScannerRegistry`, `SourceRefParser`
-- [ ] `github.py`: `GitHubScanner` subclasses `SourceScanner`; re-exports `RawScanResult`, `SourceRef`, `GitHubRef` from `scanner.py`; registers with `scanner_registry`
-- [ ] `scan.py`: replaces `github_scan.py`; both `/api/scan` and `/api/github-scan` registered
-- [ ] `skills.py`: two scan call sites updated to use `source_ref_parser` + `scanner_registry`
-- [ ] All existing tests pass (CI gate for Slice 1)
-- [ ] `local.py`: `LocalScanner.scan()`, `LocalScanner.discover()`, `snapshotted_files` population
-- [ ] `local_scanner` registered with `scanner_registry`
-- [ ] `Skill` model: `source_type: str = "github"`, `snapshotted_files: Dict[str, str] = {}`
-- [ ] `SkillOut`/`SkillListOut`: `source_type` exposed
-- [ ] `POST /api/skills` handles `source_type: "local"` + snapshot content
-- [ ] `LocalScanner` unit tests: happy path, missing path, no skill files, `.claude-plugin/` fallback
-- [ ] Installer skill: `submit <path>` command with token fallback chain (`AGENT_KNOWLEDGE_HUB_TOKEN` > `~/.s3df-access-token` > settings.local.json)
-- [ ] Installer skill: `submit <path>` error messages for all failure modes (path missing, no SKILL.md, missing name, slug taken, token missing/expired)
-- [ ] Installer skill: `submit <path>` success confirmation (name, slug, file count, catalog URL)
-- [ ] Frontend: skill detail page conditionally renders Repository section only for `source_type === "github"`; shows "Local submission" badge for local skills
-- [ ] Frontend: skill-card handles missing `repo_url` gracefully for local skills
-- [ ] `skill/SKILL.md`: update `create` sub-command closing guidance to mention `/agent-knowledge-hub submit .` as the primary local path
-- [ ] Smoke test: `submit ~/projects/test-skill` end-to-end
-- [ ] **SECURITY:** `/api/scan` endpoint rejects `LocalRef` with HTTP 422 — server never reads local disk for remote clients
-- [ ] **SECURITY:** `LocalScanner.scan()` resolves all paths and validates containment within `ref.path` root
-- [ ] **SECURITY:** `LocalScanner.discover()` skips symlinks resolving outside root; skips `.git`, `node_modules`, `.venv`; max depth 5
-- [ ] **SECURITY:** Per-file size cap (`_MAX_FILE_SIZE = 100_000`) enforced before `read_text()` in `LocalScanner`
-- [ ] **SECURITY:** `snapshotted_files` content sanitized through same pipeline as GitHub content before frontend rendering
-- [ ] **SECURITY:** Installer skill warns if `~/.claude/settings.local.json` is world-readable (file permissions check)
-- [ ] **SECURITY:** Unit tests for path traversal attempts (`../../../etc/passwd`), symlink escape, oversized file rejection
+- [x] `scanner.py`: `SourceRef`, `LocalRef`, `GitHubRef` (with `source_type` literal), `RawScanResult`, `SourceScanner` ABC, `SourceScannerRegistry`, `SourceRefParser`
+- [x] `github.py`: `GitHubScanner` subclasses `SourceScanner`; re-exports `RawScanResult`, `SourceRef`, `GitHubRef` from `scanner.py`; registers with `scanner_registry`
+- [x] `scan.py`: replaces `github_scan.py`; both `/api/scan` and `/api/github-scan` registered
+- [x] `skills.py`: two scan call sites updated to use `source_ref_parser` + `scanner_registry`
+- [x] All existing tests pass (CI gate for Slice 1)
+- [x] `local.py`: `LocalScanner.scan()`, `LocalScanner.discover()`, `snapshotted_files` population
+- [x] `local_scanner` registered with `scanner_registry`
+- [x] `Skill` model: `source_type: str = "github"`, `snapshotted_files: Dict[str, str] = {}`
+- [x] `SkillOut`/`SkillListOut`: `source_type` exposed
+- [x] `POST /api/skills` handles `source_type: "local"` + snapshot content
+- [x] `LocalScanner` unit tests: happy path, missing path, no skill files, `.claude-plugin/` fallback
+- [x] Installer skill: `submit <path>` command with token fallback chain (`AGENT_KNOWLEDGE_HUB_TOKEN` > `~/.s3df-access-token` > settings.local.json)
+- [x] Installer skill: `submit <path>` error messages for all failure modes (path missing, no SKILL.md, missing name, slug taken, token missing/expired)
+- [x] Installer skill: `submit <path>` success confirmation (name, slug, file count, catalog URL)
+- [x] Frontend: skill detail page conditionally renders Repository section only for `source_type === "github"`; shows "Local submission" badge for local skills
+- [x] Frontend: skill-card handles missing `repo_url` gracefully for local skills
+- [x] `skill/SKILL.md`: update `create` sub-command closing guidance to mention `/agent-knowledge-hub submit .` as the primary local path
+- [x] Smoke test: `submit ~/projects/test-skill` end-to-end
+- [x] **SECURITY:** `/api/scan` endpoint rejects `LocalRef` with HTTP 422 — server never reads local disk for remote clients
+- [x] **SECURITY:** `LocalScanner.scan()` resolves all paths and validates containment within `ref.path` root
+- [x] **SECURITY:** `LocalScanner.discover()` skips symlinks resolving outside root; skips `.git`, `node_modules`, `.venv`; max depth 5
+- [x] **SECURITY:** Per-file size cap (`_MAX_FILE_SIZE = 100_000`) enforced before `read_text()` in `LocalScanner`
+- [x] **SECURITY:** `snapshotted_files` content sanitized through same pipeline as GitHub content before frontend rendering
+- [x] **SECURITY:** Installer skill warns if `~/.claude/settings.local.json` is world-readable (file permissions check)
+- [x] **SECURITY:** Unit tests for path traversal attempts (`../../../etc/passwd`), symlink escape, oversized file rejection
 
 ---
 
@@ -476,15 +476,15 @@ Choice: `submit` command in SKILL.md vs a separate CLI binary
 
 ## Definition of Done
 
-- [ ] `SourceScanner` ABC, `SourceRef`, `RawScanResult`, `SourceScannerRegistry`, `SourceRefParser` defined in `scanner.py`
-- [ ] `GitHubScanner` implements `SourceScanner` — all existing tests pass unchanged
-- [ ] `LocalScanner` implemented and unit tested
-- [ ] `source_type` and `snapshotted_files` fields on `Skill` model
-- [ ] `/api/scan` endpoint resolves correct scanner from registry; `/api/github-scan` aliased
-- [ ] `agent-knowledge-hub submit <path>` CLI command functional with bearer token auth
-- [ ] `MetadataExtractor` has no imports from `github.py` — import chain goes `github.py` → `scanner.py`, not the reverse
-- [ ] Adding a new scanner requires only: implement `SourceScanner`, call `scanner_registry.register()`
-- [ ] All checklist items complete
+- [x] `SourceScanner` ABC, `SourceRef`, `RawScanResult`, `SourceScannerRegistry`, `SourceRefParser` defined in `scanner.py`
+- [x] `GitHubScanner` implements `SourceScanner` — all existing tests pass unchanged
+- [x] `LocalScanner` implemented and unit tested
+- [x] `source_type` and `snapshotted_files` fields on `Skill` model
+- [x] `/api/scan` endpoint resolves correct scanner from registry; `/api/github-scan` aliased
+- [x] `agent-knowledge-hub submit <path>` CLI command functional with bearer token auth
+- [x] `MetadataExtractor` has no imports from `github.py` — import chain goes `github.py` → `scanner.py`, not the reverse
+- [x] Adding a new scanner requires only: implement `SourceScanner`, call `scanner_registry.register()`
+- [x] All checklist items complete
 
 ---
 
@@ -494,12 +494,12 @@ Choice: `submit` command in SKILL.md vs a separate CLI binary
 
 Add to **Implementation Checklist**:
 
-- [ ] Update `docs/skill-file-discovery.md`: add `SourceRefParser` routing step, `LocalScanner` section, document `snapshotted_files` field, scope GitHub-specific sections as "GitHubScanner" behaviour
-- [ ] Update `skill/SKILL.md`: full `submit <path>` sub-command section — procedure steps, `AGENT_KNOWLEDGE_HUB_TOKEN` env var setup, error handling, coexistence with existing web-based `submit` (no args)
-- [ ] Add `CHANGELOG.md` "Unreleased" entry for multi-source scanner abstraction (new endpoint, new API field, new CLI command, model change)
-- [ ] File inline ADRs to `docs/adr/` per project convention: `adr-u11-source-ref-discriminated-union.md`, `adr-u12-snapshotted-files-embedded.md`, `adr-u13-github-scanner-abc-subclass.md`, `adr-u14-github-scan-permanent-alias.md`
-- [ ] Update `docs/runbooks/internal-api-secret.md` endpoint validation table: add `/api/scan` alongside `/api/github-scan`
-- [ ] Update `README.md` "Share what you've built" section: document both submission paths (GitHub web flow via `submit` and local directory submission via `submit <path>`)
+- [x] Update `docs/skill-file-discovery.md`: add `SourceRefParser` routing step, `LocalScanner` section, document `snapshotted_files` field, scope GitHub-specific sections as "GitHubScanner" behaviour
+- [x] Update `skill/SKILL.md`: full `submit <path>` sub-command section — procedure steps, `AGENT_KNOWLEDGE_HUB_TOKEN` env var setup, error handling, coexistence with existing web-based `submit` (no args)
+- [x] Add `CHANGELOG.md` "Unreleased" entry for multi-source scanner abstraction (new endpoint, new API field, new CLI command, model change)
+- [x] File inline ADRs to `docs/adr/` per project convention: `adr-u11-source-ref-discriminated-union.md`, `adr-u12-snapshotted-files-embedded.md`, `adr-u13-github-scanner-abc-subclass.md`, `adr-u14-github-scan-permanent-alias.md`
+- [x] Update `docs/runbooks/internal-api-secret.md` endpoint validation table: add `/api/scan` alongside `/api/github-scan`
+- [x] Update `README.md` "Share what you've built" section: document both submission paths (GitHub web flow via `submit` and local directory submission via `submit <path>`)
 
 **Sequencing recommendation:** ADRs and `docs/skill-file-discovery.md` should ship with Slice 1 (they document the abstraction). `SKILL.md` command docs, `README.md`, `CHANGELOG.md`, and runbook update ship with Slice 2 (they document user-facing features).
 

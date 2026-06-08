@@ -11,22 +11,28 @@ interface PageProps {
     page?: string;
     forked_from?: string;
     visibility?: string;
+    cursor?: string;
+    platforms?: string;
   };
 }
 
 export default async function SkillsPage({ searchParams }: PageProps) {
   const q = searchParams.q ?? "";
   const labels = searchParams.labels ? searchParams.labels.split(",").filter(Boolean) : [];
+  const platforms = searchParams.platforms ? searchParams.platforms.split(",").filter(Boolean) : [];
   const sort = (searchParams.sort as SortOption) ?? "newest";
   const page = Number(searchParams.page ?? 1);
   const forkedFrom = searchParams.forked_from;
   const visibility = searchParams.visibility as VisibilityType | "all" | undefined;
+  const cursor = searchParams.cursor;
 
   const [data, siteSettings] = await Promise.all([
     listSkills({
       q, labels, sort, page, page_size: 20, server: true,
       forked_from: forkedFrom,
       visibility: visibility !== "all" ? visibility : undefined,
+      cursor,
+      platforms: platforms.length > 0 ? platforms : undefined,
     }),
     getSettings(true),
   ]);
@@ -55,6 +61,7 @@ export default async function SkillsPage({ searchParams }: PageProps) {
           sort={sort}
           q={q}
           labels={labels}
+          platforms={platforms}
           forkedFrom={forkedFrom}
           visibility={visibility}
           accessInstructionsUrl={siteSettings.github_access_instructions_url}

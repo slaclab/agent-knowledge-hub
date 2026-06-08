@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+## 0.17.0 — 2026-06-03
+
+### Rich revision history: field diffs and label tracking (#013)
+
+Revision history on the skill detail page now shows what actually changed in each edit or refetch, not just a changelog note.
+
+- **Field-level diffs** — `edit`, `refetch`, and `pin` revisions show a collapsible "N fields changed" badge. Clicking expands to show old → new values for each changed field (name, description, version, license, repo_url, forked_from_url, visibility, compatible_platforms, labels, github_stars, last_commit_at).
+- **Label tracking** — label adds and removes appear per revision with color-coded chips (green added / red strikethrough removed) and text accessibility labels. Labels are now embedded in the revision snapshot at write time.
+- **Create genesis display** — the initial `create` revision shows the starting state (name, description, platforms, labels) as added fields.
+- **Empty refetch note** — a refetch that changed nothing now shows "Re-fetched — no changes detected" instead of a silent entry.
+- **README updated indicator** — when `readme_html` changed but no semantic fields did, the entry shows "README updated" without noisy HTML content.
+- **Repo URL warning** — changes to `repo_url` or `forked_from_url` are visually distinguished with a warning icon.
+- **10-revision cap** — the timeline shows the 10 most recent revisions by default with a "Show all N revisions" toggle.
+- **Auth gating** — `GET /api/skills/{slug}/revisions` and `/revisions/{n}` now require authentication for internal-visibility skills (returns 401 for unauthenticated viewers).
+- **Snapshot sanitization** — `readme_html`, `readme_raw`, `skill_md_raw`, `snapshotted_files` are stripped from revision snapshots both at write time and at response time, reducing snapshot payload by 50–200 KB per revision.
+- **Vitest test runner** — added Vitest to the frontend for pure-function unit tests. `npm test` runs all tests. 18 `computeDiff` unit tests cover scalar change, array add/remove, reorder (no diff), null transitions, legacy snapshots, excluded fields.
+
+### Skill provenance tree: fork and supersession lineage (#014)
+
+Skills on the detail page now show their full lineage — where they came from, what forked them, and what superseded them.
+
+- **Provenance tree** — a collapsible sidebar section replaces the old "Fork Provenance" and "Forks in Catalog" cards. Collapsed summary shows "Forked from X · N forks in catalog". Expanding shows upstream chain, this skill, forks in catalog (up to 5), and supersession chain.
+- **Upstream chain** — follows `forked_from_url` links up to 3 hops. Catalog matches show slug, name, stars, rating, last commit, and submitter. Non-catalog upstream shows a GitHub icon + repo path with best-effort metadata (stars, last commit) fetched via the existing GitHub fetcher.
+- **Fork tree (2 levels)** — level-1 forks sorted by stars, up to 5 shown with "and N more →" overflow link. Level-2 forks fetched in a single batched query. `forks_truncated` flag and `total_fork_count` surfaced in response.
+- **Supersession chain** — follows `superseded_by_slug` links as a directed path (lineage context only; the existing superseded banner handles the "go update" CTA at the top of the page).
+- **Security** — internal-visibility skills in the tree are redacted to `{name: "[internal skill]"}` for unauthenticated viewers. Rate-limited to 30 requests/minute.
+- **Cycle detection** — slug-based visited sets for upstream and supersession traversal prevent infinite loops on circular references.
+- **5-minute TTL cache** — provenance trees are cached; unfiltered tree is cached and per-viewer visibility filtering is applied at response time.
+- **CSS indented tree** — `border-left` + `padding-left` indentation with no ASCII characters; node metadata stacks on mobile.
+
+## 0.16.0 — 2026-06-03
+
+### Catalog scale: search quality, pagination, and performance (#015)
+
+The catalog list endpoint now scales to thousands of skills with keyset pagination, in-process count caching, compound sort indexes, and a name-boost search heuristic.
+
+- **Keyset pagination** — `GET /api/skills` accepts an optional opaque `cursor` param for `sort=newest`. When provided, the backend uses a compound `$gt` keyset query on `(submitted_at, _id)` instead of `skip()`, eliminating O(N) scans at high page numbers. The `?page=N` URL contract is fully preserved; cursors are only used when the frontend explicitly sends one (pages 11+ on `newest` sort).
+- **Count caching** — unfiltered catalog requests now use `estimatedDocumentCount()` (O(1)). Filtered requests cache counts per filter fingerprint for 30 seconds in-process (TTLCache, 1,000-entry LRU bound). Any skill write (create, deactivate, reactivate) flushes the cache immediately.
+- **Compound sort indexes** — explicit compound MongoDB indexes for all four sort fields (`newest`, `most_stars`, `highest_rated`, `most_rated`) make offset-based pages 1–10 fast via index-only scans.
+- **Name boost search** — when a query exactly matches a skill's name or slug, that skill is surfaced first regardless of page position. The search input now shows a hint: "exact name matches rank first."
+- **Atlas Search feature flag** — `MONGODB_ATLAS_SEARCH=1` enables a MongoDB Atlas Search pipeline (permanently inactive on the current self-hosted Percona PSMDB cluster; reserved for a future Atlas migration). Falls back to `$text` on `OperationFailure`.
+- **Page-number input** — the pagination bar gains a direct page-number input (`<input type="number">`) alongside Prev/Next buttons. Entering an out-of-range value shows a validation error and resets to the current page. The input is hidden on viewports narrower than `sm` (640px); Prev/Next remain visible at all breakpoints. Navigating to an empty page (stale bookmark) redirects to page 1 automatically.
+- **API response additions** — `GET /api/skills` now returns `pages`, `next_cursor`, and `prev_cursor` fields alongside existing `total`/`page`/`page_size`.
+
 ### Moderation: user flags and admin deactivation (#012)
 
 The community can now flag broken or stale skills, and admins have a full moderation loop to act on those reports.

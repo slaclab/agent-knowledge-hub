@@ -258,8 +258,11 @@ async def test_create_revision_snapshot_includes_file_content():
     revs = await SkillRevision.find(SkillRevision.skill_id == str(skill.id)).to_list()
     assert len(revs) == 1
     snapshot = revs[0].snapshot
-    assert snapshot.get("skill_md_raw") == SKILL_MD_CONTENT
-    assert snapshot.get("readme_raw") == README_CONTENT
+    # Large content fields are stripped from the snapshot (#013 FR-11)
+    assert "skill_md_raw" not in snapshot
+    assert "readme_raw" not in snapshot
+    # Skill metadata should still be present
+    assert snapshot.get("name") == "my-skill"
 
 
 # ---------------------------------------------------------------------------

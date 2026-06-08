@@ -111,6 +111,9 @@ export interface PaginatedSkills {
   page: number;
   page_size: number;
   pages: number;
+  next_cursor: string | null;
+  prev_cursor: string | null;
+  platform_counts?: Record<string, number>;
 }
 
 export interface SkillRevision {
@@ -123,6 +126,11 @@ export interface SkillRevision {
   changelog_note: string | null;
   created_at: string;
 }
+
+export type FieldDiff =
+  | { field: string; type: "scalar"; old: string | number | null; new: string | number | null }
+  | { field: string; type: "array"; added: string[]; removed: string[] }
+  | { field: string; type: "readme_updated" };
 
 export interface SkillCreate {
   repo_url: string;
@@ -191,6 +199,8 @@ export interface SkillListParams {
   page_size?: number;
   forked_from?: string;
   visibility?: VisibilityType | "all";
+  cursor?: string;
+  platforms?: string[];
 }
 
 export interface GitHubRef {

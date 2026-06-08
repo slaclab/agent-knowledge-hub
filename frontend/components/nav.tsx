@@ -71,7 +71,12 @@ export function Nav() {
             </Link>
           )}
           {!loading && user && (
-            <span className="text-xs text-muted-foreground">{user.user_id}</span>
+            <Link
+              href={`/users/${encodeURIComponent(user.user_id)}`}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {user.user_id}
+            </Link>
           )}
         </nav>
       </div>

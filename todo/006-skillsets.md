@@ -30,6 +30,8 @@
 
 1. As a facility lead, I want to create a named skillset, so that I can curate a starter bundle for my team.
 2. As a facility lead, I want to add existing catalog skills to my skillset, so that the collection reflects our actual toolkit.
+2b. As a facility lead, I want to submit a new skill directly from the skillset detail page, so that I can add skills that don't yet exist in the catalog without losing my context.
+2c. As a skill submitter, I want to assign my new skill to one of my skillsets during submission, so that it's immediately part of my curated set when it's created.
 3. As a facility lead, I want to remove a skill from my skillset, so that I can keep the collection current.
 4. As a facility lead, I want to write a description for my skillset, so that visitors understand its purpose and audience.
 5. As a user, I want to browse all public skillsets, so that I can discover curated bundles relevant to my role.
@@ -51,7 +53,9 @@
 ### Functional
 
 - **FR-1:** Any authenticated user can create a skillset with a name, slug, and description.
-- **FR-2:** A skillset curator can add and remove skills by slug.
+- **FR-2:** A skillset curator can add and remove existing catalog skills by slug.
+- **FR-2a:** The skillset detail page (owner-only view) shows an "Add new skill →" button that navigates to `/skills/submit?skillset=<slug>`. After successful submission, the new skill is automatically added to the skillset and the user is redirected back to the skillset detail page.
+- **FR-2b:** The skill submit form accepts an optional `skillset` query parameter. When present and the submitter owns that skillset, the newly created skill is automatically added to it after creation. If the submitter does not own the skillset (or it doesn't exist), the skill is still created normally — the `skillset` param is silently ignored (cross-ownership addition is handled by #029).
 - **FR-3:** Skillset slugs are unique, URL-safe, lowercase, and auto-derived from the name (editable at creation).
 - **FR-4:** `GET /api/skillsets` returns paginated list with skill counts and curator.
 - **FR-5:** `GET /api/skillsets/{slug}` returns full skillset with hydrated skill summaries.
@@ -81,6 +85,8 @@
 - **AC-6:** Given `install skillset lcls-starter` in an AKH session, when the command runs, then each skill in the set is installed, with skips reported for any already-installed ones.
 - **AC-7:** Given a non-owner authenticated user, when they try to PUT/DELETE skills in someone else's skillset, then a 403 is returned.
 - **AC-8:** Given an admin, when they DELETE `/api/skillsets/{slug}`, then the skillset and all its membership rows are removed.
+- **AC-9:** Given a curator on the skillset detail page, when they click "Add new skill →", they land on `/skills/submit?skillset=<slug>`. After successful submission, the new skill appears in the skillset.
+- **AC-10:** Given a submit form loaded with `?skillset=<slug>` where the submitter owns the skillset, when the skill is created, it is automatically added to that skillset. If the submitter does not own the skillset, the skill is created normally with no skillset assignment.
 
 ---
 
@@ -344,6 +350,7 @@ Choice: Auto-derive slug from name (vs. user-chosen slug only)
 - `routers/skillsets.py`: all CRUD + membership endpoints (owner-or-admin checks on PATCH/DELETE)
 - Register skillsets router in `app/main.py`
 - Extend `SkillOut` / `SkillListOut` with `skillset_count` + `skillsets`; update `_skill_to_out()` to accept `skillsets` param — only `get_skill` handler fetches skillsets; all write handlers (`create`, `update`, `refetch`, `pin`, `add_platform`) pass `skillsets=[], skillset_count=0`
+- `SkillCreate` gains optional `skillset_slug: str | None = None`; after successful skill insert, if `skillset_slug` is set and the submitter owns that skillset, call `skillset_service.add_skill()` — silently skipped if skillset not found or submitter is not owner (cross-ownership deferred to #029)
 - Add `skillset_service.purge_for_skill(skill_id)` to `skill_service.delete()` cascade
 - Update `routers/catalog.py` to batch-hydrate `skillset_count`
 - Rate-limit `POST /api/skillsets` creation (e.g. `@limiter.limit("20/hour")`)
@@ -357,7 +364,9 @@ Choice: Auto-derive slug from name (vs. user-chosen slug only)
 - Create skillset form (name, slug, description) wrapped in `<AuthGuard>` with same fallback banner as `skills/submit/page.tsx`
 - Slug collision: inline error "Slug already taken. Try: <suggested-alternative>" with one-click accept
 - Admin management is API-only in this version; `/admin/skillsets` page is deferred
-- Add/remove skills from skillset (on detail page, owner only)
+- Add/remove existing catalog skills from skillset (on detail page, owner only)
+- "Add new skill →" button on skillset detail page (owner only) — links to `/skills/submit?skillset=<slug>`; after submission redirects back to skillset detail
+- Skill submit form (`/skills/submit`) reads optional `skillset` query param: if set and submitter owns that skillset, passes `skillset_slug` to the create endpoint; shows a subtle "Will be added to skillset: <name>" notice above the submit button
 - Edit name/description (owner only)
 - Delete skillset (owner or admin)
 
@@ -385,7 +394,9 @@ Choice: Auto-derive slug from name (vs. user-chosen slug only)
 - [ ] All acceptance criteria pass
 - [ ] Unit tests: `Skillset` model, `skillset_service` (create, add, remove, batch hydration), slug validation
 - [ ] Integration tests: all CRUD endpoints, membership add/remove, 403 on wrong-owner, skill detail includes skillsets
-- [ ] Frontend: `/skillsets` and `/skillsets/[slug]` render correctly; skill detail shows reverse links; create form submits and handles slug collision; owner management actions (add/remove skills, edit, delete) work; `<AuthGuard>` fallback renders for unauthenticated users
+- [ ] Frontend: `/skillsets` and `/skillsets/[slug]` render correctly; skill detail shows reverse links; create form submits and handles slug collision; owner management actions (add/remove existing skills, edit, delete) work; `<AuthGuard>` fallback renders for unauthenticated users
+- [ ] Frontend: "Add new skill →" button on skillset detail page (owner-only) links to `/skills/submit?skillset=<slug>`; submit form shows "Will be added to skillset: <name>" notice when `skillset` param is present and submitter owns it; after submission redirects to skillset detail page
+- [ ] Backend: `SkillCreate.skillset_slug` adds new skill to owned skillset post-creation; silently ignored if skillset not found or not owned
 - [ ] AKH skill: `install skillset <slug>` installs all members, skips installed, reports progress
 - [ ] Security: non-owner cannot modify skillset (403 verified in tests)
 - [ ] No N+1 queries on list views (batch hydration verified)

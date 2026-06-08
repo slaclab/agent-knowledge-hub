@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from beanie import Document, Link
 from pydantic import Field
+from pymongo import ASCENDING, IndexModel
 
 
 class RevisionAction(str, enum.Enum):
@@ -30,4 +31,8 @@ class SkillRevision(Document):
         name = "skill_revisions"
         indexes = [
             [("skill_id", 1), ("revision_number", 1)],
+            IndexModel(
+                [("actor_id", ASCENDING), ("action", ASCENDING), ("skill_id", ASCENDING)],
+                name="actor_action_skill",
+            ),
         ]

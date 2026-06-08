@@ -1,6 +1,6 @@
 # 025 — Platform Filter: Searchable, Filterable Platform Dimension in the Catalog
 
-**Status:** ⬜ Open
+**Status:** 🔍 Reviewed
 **Branch:** —
 
 ---
@@ -57,7 +57,8 @@
 - FR-P7: `PlatformFilter` accepts `activePlatforms: string[]` and reads `platform_counts` from the `PaginatedSkills` response (passed as a prop). Each chip shows the platform name and, if available, the count from `platform_counts`.
 - FR-P8: Clicking a platform chip toggles it in `?platforms=` URL param (comma-separated, same pattern as `?labels=`). Toggling resets `?page=` to 1.
 - FR-P9: Active platform chips render as removable pills in the controls bar (same pattern as active label pills in `skill-list.tsx`), with a `×` to deactivate individually.
-- FR-P10: `skill-list.tsx` gains `platforms: string[]` prop. `removeplatform` callback mirrors `removeLabel`. The empty state distinguishes a platform-only filter: "No skills found for the selected platform(s). Try removing a filter or submitting one." (shown alongside active-platform chips).
+- FR-P10: `skill-list.tsx` gains `platforms: string[]` prop. `removePlatform` callback mirrors `removeLabel`. Empty state: when `platforms.length > 0` AND `labels.length === 0`, show "No skills found for the selected platform(s). Try removing a filter or submitting one." When BOTH `platforms` and `labels` are active and results are empty, show "No skills match your current filters." with a "Clear all filters" link. (Platform filter uses OR semantics — selecting more platforms widens results; labels use AND and narrow them. These can conflict.)
+- FR-P10a: When 2 or more platform chips are active, show a small `(any of)` hint next to the chip row heading to surface the OR semantics. This prevents users expecting AND behaviour from being confused when adding a second chip widens results.
 - FR-P11: `skill-card.tsx` — platform badges rendered by `PlatformBadges` become `<Link>` elements pointing to `/skills?platforms=<name>` (one platform per badge click). `e.stopPropagation()` prevents the card navigation from firing, same pattern as label chips.
 - FR-P12: `page.tsx` reads `searchParams.platforms`, splits on `,`, and passes the array to `listSkills` and down to `SkillList`.
 - FR-P13: `SkillListParams` in `types/skill.ts` gains `platforms?: string[]`. `PaginatedSkills` gains `platform_counts?: Record<string, number>`. `listSkills` in `lib/api.ts` serialises `platforms` as `platforms=<comma-joined>` query param.
@@ -110,9 +111,18 @@ if platforms:
         query_parts.append({"compatible_platforms": {"$in": platform_list}})
 
 # platform_counts aggregation (runs concurrently, excludes platforms filter)
-async def _platform_counts(base_query_parts_without_platform) -> dict[str, int]:
+# NOTE: _build_query_parts returns a mix of Beanie operator objects and raw dicts.
+# For the aggregation $match, apply the base filters OUTSIDE _build_query_parts:
+#   base_query_parts = [parts built without platforms filter]
+#   platform_filter  = {"compatible_platforms": {"$in": platform_list}}  # applied separately
+# The aggregation uses only base_query_parts to build its $match (raw dict only — no Beanie operators).
+# Beanie operator objects in query_parts must be converted to raw dicts via .get_string() or
+# by constructing a parallel raw dict for the aggregation pipeline.
+# When q= (full-text search) is active, return {} immediately — $text has strict placement rules
+# in aggregation $match and the behavior differs across Beanie/Motor paths.
+async def _platform_counts(base_raw_match: dict) -> dict[str, int]:
     pipeline = [
-        {"$match": _build_mongo_match(base_query_parts_without_platform)},
+        {"$match": base_raw_match},
         {"$unwind": "$compatible_platforms"},
         {"$group": {"_id": "$compatible_platforms", "count": {"$sum": 1}}},
     ]
@@ -120,7 +130,7 @@ async def _platform_counts(base_query_parts_without_platform) -> dict[str, int]:
     return {doc["_id"]: doc["count"] async for doc in cursor}
 ```
 
-No new index is needed — `compatible_platforms` with `$in` performs a collection scan on the embedded array. At ≤ 5,000 skills this is acceptable. A sparse multikey index on `compatible_platforms` can be added in a follow-up if query time grows.
+**Index:** A sparse multikey index on `compatible_platforms` is added in Slice 1 (one-line `IndexModel` declaration in `Skill.Settings.indexes`). MongoDB automatically treats indexes on array fields as multikey — the declaration adds it explicitly so Beanie initialises it on startup.
 
 ### API Contract
 
@@ -174,14 +184,15 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 ## Modules
 
 **`SkillRepository.list()` (modify, `backend/app/services/skill.py`)**
-- Accept `platforms: Optional[List[str]] = None` param
-- Apply `{"compatible_platforms": {"$in": platform_list}}` to query parts
-- Run `_platform_counts_aggregation()` concurrently via `asyncio.gather`
-- Return `(items, total, platform_counts)` — adjust return type accordingly
+- Accept `platforms: Optional[List[str]] = None` param; values lowercased+stripped; silently drop empty/None values; cap at 20 values
+- Apply `{"compatible_platforms": {"$in": platform_list}}` to `query_parts` AFTER `_build_query_parts()` returns (not inside it) — so `base_query_parts` can be passed to the aggregation without the platforms clause
+- Add `platforms` to `_filter_fingerprint()` signature and body — or the count cache will serve stale totals when only the platforms filter changes; also add `bool(platforms)` to the `is_filtered` check in `_get_total()`
+- Run `_platform_counts_aggregation()` concurrently via `asyncio.gather`; return `{}` when `q` is active
+- `list_with_cursors` returns a 5-tuple `(items, total, next_cursor, prev_cursor, platform_counts)`; `list()` wrapper updated accordingly; router destructures the 5th element
 
 **`list_skills` route (modify, `backend/app/routers/skills.py`)**
-- Add `platforms: Optional[str] = Query(None, description="Comma-separated platform names (OR filter)")`
-- Split into list, pass to `skill_repository.list()`
+- Add `platforms: Optional[str] = Query(None, max_length=500, description="Comma-separated platform names (OR filter)")`
+- Split into list (lowercased+stripped), pass to `skill_repository.list()`
 - Include `platform_counts` in `PaginatedSkills` response
 
 **`PaginatedSkills` schema (modify, `backend/app/schemas/skill.py`)**
@@ -247,7 +258,7 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 
 ## ADRs
 
-### ADR-001: OR filter semantics for platforms
+### ADR-U38: OR filter semantics for platforms
 
 **Status:** Accepted
 
@@ -259,7 +270,7 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 
 ---
 
-### ADR-002: Inline chip row for PlatformFilter
+### ADR-U39: Inline chip row for PlatformFilter
 
 **Status:** Accepted
 
@@ -271,7 +282,7 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 
 ---
 
-### ADR-003: platform_counts in PaginatedSkills (not a separate endpoint)
+### ADR-U40: platform_counts in PaginatedSkills (not a separate endpoint)
 
 **Status:** Accepted
 
@@ -283,7 +294,7 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 
 ---
 
-### ADR-004: All slices ship in one PR
+### ADR-U41: All slices ship in one PR
 
 **Status:** Accepted
 
@@ -300,12 +311,14 @@ Migration: additive — `platform_counts: {}` default for all existing responses
 All slices ship in one branch (`feat/platform-filter`), one PR. Order of implementation:
 
 **Slice 1 — Backend**
-- Add `platforms: Optional[List[str]] = None` to `SkillRepository.list()` signature
-- Apply `{"compatible_platforms": {"$in": platform_list}}` to `query_parts` when `platforms` is non-empty
-- Add `_platform_counts_aggregation()` helper; run via `asyncio.gather` alongside the main query
-- Add `compatible_platforms` multikey index declaration in the Beanie `Skill` model settings
+- Add `platforms: Optional[List[str]] = None` to `SkillRepository.list()` + `list_with_cursors()` signatures; platform filter applied OUTSIDE `_build_query_parts` so base parts are reusable for aggregation
+- Add `platforms` to `_filter_fingerprint()` and `is_filtered` check in `_get_total()`
+- Apply `{"compatible_platforms": {"$in": platform_list}}` to `query_parts` AND to the keyset cursor `keyset_parts` when platforms is non-empty
+- Add `_platform_counts_aggregation()` helper; return `{}` when `q` is active; run via `asyncio.gather` alongside the main query
+- `list_with_cursors` returns 5-tuple `(..., platform_counts)`; `list()` wrapper updated
+- Add `compatible_platforms` sparse multikey `IndexModel` declaration in `Skill.Settings.indexes`
 - Add `platform_counts: dict[str, int] = {}` to `PaginatedSkills` schema
-- Add `platforms: Optional[str] = Query(None)` param to `list_skills` route; split and pass through
+- Add `platforms: Optional[str] = Query(None, max_length=500)` param to `list_skills` route; split and pass through; cap at 20 values
 - Unit tests per test plan
 
 **Slice 2 — Frontend**
@@ -327,25 +340,30 @@ All slices ship in one branch (`feat/platform-filter`), one PR. Order of impleme
 | Inline chip row overflows narrow viewports | Low | Low | Controls bar already uses `flex-wrap`; chips wrap to second row gracefully |
 | `compatible_platforms: $in` slow without index | Low | Low | Adding multikey index in Slice 1; at current scale a collection scan is also acceptable |
 | Platform badge click conflicts with card navigation | Low | Medium | Use `e.stopPropagation()` on badge `<Link>` click; same pattern as label chips in `skill-card.tsx` |
-| `opencode` not in `PLATFORM_COLORS` map | Medium | Low | `platform-badges.tsx` has a `PLATFORM_FALLBACK` colour; add `opencode` entry to the map as part of Slice 2 |
+| `opencode` not in `PLATFORM_COLORS` map | ~~Medium~~ Resolved | Low | `opencode` is already in `PLATFORM_COLORS` in `platform-badges.tsx` — no action needed |
 
 ---
 
 ## Definition of Done
 
-- [ ] `SkillRepository.list()` accepts `platforms` param; applies `$in` filter
-- [ ] `_platform_counts_aggregation()` runs concurrently; returns `dict[str, int]`
-- [ ] `compatible_platforms` multikey index declared in `Skill` model
+- [ ] `SkillRepository.list()` accepts `platforms` param; applies `$in` filter OUTSIDE `_build_query_parts`
+- [ ] `_filter_fingerprint()` includes `platforms`; `_get_total.is_filtered` checks `platforms`
+- [ ] Keyset cursor path includes platforms filter in `keyset_parts`
+- [ ] `_platform_counts_aggregation()` runs concurrently; returns `{}` when `q` active; returns `dict[str, int]` otherwise
+- [ ] `list_with_cursors` returns 5-tuple; `list()` wrapper and router updated
+- [ ] `compatible_platforms` sparse multikey index declared in `Skill` model
 - [ ] `PaginatedSkills.platform_counts` added; `list_skills` route wires it through
 - [ ] `types/skill.ts` updated: `SkillListParams.platforms`, `PaginatedSkills.platform_counts`
 - [ ] `lib/api.ts` `listSkills` serialises `platforms`
 - [ ] `page.tsx` reads and passes `platforms` from searchParams
 - [ ] `platform-filter.tsx` new component: inline chips, `platformPillClass`, toggles `?platforms=` URL param, shows counts
-- [ ] `skill-list.tsx` passes `platforms` + `platformCounts` to `PlatformFilter`; active-platform removable pills; platform empty state
+- [ ] `skill-list.tsx` passes `platforms` + `platformCounts` to `PlatformFilter`; active-platform removable pills; platform-only empty state; combined labels+platforms empty state with "Clear all filters" link; `(any of)` hint when 2+ platforms active
 - [ ] `skill-card.tsx` platform badges are `<Link>` elements navigating to `?platforms=<name>`
 - [ ] `platform-section.tsx` unauthenticated read path wraps chips in `<Link>`
-- [ ] `opencode` added to `PLATFORM_COLORS` in `platform-badges.tsx`
+- [x] `opencode` already in `PLATFORM_COLORS` in `platform-badges.tsx` — no action needed
 - [ ] AC-P1 through AC-P6 pass in staging
+- [ ] `docs/catalog-api.md` updated: `platforms` query param row in Query Parameters table; `platform_counts` row in Response Fields table; `platforms` added to Count Caching "unfiltered" filter list
+- [ ] `CHANGELOG.md` entry added under `## Unreleased` following project format (`### Feature title (#025)` + bullet points)
 
 ---
 
@@ -367,6 +385,14 @@ All slices ship in one branch (`feat/platform-filter`), one PR. Order of impleme
 - `test_platform_filter_none` — `platforms=None` returns all skills (no filter)
 - `test_platform_counts_empty_catalog` — `platform_counts` returns `{}` when no skills exist
 
+**Cache and cursor correctness (added by eng review, round 1):**
+- `test_platform_filter_with_cursor` — `platforms=["opencode"]` + keyset cursor returns only matching skills from the keyset path
+- `test_platform_filter_case_insensitive` — `platforms=["Claude-Code"]` normalised to `"claude-code"` matches skills correctly
+- `test_filter_fingerprint_includes_platforms` — different `platforms=` values produce different cache fingerprints; stale cache does not cross-pollinate
+- `test_platform_filter_only_is_filtered` — `platforms` as sole active filter uses `count()` (not `estimatedDocumentCount`)
+- `test_platform_counts_with_text_search` — `q="foo"` active: `platform_counts` returns `{}` (skip aggregation when `$text` is in play)
+- `test_platform_counts_full_set_independent_of_page` — `platform_counts` totals reflect the full matching set, not just the current page
+
 ### Integration Tests — `backend/tests/test_skill_routes_platform_filter.py` (FastAPI TestClient)
 
 - `test_list_skills_platform_filter` — `GET /api/skills?platforms=claude-code` returns only matching skills
@@ -374,6 +400,8 @@ All slices ship in one branch (`feat/platform-filter`), one PR. Order of impleme
 - `test_list_skills_platform_counts_present` — response includes `platform_counts` field
 - `test_list_skills_no_platform_filter` — `platform_counts` still present; `items` not filtered
 - `test_list_skills_platform_and_label_combined` — both filters active; only skills satisfying both returned
+- `test_list_skills_platform_filter_with_cursor` — `GET /api/skills?platforms=opencode&cursor=<valid>` returns filtered keyset results
+- `test_list_skills_platform_filter_case_normalization` — `GET /api/skills?platforms=Claude-Code` returns same results as `platforms=claude-code`
 
 ### Frontend Tests (vitest/jest if configured)
 
@@ -384,3 +412,119 @@ All slices ship in one branch (`feat/platform-filter`), one PR. Order of impleme
 - `test_skill_card_badge_click_stops_propagation` — badge click does not trigger card navigation
 - `test_skill_list_platform_empty_state` — zero results with `platforms.length > 0` shows platform-specific message
 - `test_skill_list_active_platform_pill_removes_on_click` — removable pill click updates URL
+- `test_platform_filter_url_state_on_load` — page loaded with `?platforms=claude-code` pre-selects the chip without client interaction
+- `test_platform_section_auth_chips_not_links` — authenticated `PlatformSection` renders spans (not `<a>`) for platform chips
+
+---
+
+## Board Review
+
+**Verdict:** CLEAR TO BUILD
+**Date:** 2026-06-04
+**Rounds:** 1
+
+| Reviewer | Result | Amended | Key findings |
+|---|---|---|---|
+| research | ⚠️ WARN | YES | All 7 claims confirmed; aggregation $match pattern gap identified; _filter_fingerprint cache bug; index text contradiction fixed |
+| codebase-arch-review | ⚠️ WARN | YES | _filter_fingerprint must include platforms; list_with_cursors 5-tuple specified; index contradiction fixed; ADRs renumbered U38–U41 |
+| codebase-eng-review | ⚠️ WARN | YES | Cache bug + return-type gap + query-split strategy specified in plan; 9 additional tests added; $text + aggregation interaction documented |
+| doc-review | ⚠️ WARN | YES | docs/catalog-api.md + CHANGELOG added to DoD; ADR numbering note (U38–U41 avoid all known collisions) |
+| security-review | ✅ PASS | NO | 3 low findings (all defense-in-depth); $in safe against injection; platforms cap ≤20 + max_length=500 added to plan |
+| codebase-ux-review | ✅ PASS | NO | OR semantics hint `(any of)` + combined empty state added to FR-P10a; other findings acceptable for v1 |
+
+**Accepted warnings:** Rate-limit gap on GET /api/skills (pre-existing; deferred to a hardening ticket). PlatformSection auth/unauth asymmetry acceptable for v1. Filter bar wraps on narrow viewports (flex-wrap handles it).
+**Unresolved decisions:** none
+
+### Reviewer output
+
+<details>
+<summary>research — Round 1 (PASS WITH WARNINGS)</summary>
+
+## Summary
+- All 7 key plan claims confirmed against codebase
+- HIGH: _platform_counts_aggregation references non-existent _build_mongo_match(); aggregation $match must use raw dicts, not Beanie operator objects — implementation guidance added to plan
+- MEDIUM: _filter_fingerprint omits platforms param — cache serves stale totals; fixed in plan
+- MEDIUM: Plan self-contradicts on index (Architecture says "no"; Trade-offs/DoD say "add it") — Architecture text corrected
+- LOW: Incorrect claim "MongoDB auto-creates multikey index" — clarified in plan
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>codebase-arch-review — Round 1 (PASS WITH WARNINGS)</summary>
+
+## Summary
+- Architecture sound: $in on embedded array is correct pattern; OR semantics well-reasoned; asyncio.gather approach efficient at current scale
+- MEDIUM: _filter_fingerprint must include platforms — stale cache bug fixed in plan
+- MEDIUM: list_with_cursors 5-tuple expansion specified; callers documented (router + list() wrapper)
+- LOW: Architecture section text contradiction on index corrected
+- LOW: asyncio.gather integration options noted (items + platform_counts gathered together)
+- ADRs renumbered ADR-001–004 → ADR-U38–U41 (U32–U37 taken by #015 and #023)
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>codebase-eng-review — Round 1 (PASS WITH WARNINGS)</summary>
+
+## Summary
+- CRITICAL: _filter_fingerprint cache bug — platforms omitted; is_filtered check also needs platforms — both fixed in plan
+- HIGH: Return type 4-tuple → 5-tuple (items, total, next_cursor, prev_cursor, platform_counts) specified; list() wrapper + router call sites documented
+- HIGH: Query splitting strategy: platforms filter applied OUTSIDE _build_query_parts; base_query_parts snapshot passed to aggregation; keyset cursor path also needs platforms filter — all added to plan
+- MEDIUM: $text + aggregation: return {} for platform_counts when q active — added to plan
+- MEDIUM: Atlas Search path must include platforms in extra_filters — noted in plan
+- 9 additional tests added to test plan (cursor interaction, cache fingerprint, case sensitivity, $text interaction, etc.)
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>doc-review — Round 1 (PASS WITH WARNINGS)</summary>
+
+## Summary
+- MEDIUM: docs/catalog-api.md needs platforms param, platform_counts field, and count-caching clause update — added to DoD
+- MEDIUM: CHANGELOG entry missing from DoD — added
+- LOW: ADR numbering: U32–U34 claimed by #015, U35–U37 claimed by #023; U38–U41 are correct for #025 (arch reviewer applied this)
+- LOW: README platform filtering mention deferred to closeout
+
+## Status
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>security-review — Round 1 (PASS)</summary>
+
+## Summary
+- $in with typed Python strings: safe against NoSQL injection (confirmed)
+- Auth posture: unchanged (endpoint remains public, no auth change)
+- low: No cap on platform values in $in list — cap at 20 added to plan; max_length=500 on Query param added
+- low: No per-IP rate limit on GET /api/skills (pre-existing gap, deferred to hardening ticket)
+- No blocking issues; no architectural changes needed
+
+## Status
+PASS
+
+</details>
+
+<details>
+<summary>codebase-ux-review — Round 1 (PASS)</summary>
+
+## Summary
+- Design is sound and follows established patterns (label chips, e.stopPropagation, URL state)
+- MEDIUM: OR semantics invisible — adding 2nd chip widens results, users expect narrowing — `(any of)` hint added as FR-P10a
+- LOW: Combined labels+platforms empty state unspecified — "Clear all filters" path added to FR-P10
+- LOW: PlatformSection auth asymmetry acceptable for v1 (x icon vs plain badge makes distinction clear)
+- LOW: Mobile tap targets (60×20px) same pattern as label chips, already shipped
+- LOW: Filter bar wraps at narrow viewports — flex-wrap handles gracefully
+
+## Status
+PASS
+
+</details>

@@ -1,7 +1,7 @@
 # TODO #019 — plugin.json-First Scan Pipeline + Rich Component Metadata
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done
+> **Status:** ✅ Complete
 > **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
@@ -235,30 +235,30 @@ Choice: Store agent_names as array vs comma-joined string
 
 ## Implementation Checklist
 
-- [ ] Add `"plugin.json"` to `_SKILL_FILES`
-- [ ] `discover()`: add `plugin.json` as fourth skill dir marker
-- [ ] `MetadataExtractor._parse_plugin_json()`: keywords, agents, MCP, platforms, author, dir-form skills
-- [ ] `MetadataExtractor._extract_platforms()`: plugin.json explicit list overrides heuristic inference
-- [ ] `MetadataExtractor._extract_keywords()`: merge SKILL.md + plugin.json keywords
-- [ ] `SkillScanSnapshot`: add `agent_count`, `agent_names`, `has_mcp_server`, `has_scripts`, `author`
-- [ ] `Skill` model: add same five fields
-- [ ] `skill_repository.create()`: propagate new scan fields + apply structural auto-labels
-- [ ] `skill_repository.refetch()`: update structural metadata fields
-- [ ] `SkillOut` / `SkillListOut`: expose new fields
-- [ ] Frontend: component badges on skill card (agent count, MCP badge, scripts badge)
-- [ ] Tests: plugin.json parsing, auto-label derivation, discover() with plugin.json-only dirs
-- [ ] Plugin.json schema documentation
+- [x] Add `"plugin.json"` to `_SKILL_FILES`
+- [x] `discover()`: add `plugin.json` as fourth skill dir marker
+- [x] `MetadataExtractor._parse_plugin_json()`: keywords, agents, MCP, platforms, author, dir-form skills
+- [x] `MetadataExtractor._extract_platforms()`: plugin.json explicit list overrides heuristic inference
+- [x] `MetadataExtractor._extract_keywords()`: merge SKILL.md + plugin.json keywords
+- [x] `SkillScanSnapshot`: add `agent_count`, `agent_names`, `has_mcp_server`, `has_scripts`, `author`
+- [x] `Skill` model: add same five fields
+- [x] `skill_repository.create()`: propagate new scan fields + apply structural auto-labels
+- [x] `skill_repository.refetch()`: update structural metadata fields
+- [x] `SkillOut` / `SkillListOut`: expose new fields
+- [x] Frontend: component badges on skill card (agent count, MCP badge, scripts badge)
+- [x] Tests: plugin.json parsing, auto-label derivation, discover() with plugin.json-only dirs
+- [x] Plugin.json schema documentation
 
 ---
 
 ## Definition of Done
 
-- [ ] Skills with `plugin.json` keywords have those keywords applied as labels at registration
-- [ ] Skills with `"agents"` in plugin.json show agent count in catalog; `multi-agent` label auto-applied
-- [ ] Skills with `"mcp-servers"` show MCP badge; `mcp` label auto-applied
-- [ ] `discover()` finds skill directories that contain only plugin.json (no SKILL.md)
-- [ ] `compatible_platforms` populated from plugin.json explicit declaration
-- [ ] All checklist items complete
+- [x] Skills with `plugin.json` keywords have those keywords applied as labels at registration
+- [x] Skills with `"agents"` in plugin.json show agent count in catalog; `multi-agent` label auto-applied
+- [x] Skills with `"mcp-servers"` show MCP badge; `mcp` label auto-applied
+- [x] `discover()` finds skill directories that contain only plugin.json (no SKILL.md)
+- [x] `compatible_platforms` populated from plugin.json explicit declaration
+- [x] All checklist items complete
 
 ---
 

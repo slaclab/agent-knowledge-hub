@@ -17,6 +17,7 @@ import type {
   RetractResponse,
   PaginatedFlaggedSkills,
 } from "@/types/skill";
+import type { ProvenanceTree } from "@/types/provenance";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
 // Client Components use server=false (default) to call Next.js proxy route handlers.
@@ -63,6 +64,8 @@ export async function listSkills(
   if (rest.page_size) qs.set("page_size", String(rest.page_size));
   if (rest.forked_from) qs.set("forked_from", rest.forked_from);
   if (rest.visibility) qs.set("visibility", rest.visibility);
+  if (rest.cursor) qs.set("cursor", rest.cursor);
+  if (rest.platforms?.length) qs.set("platforms", rest.platforms.join(","));
   const { data } = await request<PaginatedSkills>(apiBase(server), `/skills?${qs}`);
   return data;
 }
@@ -135,6 +138,11 @@ export async function pinSkill(
 export async function getRevisions(slug: string, server = false): Promise<SkillRevision[]> {
   const { data } = await request<SkillRevision[]>(apiBase(server), `/skills/${slug}/revisions`);
   return data ?? [];
+}
+
+export async function getProvenance(slug: string, server = false): Promise<ProvenanceTree | null> {
+  const { data } = await request<ProvenanceTree>(apiBase(server), `/skills/${slug}/provenance`);
+  return data;
 }
 
 export async function getSettings(server = false): Promise<{ github_access_instructions_url: string }> {

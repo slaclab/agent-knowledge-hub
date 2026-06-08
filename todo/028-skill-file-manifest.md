@@ -1,9 +1,10 @@
 # 028 — Skill File Manifest: browsable file listing for skill/plugin repos
 
-**Status:** 🏁 Implementation Done
-**Branch:** —
+**Status:** ✅ Complete
+**Branch:** main
 **Priority:** 🟡 P2 — Medium
 **Created:** 2026-06-02
+**Shipped:** 2026-06-02 (`25bcacb`)
 
 ---
 
@@ -336,52 +337,52 @@ GET /api/scan?url=...   (SkillScanSnapshotOut)
 ## Definition of Done
 
 **Slice 1 — Data + scan pipeline**
-- [ ] `FileManifestEntry` defined in `scanner.py` with `path`, `size_bytes`, `is_text`
-- [ ] `_TEXT_EXTENSIONS` constant defined
-- [ ] `RawScanResult.all_files` populated by `GitHubScanner.scan()` from `contents_data`
-- [ ] `RawScanResult.all_files` populated by `LocalScanner` from `snapshotted_files`
-- [ ] 200-file cap enforced; `manifest_truncated` flag set correctly
-- [ ] `SkillScanSnapshot.file_manifest` + `manifest_truncated` populated by `MetadataExtractor`
-- [ ] `Skill` model has `file_manifest` + `manifest_truncated`
-- [ ] `skill_repository.create()` stores manifest for both GitHub and local skills
-- [ ] `skill_repository.refetch()` updated to refresh `file_manifest` + `manifest_truncated` (prevent stale manifests on re-fetch)
-- [ ] `SkillOut` + `SkillScanSnapshotOut` include `file_manifest` + `manifest_truncated`
-- [ ] `_skill_to_out()` / manual serialisation mappings updated to include `file_manifest`
-- [ ] Unit tests passing for all above; test fixtures include `size` field in mock dir listing items
+- [x] `FileManifestEntry` defined in `scanner.py` with `path`, `size_bytes`, `is_text`
+- [x] `_TEXT_EXTENSIONS` constant defined
+- [x] `RawScanResult.all_files` populated by `GitHubScanner.scan()` from `contents_data`
+- [x] `RawScanResult.all_files` populated by `LocalScanner` from `snapshotted_files`
+- [x] 200-file cap enforced; `manifest_truncated` flag set correctly
+- [x] `SkillScanSnapshot.file_manifest` + `manifest_truncated` populated by `MetadataExtractor`
+- [x] `Skill` model has `file_manifest` + `manifest_truncated`
+- [x] `skill_repository.create()` stores manifest for both GitHub and local skills
+- [x] `skill_repository.refetch()` updated to refresh `file_manifest` + `manifest_truncated` (prevent stale manifests on re-fetch)
+- [x] `SkillOut` + `SkillScanSnapshotOut` include `file_manifest` + `manifest_truncated`
+- [x] `_skill_to_out()` / manual serialisation mappings updated to include `file_manifest`
+- [x] Unit tests passing for all above; test fixtures include `size` field in mock dir listing items
 
 **Slice 2 — Registration flow**
-- [ ] `SkillScanSnapshot` TypeScript type updated
-- [ ] Scan preview card renders file list with sizes
-- [ ] Truncation notice shown when `manifest_truncated=true`
-- [ ] CLI `submit <path>` prints file list before confirm
+- [x] `SkillScanSnapshot` TypeScript type updated
+- [x] Scan preview card renders file list with sizes
+- [x] Truncation notice shown when `manifest_truncated=true`
+- [x] CLI `submit <path>` prints file list before confirm
 
 **Slice 3 — File content endpoint**
-- [ ] `GET /api/skills/{slug}/files/{path:path}` returns content for text files
-- [ ] Path validation: manifest-based lookup; 404 for unknown paths
-- [ ] Auth: 401 for anonymous access to internal skills
-- [ ] Rate limit: `@limiter.limit("60/minute")` applied
-- [ ] Public `fetch_file_content()` method added to `GitHubScanner` (not private `_fetch_text`)
-- [ ] 5-min TTL cache keyed by `(slug, path)`
-- [ ] Binary files return 400 + `github_url`
-- [ ] Local skills served from `snapshotted_files`; 404 if absent
-- [ ] Tests for all response paths
+- [x] `GET /api/skills/{slug}/files/{path:path}` returns content for text files
+- [x] Path validation: manifest-based lookup; 404 for unknown paths
+- [x] Auth: 401 for anonymous access to internal skills
+- [x] Rate limit: `@limiter.limit("60/minute")` applied
+- [x] Public `fetch_file_content()` method added to `GitHubScanner` (not private `_fetch_text`)
+- [x] 5-min TTL cache keyed by `(slug, path)`
+- [x] Binary files return 400 + `github_url`
+- [x] Local skills served from `snapshotted_files`; 404 if absent
+- [x] Tests for all response paths
 
 **Slice 4 — Files tab**
-- [ ] Files tab always rendered; empty state for skills with no manifest
-- [ ] Files tab renders file list with size badges
-- [ ] Directory entries shown greyed-out with tooltip
-- [ ] Truncation notice shown when `manifest_truncated=true`
-- [ ] Inline viewer with syntax highlighting for text files
-- [ ] Binary files show "View on GitHub ↗" link
-- [ ] Loading state while fetching file content
-- [ ] Error state when file fetch fails
+- [x] Files tab always rendered; empty state for skills with no manifest
+- [x] Files tab renders file list with size badges
+- [x] Directory entries shown greyed-out with tooltip
+- [x] Truncation notice shown when `manifest_truncated=true`
+- [x] Inline viewer with syntax highlighting for text files
+- [x] Binary files show "View on GitHub ↗" link
+- [x] Loading state while fetching file content
+- [x] Error state when file fetch fails
 
 **Documentation (post-ship)**
-- [ ] `docs/skill-file-discovery.md` updated to document `all_files` in scan pipeline
-- [ ] `CHANGELOG.md` entry added under [Unreleased]
-- [ ] ADR-u15, ADR-u16, ADR-u17 written as standalone files in `docs/adr/`
-- [ ] `skill/SKILL.md` updated — mention file list in CLI `submit <path>` flow
-- [ ] `docs/github-api-plugin-installation.md` updated — note rate-limit implications of file content endpoint
+- [x] `docs/skill-file-discovery.md` updated to document `all_files` in scan pipeline
+- [x] `CHANGELOG.md` entry added under [Unreleased]
+- [x] ADR-u15, ADR-u16, ADR-u17 written as standalone files in `docs/adr/`
+- [x] `skill/SKILL.md` updated — mention file list in CLI `submit <path>` flow
+- [x] `docs/github-api-plugin-installation.md` updated — note rate-limit implications of file content endpoint
 
 ---
 

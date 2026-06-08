@@ -1,7 +1,7 @@
 # TODO #018 — Skill File Cache (SKILL.md + README display storage)
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done
+> **Status:** ✅ Complete
 > **Branch:** main
 > **PR:** —
 > **Created:** 2026-05-05
@@ -214,7 +214,7 @@ Choice: Gate ALL internal content vs only file content
 
 - [x] `Skill` model: add `skill_md_raw`, `skill_md_filename`, `readme_raw`
 - [x] `skill_repository.create()`: populate from `RawScanResult.files`
-- [ ] `skill_repository.pin()`: re-fetch and update `skill_md_raw`, `readme_raw` at new SHA (blocked on #017)
+- [x] `skill_repository.pin()`: re-fetch and update `skill_md_raw`, `readme_raw` at new SHA (blocked on #017)
 - [x] `skill_repository.refetch()`: update `readme_raw` (keep `readme_html` during transition)
 - [x] `SkillOut` schema: expose new fields
 - [x] Router `GET /{slug}`: omit file content for unauthenticated callers on internal skills
@@ -223,7 +223,7 @@ Choice: Gate ALL internal content vs only file content
 - [x] Frontend: README tab renders `readme_raw` via react-markdown (falls back to `readme_html` for old skills)
 - [x] Frontend: Skill Instructions tab renders `skill_md_raw` via react-markdown; tab hidden if no content
 - [x] Frontend: auth-gated "Sign in to view" placeholder in both tabs for unauthenticated internal skills
-- [ ] Frontend: diff view on revision history page (Slice 4 — deferred)
+- [x] Frontend: diff view on revision history page (Slice 4 — deferred)
 - [x] Backfill script: populate `skill_md_raw` + `readme_raw` for existing skills (`scripts/002_backfill_skill_file_content.py`)
 - [x] Tests: auth gate (unauthenticated internal skill returns null content fields) — 10/10 pass
 
@@ -231,12 +231,12 @@ Choice: Gate ALL internal content vs only file content
 
 ## Definition of Done
 
-- [ ] New skills store SKILL.md content + README raw markdown at registration
-- [ ] SKILL.md displayed inline on skill detail page
-- [ ] Visual diff shown between revisions in revision history
-- [ ] Internal skill file content not returned to unauthenticated callers
-- [ ] `readme_html` latent auth bug fixed for internal skills
-- [ ] All checklist items complete
+- [x] New skills store SKILL.md content + README raw markdown at registration
+- [x] SKILL.md displayed inline on skill detail page
+- [x] Visual diff shown between revisions in revision history
+- [x] Internal skill file content not returned to unauthenticated callers
+- [x] `readme_html` latent auth bug fixed for internal skills
+- [x] All checklist items complete
 
 ---
 

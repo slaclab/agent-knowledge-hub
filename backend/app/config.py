@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Shared secret for Next.js → backend trust; None disables the proxy auth path entirely
     internal_api_secret: Optional[str] = None
 
+    # Comma-separated allowed CORS origins; defaults to localhost for dev
+    allowed_origins_str: str = "http://localhost:3000"
+
     # JWT Bearer auth (Path 3) — CLI tools with SLAC-issued tokens
     # JWKS URI is fetched automatically; keys are cached in memory and refreshed on rotation.
     # Override JWT_JWKS_URI in dev to point at dex-dev.slac.stanford.edu.
@@ -38,12 +41,21 @@ class Settings(BaseSettings):
     # aud claim value — must match what SLAC Dex issues for this application
     jwt_audience: str = "s3df"
 
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [o.strip() for o in self.allowed_origins_str.split(",") if o.strip()]
+
     @field_validator("internal_api_secret", mode="before")
     @classmethod
     def _strip_internal_api_secret(cls, v: object) -> Optional[str]:
         if v is None:
             return None
         stripped = str(v).strip()
+        if stripped and len(stripped) < 32:
+            raise ValueError(
+                "INTERNAL_API_SECRET must be at least 32 characters. "
+                "Generate with: openssl rand -hex 32"
+            )
         return stripped if stripped else None
 
     @field_validator("jwt_algorithm", mode="before")

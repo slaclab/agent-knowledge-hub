@@ -1,0 +1,47 @@
+{
+  "name": "blast_radius",
+  "description": "Compute the blast-radius priority tier for a proposed TOPICS.md entry. Returns how many existing concept/report files reference the given keywords, the computed priority (P1/P2/P3), and the list of affected files. Always call this before assigning a priority to a new topic.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "keywords": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "One or more search keywords. Use the most specific terms for the topic (e.g. ['Keycloak', 'realm', 'LDAP sync'] for a Keycloak topic).",
+        "minItems": 1
+      }
+    },
+    "required": ["keywords"]
+  },
+  "examples": [
+    {
+      "description": "Check blast radius before adding a new SkillClaw topic",
+      "input": { "keywords": ["SkillClaw", "AMAP"] },
+      "output": {
+        "keywords": ["SkillClaw", "AMAP"],
+        "match_count": 1,
+        "priority": "P3",
+        "affected_files": ["concepts/skillnet.md"],
+        "notes_snippet": "referenced by 1 file: `skillnet`"
+      }
+    },
+    {
+      "description": "Check blast radius for a high-impact topic",
+      "input": { "keywords": ["npm", "PyPI", "registry"] },
+      "output": {
+        "keywords": ["npm", "PyPI", "registry"],
+        "match_count": 6,
+        "priority": "P1",
+        "affected_files": [
+          "concepts/skillnet.md",
+          "reports/skillnet-integration.md",
+          "reports/skillnet-scripts-analysis.md",
+          "reports/akh-skillnet-improvements.md",
+          "concepts/skillclaw.md",
+          "concepts/hermes-agent-skills.md"
+        ],
+        "notes_snippet": "referenced by 6 files: `skillnet`, `skillnet-integration`, `skillnet-scripts-analysis`, `akh-skillnet-improvements`, `skillclaw`, `hermes-agent-skills`"
+      }
+    }
+  ]
+}

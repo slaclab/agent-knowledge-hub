@@ -31,3 +31,18 @@
 | [027](todo/027-mcp-registry-integration.md) | MCP Registry integration: Pass 0 autodiscovery from modelcontextprotocol.io/registry | ⬜ Open |
 | [028](todo/028-skill-file-manifest.md) | Skill file manifest: browsable file listing + inline viewer for skill/plugin repos | ✅ Complete |
 | [029](todo/029-skillset-cross-ownership-add.md) | Skillset cross-ownership: request flow for adding skills to another user's skillset | ⬜ Open |
+| [030](todo/030-sec-platform-ownership-check.md) | **SEC HIGH** — Missing ownership check on platform add/remove endpoints | ✅ Complete |
+| [031](todo/031-sec-github-preview-auth.md) | **SEC HIGH** — Unauthenticated /api/github-preview exposes server's GitHub credentials | ✅ Complete |
+| [032](todo/032-sec-internal-secret-in-logs.md) | **SEC HIGH** — Internal API secret logged in plaintext on every /api/me call | ✅ Complete |
+| [033](todo/033-sec-kubernetes-security-context.md) | **SEC HIGH** — Containers run as root; add Kubernetes securityContext + USER directive | ⬜ Open |
+| [034](todo/034-sec-image-digest-pinning.md) | **SEC HIGH** — Pin production images to digest, not mutable tags | ⬜ Open |
+| [035](todo/035-sec-security-headers.md) | **SEC HIGH** — Add HTTP security headers to Next.js (CSP, HSTS, X-Frame-Options) | ✅ Complete |
+| [036](todo/036-sec-backend-lockfile.md) | **SEC HIGH** — Add Python lockfile for reproducible backend builds | ⬜ Open |
+| [037](todo/037-sec-cors-restrict-origins.md) | **SEC MED** — Restrict CORS origins (allow_origins=["*"] + credentials) | ✅ Complete |
+| [038](todo/038-sec-internal-secret-min-length.md) | **SEC MED** — Enforce minimum length on internal_api_secret | ✅ Complete |
+| [039](todo/039-sec-rate-limit-skill-creation.md) | **SEC MED** — Rate limit skill creation endpoint (POST /api/skills) | ✅ Complete |
+| [040](todo/040-sec-repo-url-validation.md) | **SEC MED** — Validate repo_url format in SkillCreate schema | ✅ Complete |
+| [041](todo/041-sec-dompurify-css-injection.md) | **SEC MED** — Restrict DOMPurify config to prevent CSS injection in README renderer | ✅ Complete |
+| [042](todo/042-sec-frontend-network-policy.md) | **SEC MED** — Add NetworkPolicy for frontend pods + namespace default-deny | ⬜ Open |
+| [043](todo/043-sec-tls-ingress.md) | **SEC MED** — Confirm TLS termination on ingress (HSTS / force SSL redirect) | ✅ Complete |
+| [044](todo/044-sec-low-findings.md) | **SEC LOW** — Low-severity hardening batch (L1–L7, I2): health, log level, header validation, lockfile | ✅ Complete |

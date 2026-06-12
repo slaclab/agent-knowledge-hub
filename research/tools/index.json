@@ -1,0 +1,60 @@
+{
+  "version": "1",
+  "description": "Tool Search index for the Agent Knowledge Hub research workspace. Load this file first (~500 tokens), then fetch only the schemas you need from the paths listed here.",
+  "tools": [
+    {
+      "name": "search_concepts",
+      "description": "Keyword search across research/concepts/ files. Returns ranked matches with file path, snippet, and matched keywords.",
+      "schema": "research/tools/schemas/search_concepts.json",
+      "side_effects": false
+    },
+    {
+      "name": "search_reports",
+      "description": "Keyword search across research/reports/ files. Returns ranked matches with file path, snippet, and matched keywords.",
+      "schema": "research/tools/schemas/search_reports.json",
+      "side_effects": false
+    },
+    {
+      "name": "get_concept",
+      "description": "Read a concept file in full by name (kebab slug or fuzzy match). Returns path and full markdown content.",
+      "schema": "research/tools/schemas/get_concept.json",
+      "side_effects": false
+    },
+    {
+      "name": "get_report",
+      "description": "Read a report file in full by name (kebab slug or fuzzy match). Returns path and full markdown content.",
+      "schema": "research/tools/schemas/get_report.json",
+      "side_effects": false
+    },
+    {
+      "name": "list_topics",
+      "description": "Return TOPICS.md as structured JSON. Filter by status and/or type.",
+      "schema": "research/tools/schemas/list_topics.json",
+      "side_effects": false
+    },
+    {
+      "name": "blast_radius",
+      "description": "Compute the blast-radius priority tier for a set of keywords — how many existing concept/report files reference them.",
+      "schema": "research/tools/schemas/blast_radius.json",
+      "side_effects": false
+    },
+    {
+      "name": "catalogue_concept",
+      "description": "Write or amend a concept entry in research/concepts/. Accepts structured content fields; handles file naming, README update, and TOPICS.md status update.",
+      "schema": "research/tools/schemas/catalogue_concept.json",
+      "side_effects": true
+    },
+    {
+      "name": "write_report",
+      "description": "Write or amend a report in research/reports/. Accepts structured content fields; handles file naming, README update, and TOPICS.md status update.",
+      "schema": "research/tools/schemas/write_report.json",
+      "side_effects": true
+    },
+    {
+      "name": "answer_charge",
+      "description": "Write or update a charge answer in research/charges/. Synthesises from existing concepts and reports — does not fetch external sources.",
+      "schema": "research/tools/schemas/answer_charge.json",
+      "side_effects": true
+    }
+  ]
+}

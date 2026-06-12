@@ -132,13 +132,15 @@ class TestInternalApiSecretValidator:
 
     def test_valid_value_preserved(self):
         import app.config as cfg
-        result = cfg.Settings._strip_internal_api_secret("abc123")
-        assert result == "abc123"
+        secret = "a" * 32
+        result = cfg.Settings._strip_internal_api_secret(secret)
+        assert result == secret
 
     def test_trailing_newline_stripped(self):
         import app.config as cfg
-        result = cfg.Settings._strip_internal_api_secret("abc123\n")
-        assert result == "abc123"
+        secret = "a" * 32
+        result = cfg.Settings._strip_internal_api_secret(secret + "\n")
+        assert result == secret
 
     def test_whitespace_only_normalised_to_none(self):
         import app.config as cfg
@@ -152,8 +154,15 @@ class TestInternalApiSecretValidator:
 
     def test_leading_and_trailing_whitespace_stripped(self):
         import app.config as cfg
-        result = cfg.Settings._strip_internal_api_secret("  mysecret  ")
-        assert result == "mysecret"
+        secret = "a" * 32
+        result = cfg.Settings._strip_internal_api_secret("  " + secret + "  ")
+        assert result == secret
+
+    def test_short_secret_raises(self):
+        import app.config as cfg
+        import pytest
+        with pytest.raises(ValueError, match="at least 32 characters"):
+            cfg.Settings._strip_internal_api_secret("tooshort")
 
 
 # ---------------------------------------------------------------------------

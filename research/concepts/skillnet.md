@@ -104,6 +104,12 @@ Significance: skill reuse measurably accelerates agents — not just a convenien
 
 - [reports/skillnet-integration.md](../reports/skillnet-integration.md) — what to steal for AKH
 
+---
+
+## Amendment 2026-06-08 — OpenClaw clarified
+
+Section 7 listed "OpenClaw" as a platform integration alongside Claude Code, Codex, and MCP. OpenClaw is a separate CLI agent framework (not SkillClaw / AMAP-ML/SkillClaw). Both SkillNet and SkillClaw integrate with it independently; they share the same SKILL.md format with YAML frontmatter and the `disable-model-invocation` frontmatter flag. See [concepts/skillclaw.md](skillclaw.md) for the full SkillClaw architecture and [concepts/hermes-agent-skills.md](hermes-agent-skills.md) for the Hermes skills subsystem (the most mature open-source search+scan+install implementation).
+
 ## Sources
 
 - https://github.com/zjunlp/SkillNet — fetched 2026-06-05

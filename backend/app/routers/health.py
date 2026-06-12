@@ -1,7 +1,4 @@
 from fastapi import APIRouter
-from motor.motor_asyncio import AsyncIOMotorClient
-
-from app.config import settings
 
 router = APIRouter()
 
@@ -9,8 +6,9 @@ router = APIRouter()
 @router.get("/health")
 async def health():
     try:
-        client = AsyncIOMotorClient(settings.mongo_uri, serverSelectionTimeoutMS=2000)
-        await client.admin.command("ping")
+        from beanie import Document
+        from app.models.skill import Skill
+        await Skill.find_one()
         return {"status": "ok"}
     except Exception:
         return {"status": "degraded", "detail": "MongoDB unreachable"}

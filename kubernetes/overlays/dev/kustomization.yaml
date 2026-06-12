@@ -20,6 +20,7 @@ configMapGenerator:
       - GITHUB_API_URL=https://api.github.com
       - AUTH_MODE=vouchproxy
       - ADMIN_USERS=ytl
+      - ALLOWED_ORIGINS_STR=https://agent-knowledge-hub-dev.slac.stanford.edu,http://localhost:3000
       - JWT_JWKS_URI=https://dex-dev.slac.stanford.edu/keys
       - JWT_ISSUER=https://dex-dev.slac.stanford.edu
       - JWT_AUDIENCE=s3df

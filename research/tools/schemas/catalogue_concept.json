@@ -1,0 +1,99 @@
+{
+  "name": "catalogue_concept",
+  "description": "Write a new concept entry to research/concepts/ or append an amendment to an existing one. Handles file naming (kebab slug), frontmatter blockquote, confidence line, README update, and TOPICS.md status change. Mutating — requires human confirmation before writing.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Concept name in kebab-case (e.g. 'hermes-agent-skills'). Used as the filename."
+      },
+      "title": {
+        "type": "string",
+        "description": "Full human-readable title for the frontmatter blockquote (e.g. 'Hermes Agent — Skills Subsystem')."
+      },
+      "source": {
+        "type": "string",
+        "description": "Primary source citation for the frontmatter blockquote (e.g. 'GitHub NousResearch/hermes-agent')."
+      },
+      "relevance": {
+        "type": "string",
+        "description": "One-line relevance statement for the frontmatter blockquote — why this concept matters to the project."
+      },
+      "confidence": {
+        "type": "string",
+        "description": "Confidence level with method in parentheses (e.g. 'High (source code + README)', 'Medium (docs + WebSearch)').",
+        "examples": ["High (RFCs + official docs)", "Medium (docs + WebSearch)", "Low (inferred)"]
+      },
+      "content": {
+        "type": "string",
+        "description": "Full markdown body of the concept entry — sections, tables, code blocks. Do not include the frontmatter blockquote or confidence line; those are generated from the other fields."
+      },
+      "sources": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Source URLs or file references, each with '— fetched YYYY-MM-DD' suffix. Added to the Sources section."
+      },
+      "applied_in": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Relative paths to report files that apply this concept (for bidirectional linking). Optional.",
+        "default": []
+      },
+      "amend": {
+        "type": "boolean",
+        "description": "If true, append an Amendment section to an existing file instead of creating a new one. Requires the file to already exist.",
+        "default": false
+      },
+      "amendment_reason": {
+        "type": "string",
+        "description": "Required when amend=true. Brief reason for the amendment (e.g. 'OpenClaw clarified')."
+      }
+    },
+    "required": ["name", "title", "source", "relevance", "confidence", "content", "sources"]
+  },
+  "examples": [
+    {
+      "description": "Create a new concept entry for a freshly researched tool",
+      "input": {
+        "name": "skillclaw",
+        "title": "SkillClaw — Collective Skill Evolution via Local API Proxy and Agentic Evolver",
+        "source": "GitHub AMAP-ML/SkillClaw, arXiv 2604.08377",
+        "relevance": "Companion to Hermes and Claude Code that intercepts LLM traffic and evolves shared skill libraries from real user interactions",
+        "confidence": "High (GitHub source code + README + arXiv abstract)",
+        "content": "## 1. Overview\n\nSkillClaw (AMAP-ML, Alibaba) is an open-source skill evolution system...",
+        "sources": [
+          "https://github.com/AMAP-ML/SkillClaw — fetched 2026-06-08",
+          "https://arxiv.org/abs/2604.08377 — abstract fetched 2026-06-08"
+        ],
+        "applied_in": []
+      },
+      "output": {
+        "written": true,
+        "path": "research/concepts/skillclaw.md",
+        "readme_updated": true,
+        "topics_updated": true
+      }
+    },
+    {
+      "description": "Amend an existing concept when new information surfaces",
+      "input": {
+        "name": "skillnet",
+        "title": "SkillNet",
+        "source": "",
+        "relevance": "",
+        "confidence": "",
+        "content": "OpenClaw is a separate CLI agent framework, not SkillClaw. Both SkillNet and SkillClaw integrate with it independently.",
+        "sources": [],
+        "amend": true,
+        "amendment_reason": "OpenClaw clarified"
+      },
+      "output": {
+        "written": true,
+        "path": "research/concepts/skillnet.md",
+        "readme_updated": true,
+        "topics_updated": false
+      }
+    }
+  ]
+}

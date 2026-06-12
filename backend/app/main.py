@@ -23,7 +23,7 @@ from app.routers.labels import router as labels_router
 from app.routers.labels import skills_labels_router
 
 import os
-_log_level = getattr(logging, os.environ.get("LOG_LEVEL", "DEBUG").upper(), logging.DEBUG)
+_log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logging.basicConfig(
     level=_log_level,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -71,7 +71,7 @@ def _redact_private_key(text: str) -> str:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Agent Knowledge Hub API", version="0.15.0", lifespan=lifespan)
+    app = FastAPI(title="Agent Knowledge Hub API", version="0.18.0", lifespan=lifespan)
 
     # Rate limiter state
     app.state.limiter = limiter
@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

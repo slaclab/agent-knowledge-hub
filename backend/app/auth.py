@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 from dataclasses import dataclass
 
 import jwt as pyjwt
@@ -111,6 +112,12 @@ def get_current_user(request: Request) -> User:
         )
         if secret_match:
             if forwarded_user:
+                if not re.match(r"^[a-zA-Z0-9._\-@]{1,128}$", forwarded_user):
+                    logger.warning("AUTH path2 X-Forwarded-User has invalid format: %r", forwarded_user[:64])
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Authentication required",
+                    )
                 logger.debug("AUTH path=2 (internal secret) user=%s", forwarded_user)
                 user = User(
                     user_id=forwarded_user,

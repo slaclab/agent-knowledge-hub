@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+import { BACKEND, backendHeaders } from "../_internal";
 
 export async function GET(request: NextRequest) {
   const repoUrl = request.nextUrl.searchParams.get("repo_url");
@@ -9,10 +9,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const backendUrl = new URL(`${BACKEND_URL}/api/github-preview`);
+    const backendUrl = new URL(`${BACKEND}/api/github-preview`);
     backendUrl.searchParams.set("repo_url", repoUrl);
 
-    const res = await fetch(backendUrl.toString(), { next: { revalidate: 60 } });
+    const res = await fetch(backendUrl.toString(), {
+      headers: backendHeaders(request),
+      next: { revalidate: 60 },
+    });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch {

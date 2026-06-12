@@ -1,0 +1,69 @@
+{
+  "name": "list_topics",
+  "description": "Return TOPICS.md as structured JSON. Use to check what has been researched, what is outstanding, and what is blocked — without reading the raw Markdown file.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "description": "Filter by topic status. 'all' returns every row.",
+        "enum": ["todo", "in-progress", "blocked", "deferred", "done", "all"],
+        "default": "all"
+      },
+      "type": {
+        "type": "string",
+        "description": "Filter by topic type.",
+        "enum": ["concept", "report", "all"],
+        "default": "all"
+      }
+    },
+    "required": []
+  },
+  "examples": [
+    {
+      "description": "List all outstanding todo items",
+      "input": { "status": "todo" },
+      "output": {
+        "topics": [
+          {
+            "priority": "P1",
+            "status": "todo",
+            "type": "concept",
+            "topic": "npm / PyPI registry patterns",
+            "researched": null,
+            "notes": "Dependency graphs, SLSA provenance attestation..."
+          },
+          {
+            "priority": "P1",
+            "status": "todo",
+            "type": "report",
+            "topic": "Discovery UX patterns beyond search",
+            "researched": null,
+            "notes": "Editorial featured/trending surfaces..."
+          }
+        ],
+        "total": 2
+      }
+    },
+    {
+      "description": "List all blocked topics to surface in session start",
+      "input": { "status": "blocked" },
+      "output": {
+        "topics": [],
+        "total": 0
+      }
+    },
+    {
+      "description": "List only done concept entries",
+      "input": { "status": "done", "type": "concept" },
+      "output": {
+        "topics": [
+          { "priority": "P3", "status": "done", "type": "concept", "topic": "SkillNet", "researched": "2026-06-05", "notes": "`concepts/skillnet.md`" },
+          { "priority": "P3", "status": "done", "type": "concept", "topic": "SkillClaw (AMAP-ML)", "researched": "2026-06-08", "notes": "`concepts/skillclaw.md`" },
+          { "priority": "P3", "status": "done", "type": "concept", "topic": "Hermes agent skill search/scan/verify", "researched": "2026-06-08", "notes": "`concepts/hermes-agent-skills.md`" }
+        ],
+        "total": 3
+      }
+    }
+  ]
+}

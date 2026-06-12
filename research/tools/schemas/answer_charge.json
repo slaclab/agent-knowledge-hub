@@ -1,0 +1,87 @@
+{
+  "name": "answer_charge",
+  "description": "Write or update a charge answer file in research/charges/. Synthesises from existing concepts and reports only — does not fetch external sources. Updates CHARGE.md with the link. Mutating — requires human confirmation before writing.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "charge_number": {
+        "type": "integer",
+        "description": "The charge number from CHARGE.md (e.g. 1, 2, 3).",
+        "minimum": 1
+      },
+      "charge_question": {
+        "type": "string",
+        "description": "The exact charge question text from CHARGE.md (for the charge file header)."
+      },
+      "status": {
+        "type": "string",
+        "description": "Answered = clear defensible answer exists. Partial = main thrust answered, sub-questions remain. Open = insufficient research to answer.",
+        "enum": ["Answered", "Partial", "Open"]
+      },
+      "answer": {
+        "type": "string",
+        "description": "Direct answer to the charge question. Commit to a position — not 'it depends' without follow-up. For Open status, state what is known and what is needed."
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "citation": {
+              "type": "string",
+              "description": "Inline citation in format '[→ report-slug.md §Section Title]' or '[→ concepts/concept-slug.md §Section]'."
+            },
+            "claim": {
+              "type": "string",
+              "description": "The specific claim or finding from that source that supports the answer."
+            }
+          },
+          "required": ["citation", "claim"]
+        },
+        "description": "Evidence items supporting the answer, each citing a specific section of an existing concepts/ or reports/ file."
+      },
+      "open_questions": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Residual open questions — what is still unknown or unresolved after synthesising the research."
+      },
+      "primary_sources": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Kebab slugs of the concept/report files that are primary sources for this charge answer."
+      }
+    },
+    "required": ["charge_number", "charge_question", "status", "answer", "evidence", "open_questions", "primary_sources"]
+  },
+  "examples": [
+    {
+      "description": "Answer a charge question about skill security with partial confidence",
+      "input": {
+        "charge_number": 2,
+        "charge_question": "What trust and security model should AKH use for community-submitted skills?",
+        "status": "Partial",
+        "answer": "AKH should adopt Hermes's four-tier trust model (builtin / trusted / community / agent-created) with a mandatory regex security scan at install time using the six threat categories defined in skills_guard.py. The 'trusted' tier should be reserved for Anthropic and a small set of vetted publishers. Community skills with any scan finding should be blocked by default, with an explicit --force override available to users.",
+        "evidence": [
+          {
+            "citation": "[→ concepts/hermes-agent-skills.md §3. Security Scanning]",
+            "claim": "skills_guard.py implements 6 threat categories (exfiltration, injection, destructive, persistence, network, obfuscation) with trust-aware install policy — community skills blocked on any finding"
+          },
+          {
+            "citation": "[→ reports/skillnet-integration.md §Skill Trust Model]",
+            "claim": "SkillNet has no security scan at install time — AKH should not follow this pattern"
+          }
+        ],
+        "open_questions": [
+          "What publishers should be in the 'trusted' tier for SLAC's AKH instance?",
+          "Does the scan need to cover compiled binaries or only Markdown/Python?"
+        ],
+        "primary_sources": ["hermes-agent-skills", "skillnet-integration"]
+      },
+      "output": {
+        "written": true,
+        "path": "research/charges/charge-02.md",
+        "charge_md_updated": true
+      }
+    }
+  ]
+}

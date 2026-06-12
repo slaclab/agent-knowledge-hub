@@ -1,0 +1,46 @@
+{
+  "name": "search_concepts",
+  "description": "Keyword search across research/concepts/ files. Returns ranked matches with file path, snippet, and matched keywords. Use this before creating a new concept entry to check whether one already exists.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "One or more keywords to search for, space-separated. Case-insensitive. Each keyword is matched independently; results ranked by match count."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of results to return.",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 50
+      }
+    },
+    "required": ["query"]
+  },
+  "examples": [
+    {
+      "description": "Find existing concept entries about SkillNet before cataloguing a related tool",
+      "input": { "query": "SkillNet skill registry" },
+      "output": {
+        "matches": [
+          {
+            "file": "research/concepts/skillnet.md",
+            "score": 3,
+            "matched_keywords": ["SkillNet", "skill", "registry"],
+            "snippet": "SkillNet is an open-source platform that packages AI agent capabilities as reusable, shareable, versioned units (\"skills\")..."
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "description": "Search with limit to check coverage quickly",
+      "input": { "query": "authentication OAuth token", "limit": 3 },
+      "output": {
+        "matches": [],
+        "total": 0
+      }
+    }
+  ]
+}

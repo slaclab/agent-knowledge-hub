@@ -1,0 +1,101 @@
+{
+  "name": "write_report",
+  "description": "Write a new report to research/reports/ or append an amendment to an existing one. Handles file naming, required section anchors (Executive Summary, Recommendations, Open Questions, Sources), README update, and TOPICS.md status change. Mutating — requires human confirmation before writing.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Report name in kebab-case (e.g. 'skillnet-integration'). Used as the filename."
+      },
+      "title": {
+        "type": "string",
+        "description": "Full human-readable title for the frontmatter blockquote."
+      },
+      "confidence": {
+        "type": "string",
+        "description": "Confidence level with method (e.g. 'High (primary sources)', 'Medium (docs + inference)')."
+      },
+      "executive_summary": {
+        "type": "string",
+        "description": "2–4 sentence executive summary of the report's conclusions."
+      },
+      "body": {
+        "type": "string",
+        "description": "Full markdown body of the report — theme sections, evidence, analysis. Do not include Executive Summary, Recommendations, Open Questions, or Sources sections; those are generated from the other fields."
+      },
+      "recommendations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "detail": { "type": "string" },
+            "priority": { "type": "string", "enum": ["high", "medium", "low"] }
+          },
+          "required": ["title", "detail"]
+        },
+        "description": "Actionable recommendations. Each becomes a subsection under ## Recommendations."
+      },
+      "open_questions": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Unresolved questions or gaps identified during research. Each becomes a bullet under ## Open Questions."
+      },
+      "sources": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Source URLs or file references with '— fetched YYYY-MM-DD' suffix."
+      },
+      "concept_references": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Kebab slugs of concept files this report references (for bidirectional linking). Optional.",
+        "default": []
+      },
+      "amend": {
+        "type": "boolean",
+        "description": "If true, append an Amendment section to an existing file.",
+        "default": false
+      },
+      "amendment_reason": {
+        "type": "string",
+        "description": "Required when amend=true."
+      }
+    },
+    "required": ["name", "title", "confidence", "executive_summary", "body", "recommendations", "open_questions", "sources"]
+  },
+  "examples": [
+    {
+      "description": "Write a new integration recommendation report",
+      "input": {
+        "name": "hermes-skills-for-akh",
+        "title": "Adopting Hermes skills_guard.py for AKH Trust Pipeline",
+        "confidence": "High (source code)",
+        "executive_summary": "Hermes's skills_guard.py implements the most complete open-source skill security scanner available. AKH should adopt its 6-category threat model and trust-level install policy.",
+        "body": "## Current AKH Gap\n\nAKH has no security scan at install time...",
+        "recommendations": [
+          {
+            "title": "Import skills_guard.py as AKH's install-time scanner",
+            "detail": "Fork or vendor NousResearch/hermes-agent tools/skills_guard.py. Wire it into the AKH submission pipeline at the point a skill SKILL.md is received.",
+            "priority": "high"
+          }
+        ],
+        "open_questions": [
+          "Does SLAC's security team need to review the regex patterns before adoption?",
+          "Should the install policy for SLAC-internal skills use 'trusted' or 'community' trust level?"
+        ],
+        "sources": [
+          "https://github.com/NousResearch/hermes-agent — fetched 2026-06-08"
+        ],
+        "concept_references": ["hermes-agent-skills"]
+      },
+      "output": {
+        "written": true,
+        "path": "research/reports/hermes-skills-for-akh.md",
+        "readme_updated": true,
+        "topics_updated": true
+      }
+    }
+  ]
+}

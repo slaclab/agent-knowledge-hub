@@ -1,0 +1,44 @@
+{
+  "name": "search_reports",
+  "description": "Keyword search across research/reports/ files. Returns ranked matches with file path, snippet, and matched keywords. Use this to find existing recommendations before writing a new report.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "One or more keywords to search for, space-separated. Case-insensitive. Each keyword is matched independently; results ranked by match count."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of results to return.",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 50
+      }
+    },
+    "required": ["query"]
+  },
+  "examples": [
+    {
+      "description": "Find reports that discuss SkillNet integration recommendations",
+      "input": { "query": "SkillNet integration AKH" },
+      "output": {
+        "matches": [
+          {
+            "file": "research/reports/skillnet-integration.md",
+            "score": 3,
+            "matched_keywords": ["SkillNet", "integration", "AKH"],
+            "snippet": "Three features from SkillNet are worth adopting for Agent Knowledge Hub..."
+          },
+          {
+            "file": "research/reports/akh-skillnet-improvements.md",
+            "score": 2,
+            "matched_keywords": ["SkillNet", "AKH"],
+            "snippet": "Recommendation 1: add a 5-dimension quality score to the AKH skill submission form..."
+          }
+        ],
+        "total": 2
+      }
+    }
+  ]
+}

@@ -15,19 +15,23 @@ async function proxyJson(request: NextRequest, method: string, backendUrl: strin
   return NextResponse.json(data, { status: res.status });
 }
 
+function encodedPath(parts: string[]): string {
+  return parts.map(encodeURIComponent).join("/");
+}
+
 export async function GET(request: NextRequest, { params }: Ctx) {
-  const url = `${BACKEND}/api/admin/labels/${params.path.join("/")}?${request.nextUrl.searchParams}`;
+  const url = `${BACKEND}/api/admin/labels/${encodedPath(params.path)}?${request.nextUrl.searchParams}`;
   return proxyJson(request, "GET", url);
 }
 
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  return proxyJson(request, "PATCH", `${BACKEND}/api/admin/labels/${params.path.join("/")}`);
+  return proxyJson(request, "PATCH", `${BACKEND}/api/admin/labels/${encodedPath(params.path)}`);
 }
 
 export async function POST(request: NextRequest, { params }: Ctx) {
-  return proxyJson(request, "POST", `${BACKEND}/api/admin/labels/${params.path.join("/")}`);
+  return proxyJson(request, "POST", `${BACKEND}/api/admin/labels/${encodedPath(params.path)}`);
 }
 
 export async function DELETE(request: NextRequest, { params }: Ctx) {
-  return proxyJson(request, "DELETE", `${BACKEND}/api/admin/labels/${params.path.join("/")}`);
+  return proxyJson(request, "DELETE", `${BACKEND}/api/admin/labels/${encodedPath(params.path)}`);
 }

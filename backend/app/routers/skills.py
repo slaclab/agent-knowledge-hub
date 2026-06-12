@@ -353,6 +353,8 @@ async def add_platform(slug: str, body: AddPlatformIn, user: User = Depends(get_
     skill = await Skill.find_one(Skill.slug == slug)
     if not skill or skill.status == SkillStatus.deactivated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.submitter_id != user.user_id and not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
     platform = body.platform.strip().lower()
     if not platform:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Platform name required")
@@ -369,6 +371,8 @@ async def remove_platform(slug: str, platform: str, user: User = Depends(get_cur
     skill = await Skill.find_one(Skill.slug == slug)
     if not skill or skill.status == SkillStatus.deactivated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if skill.submitter_id != user.user_id and not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
     skill.compatible_platforms = [p for p in skill.compatible_platforms if p != platform]
     await skill.save()
 
@@ -528,17 +532,15 @@ async def get_provenance(
     skill = await Skill.find_one(Skill.slug == slug)
     if not skill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
-    # Cache unfiltered tree; apply visibility per-viewer at response time
+    # Cache tree keyed by (skill_id, viewer_authenticated) to prevent authed view
+    # from leaking to unauthenticated callers via a race on the shared cache.
     if not hasattr(get_provenance, "_cache"):
         get_provenance._cache = TTLCache(maxsize=512, ttl=300)  # type: ignore[attr-defined]
-    cache_key = str(skill.id)
+    viewer_authenticated = viewer is not None
+    cache_key = (str(skill.id), viewer_authenticated)
     if cache_key not in get_provenance._cache:  # type: ignore[attr-defined]
-        get_provenance._cache[cache_key] = await build_tree(skill, viewer_authenticated=True)  # type: ignore[attr-defined]
-    tree = get_provenance._cache[cache_key]  # type: ignore[attr-defined]
-    # Apply per-viewer visibility (re-run with viewer flag for non-authed callers)
-    if not viewer:
-        tree = await build_tree(skill, viewer_authenticated=False)
-    return tree
+        get_provenance._cache[cache_key] = await build_tree(skill, viewer_authenticated=viewer_authenticated)  # type: ignore[attr-defined]
+    return get_provenance._cache[cache_key]  # type: ignore[attr-defined]
 
 
 @github_router.get("/github-preview", response_model=GitHubPreviewOut)
@@ -546,6 +548,7 @@ async def get_provenance(
 async def github_preview(
     repo_url: str = Query(..., description="GitHub repo URL to preview"),
     request: Request = None,
+    user: User = Depends(get_current_user),
 ):
     """Preview GitHub repo metadata using the shared fallback chain (unauth → PAT → App token).
 

@@ -1,0 +1,45 @@
+{
+  "name": "get_concept",
+  "description": "Read a concept file in full by name. Accepts the exact kebab-case slug (e.g. 'skillnet') or a fuzzy partial match. Returns the full markdown content without requiring a separate file read.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Concept name as a kebab-case slug (e.g. 'skillnet', 'hermes-agent-skills') or a partial/fuzzy match string. If multiple files match, the closest match is returned and alternatives listed."
+      }
+    },
+    "required": ["name"]
+  },
+  "examples": [
+    {
+      "description": "Read the SkillNet concept entry by exact slug",
+      "input": { "name": "skillnet" },
+      "output": {
+        "found": true,
+        "path": "research/concepts/skillnet.md",
+        "content": "> **Concept:** SkillNet — Open Infrastructure for Creating, Evaluating, and Connecting AI Agent Skills\n..."
+      }
+    },
+    {
+      "description": "Fuzzy match when unsure of exact slug",
+      "input": { "name": "hermes skills" },
+      "output": {
+        "found": true,
+        "path": "research/concepts/hermes-agent-skills.md",
+        "content": "> **Concept:** Hermes Agent — Skills Subsystem (Search, Scan, Install, Audit)\n...",
+        "alternatives": []
+      }
+    },
+    {
+      "description": "Not found — returns alternatives to guide next call",
+      "input": { "name": "keycloak" },
+      "output": {
+        "found": false,
+        "path": null,
+        "content": null,
+        "alternatives": []
+      }
+    }
+  ]
+}

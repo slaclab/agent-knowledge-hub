@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.models.skill import EntryType, SkillStatus, VisibilityEnum
 from app.services.scanner import FileManifestEntry
@@ -39,6 +39,17 @@ class SkillCreate(BaseModel):
     # local submission fields (source_type='local')
     source_type: str = "github"
     snapshotted_files: Dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_repo_url(self) -> "SkillCreate":
+        if self.source_type != "local":
+            if not _GITHUB_URL_RE.match(self.repo_url.strip()):
+                raise ValueError(
+                    "repo_url must be a valid GitHub URL "
+                    "(e.g. https://github.com/owner/repo)"
+                )
+            self.repo_url = self.repo_url.strip()
+        return self
 
 
 class SkillUpdate(BaseModel):

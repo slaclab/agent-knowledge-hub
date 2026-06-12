@@ -14,7 +14,7 @@ async def _make_skill(repo_url: str, name: str, forked_from_url: str | None = No
                       visibility: VisibilityEnum = VisibilityEnum.public,
                       source_type: str = "github") -> Skill:
     """Helper: create a skill with optional fork/supersession links directly in DB."""
-    data = SkillCreate(repo_url=repo_url, name=name)
+    data = SkillCreate(repo_url=repo_url, name=name, source_type=source_type)
     skill = await skill_repository.create(data, submitter_id="alice")
     if forked_from_url or superseded_by_slug or visibility != VisibilityEnum.public or source_type != "github":
         if forked_from_url:

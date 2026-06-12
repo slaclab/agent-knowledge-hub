@@ -8,7 +8,14 @@ interface ReadmeRenderProps {
 }
 
 export function ReadmeRender({ html }: ReadmeRenderProps) {
-  const clean = useMemo(() => DOMPurify.sanitize(html), [html]);
+  const clean = useMemo(
+    () =>
+      DOMPurify.sanitize(html, {
+        FORBID_TAGS: ["style", "link"],
+        FORBID_ATTR: ["style"],
+      }),
+    [html],
+  );
   return (
     <div
       className="prose"

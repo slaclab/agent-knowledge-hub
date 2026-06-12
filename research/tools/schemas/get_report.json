@@ -1,0 +1,35 @@
+{
+  "name": "get_report",
+  "description": "Read a report file in full by name. Accepts the exact kebab-case slug or a fuzzy partial match. Returns the full markdown content.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Report name as a kebab-case slug (e.g. 'skillnet-integration', 'akh-skillnet-improvements') or a partial/fuzzy match string."
+      }
+    },
+    "required": ["name"]
+  },
+  "examples": [
+    {
+      "description": "Read the SkillNet integration report by exact slug",
+      "input": { "name": "skillnet-integration" },
+      "output": {
+        "found": true,
+        "path": "research/reports/skillnet-integration.md",
+        "content": "## Executive Summary\n\nThree features from SkillNet are worth adopting for AKH...\n"
+      }
+    },
+    {
+      "description": "Partial match — 'improvements' matches akh-skillnet-improvements",
+      "input": { "name": "improvements" },
+      "output": {
+        "found": true,
+        "path": "research/reports/akh-skillnet-improvements.md",
+        "content": "...",
+        "alternatives": []
+      }
+    }
+  ]
+}

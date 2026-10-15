@@ -1,6 +1,8 @@
 """Tests for #006 — skillset service: create, membership, order, hydration, permissions, audit log."""
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from app.auth import User
@@ -422,3 +424,73 @@ class TestSkillsetServiceCascade:
         await skill_repository.delete(await Skill.find_one(Skill.slug == "a"), actor_id="author")
         with pytest.raises(SkillsetVersionConflictError):
             await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)
+
+
+def _audit_records(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "app.services.skillset" and r.levelno == logging.INFO]
+
+
+class TestSkillsetServiceAuditLog:
+    async def test_each_write_logs_one_line(self, caplog):  # L1
+        caplog.set_level(logging.INFO, logger="app.services.skillset")
+        await _make_skill("a")
+        await _make_skill("b")
+        steps = [
+            ("create", lambda: _make_skillset(), None),
+            ("edit", lambda: skillset_service.update("set", OWNER, name="Renamed"), None),
+            ("add", lambda: skillset_service.add_skill("set", "a", OWNER), "a"),
+            ("add", lambda: skillset_service.add_skill("set", "b", OWNER), "b"),
+            ("reorder", lambda: _reorder_current(["b", "a"]), None),
+            ("remove", lambda: skillset_service.remove_skill("set", "a", OWNER), "a"),
+            ("delete", lambda: skillset_service.delete("set", OWNER), None),
+        ]
+        for action, step, skill_slug in steps:
+            caplog.clear()
+            await step()
+            records = _audit_records(caplog)
+            assert len(records) == 1, (action, records)
+            assert f"action={action}" in records[0]
+            assert "actor=owner" in records[0]
+            assert "skillset=set" in records[0]
+            if skill_slug:
+                assert f"skill={skill_slug}" in records[0]
+
+    async def test_submitter_removal_names_submitter(self, caplog):  # L2
+        await _skillset_with("a")
+        caplog.set_level(logging.INFO, logger="app.services.skillset")
+        caplog.clear()
+        await skillset_service.remove_skill("set", "a", User(user_id="author"))
+        records = _audit_records(caplog)
+        assert len(records) == 1 and "actor=author" in records[0]
+
+    async def test_refused_and_repeated_writes_do_not_log(self, caplog):  # L3
+        await _skillset_with("a")
+        caplog.set_level(logging.INFO, logger="app.services.skillset")
+        caplog.clear()
+        with pytest.raises(PermissionDeniedError):
+            await skillset_service.add_skill("set", "a", User(user_id="stranger"))
+        with pytest.raises(SkillsetMemberAlreadyError):
+            await skillset_service.add_skill("set", "a", OWNER)
+        assert _audit_records(caplog) == []
+
+    async def test_cascade_logs_once_naming_skillsets(self, caplog):  # L4
+        a = await _make_skill("a")
+        lonely = await _make_skill("lonely")
+        for slug in ("first", "second"):
+            await _make_skillset(slug)
+            await skillset_service.add_skill(slug, "a", OWNER)
+        caplog.set_level(logging.INFO, logger="app.services.skillset")
+        caplog.clear()
+        await skill_repository.delete(a, actor_id="author")
+        records = _audit_records(caplog)
+        assert len(records) == 1
+        assert "action=cascade" in records[0] and "actor=author" in records[0]
+        assert "first" in records[0] and "second" in records[0]
+        caplog.clear()
+        await skill_repository.delete(lonely, actor_id="author")
+        assert _audit_records(caplog) == []
+
+
+async def _reorder_current(skill_slugs: list[str]) -> Skillset:
+    current = await skillset_service.get("set")
+    return await skillset_service.reorder("set", skill_slugs, current.version, OWNER)

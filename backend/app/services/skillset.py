@@ -58,6 +58,14 @@ async def _next_free_slug(slug: str) -> str:
     return f"{slug}-{i}"
 
 
+def _audit(action: str, actor_id: str, skillset_slug: str, skill_slug: Optional[str] = None) -> None:
+    """Record a successful write. Removals and deletes leave no other trace of who made them."""
+    logger.info(
+        "[SKILLSET] action=%s actor=%s skillset=%s skill=%s",
+        action, actor_id, skillset_slug, skill_slug or "-",
+    )
+
+
 def _is_owner_or_admin(skillset: Skillset, actor: User) -> bool:
     return actor.is_admin or skillset.created_by == actor.user_id
 
@@ -83,6 +91,7 @@ class SkillsetService:
             await skillset.insert()
         except DuplicateKeyError:
             raise SkillsetAlreadyExistsError(skillset.slug, await _next_free_slug(skillset.slug))
+        _audit("create", actor.user_id, skillset.slug)
         return skillset
 
     async def get(self, slug: str) -> Skillset:
@@ -117,6 +126,7 @@ class SkillsetService:
         await Skillset.find_one(Skillset.id == skillset.id).update(
             {"$set": {**changes, "updated_at": datetime.now(timezone.utc)}}
         )
+        _audit("edit", actor.user_id, skillset.slug)
         return await Skillset.get(skillset.id)
 
     async def delete(self, slug: str, actor: User) -> None:
@@ -124,6 +134,7 @@ class SkillsetService:
         if not _is_owner_or_admin(skillset, actor):
             raise PermissionDeniedError("Only the skillset's owner or an admin can delete it")
         await skillset.delete()
+        _audit("delete", actor.user_id, skillset.slug)
 
     async def add_skill(self, slug: str, skill_slug: str, actor: User) -> None:
         skillset = await self.get(slug)
@@ -139,6 +150,7 @@ class SkillsetService:
         ).update({"$push": {"members": member.model_dump()}, "$inc": {"version": 1}})
         if result.matched_count == 0:
             raise await _missing_or(skillset, SkillsetMemberAlreadyError("Skill is already in this skillset"))
+        _audit("add", actor.user_id, skillset.slug, skill.slug)
 
     async def remove_skill(self, slug: str, skill_slug: str, actor: User) -> None:
         skillset = await self.get(slug)
@@ -156,6 +168,7 @@ class SkillsetService:
         ).update({"$pull": {"members": {"skill_id": skill_id}}, "$inc": {"version": 1}})
         if result.matched_count == 0:
             raise await _missing_or(skillset, SkillsetMemberNotFoundError("Skill is not in this skillset"))
+        _audit("remove", actor.user_id, skillset.slug, skill.slug)
 
     async def reorder(
         self, slug: str, skill_slugs: List[str], version: int, actor: User
@@ -185,6 +198,7 @@ class SkillsetService:
             raise await _missing_or(
                 skillset, SkillsetVersionConflictError("Skillset changed since it was loaded")
             )
+        _audit("reorder", actor.user_id, skillset.slug)
         return await self.get(slug)
 
     async def batch_skillsets_for_skills(self, skill_ids: List[str]) -> dict[str, List[SkillsetRef]]:
@@ -202,9 +216,14 @@ class SkillsetService:
 
     async def purge_for_skill(self, skill_id: str, skill_slug: str, actor_id: str) -> None:
         """Remove a skill from every skillset; called before the skill document is deleted."""
+        holders = await Skillset.find({"members.skill_id": skill_id}).to_list()
+        if not holders:
+            return
+        # A skillset that gains the skill after this read is still cleaned, but goes unnamed.
         await Skillset.find({"members.skill_id": skill_id}).update(
             {"$pull": {"members": {"skill_id": skill_id}}, "$inc": {"version": 1}}
         )
+        _audit("cascade", actor_id, ",".join(h.slug for h in holders), skill_slug)
 
 
 skillset_service = SkillsetService()

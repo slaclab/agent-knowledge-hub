@@ -1,7 +1,7 @@
 # 006 — Skillsets: Curated Skill Collections
 
-**Status:** 🔍 Reviewed (amended 2026-10-14; board re-review CLEAR WITH WARNINGS)
-**Branch:** —
+**Status:** 🔄 In Progress (Slice 1)
+**Branch:** `feat/skillsets-backend`
 **PR:** —
 
 ---
@@ -529,7 +529,7 @@ No other section restates these values; they reference a row by its name.
 
 ## Board Review
 
-**Amendment 2026-10-14:** ADR-U18 was replaced, and ADR-U19 gained the permission rules and author removal. User stories 2a, 16, and 17, FR-2c to FR-2g, NFR-5, AC-11 to AC-15, the Measured facts block, the Follow-ups section, and the Problems & Solutions and References entries were added. The success metrics, user stories 11 and 14, FR-2, FR-4, FR-5, FR-7, FR-9, NFR-2, NFR-3, AC-2 to AC-8, ADR-U20 (stored order and FR-7's rules), Module Design, System Design, Trade-offs, Delivery Slices, Risk Register, Definition of Done, and Test Plan were revised. The verdict below covers the 2026-06-03 text only. Re-review is pending.
+**Amendment 2026-10-14:** ADR-U18 was replaced, and ADR-U19 gained the permission rules and author removal. User stories 2a, 16, and 17, FR-2c to FR-2g, NFR-5, AC-11 to AC-15, the Measured facts block, the Follow-ups section, and the Problems & Solutions and References entries were added. The success metrics, user stories 11 and 14, FR-2, FR-4, FR-5, FR-7, FR-9, NFR-2, NFR-3, AC-2 to AC-8, ADR-U20 (stored order and FR-7's rules), Module Design, System Design, Trade-offs, Delivery Slices, Risk Register, Definition of Done, and Test Plan were revised. The re-review of these changes follows; the original 2026-06-03 review is kept below it.
 
 ### Re-review of the 2026-10-14 amendment
 

@@ -5,5 +5,6 @@ from app.models.rating import Rating
 from app.models.revision import SkillRevision
 from app.models.settings import SiteSettings
 from app.models.skill import Skill
+from app.models.skillset import Skillset
 
-ALL_MODELS = [Skill, SkillRevision, Rating, Label, SkillLabel, SkillFlag, SiteSettings, SkillInstallEvent]
+ALL_MODELS = [Skill, SkillRevision, Rating, Label, SkillLabel, SkillFlag, SiteSettings, SkillInstallEvent, Skillset]

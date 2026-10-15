@@ -3,6 +3,7 @@
 **Status:** ✅ Complete
 **Severity:** MEDIUM
 **Source:** Security review 2026-06-09 (M4)
+**Follow-up:** [#045](045-sec-repo-url-skill-path-allowlist.md) tightens the `_GITHUB_URL_RE` check added here.
 
 ---
 

@@ -81,7 +81,7 @@ esac
 home=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)
 checked=
 for f in "${home:+$home/.s3df-access-token}" "${HOME:+$HOME/.s3df-access-token}"; do
-    case $f in "") continue ;; esac
+    case $f in "" | "$checked") continue ;; esac
     checked="${checked:+$checked, }$f"
     if test -f "$f"; then
         tok=$(tr -d '\r\n' < "$f")

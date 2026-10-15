@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.models import ALL_MODELS
-from app.routers import admin, health, me, site_settings, skills, users
+from app.routers import admin, health, me, site_settings, skills, skillsets, users
 from app.routers import github_scan
 import app.services.local  # noqa: F401 — registers LocalScanner in scanner_registry
 from app.routers.catalog import router as catalog_router
@@ -103,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(labels_router)
     app.include_router(skills_labels_router)
     app.include_router(labels_admin_router)
+    app.include_router(skillsets.router)
     app.include_router(users.router)
     app.include_router(admin.router)
 

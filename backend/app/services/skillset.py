@@ -13,6 +13,8 @@ from app.auth import User
 from app.models.skill import Skill, SkillStatus
 from app.models.skillset import Skillset, SkillsetMember
 from app.schemas.skill import SkillsetRef
+from app.schemas.skillset import SkillsetMemberOut, SkillsetOut
+from app.services.label import label_service
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,36 @@ class SkillsetService:
         if skillset is None:
             raise SkillsetNotFoundError("Skillset not found")
         return skillset
+
+    async def detail(self, skillset: Skillset) -> SkillsetOut:
+        """Hydrate members in stored order, any status, leaving out orphans."""
+        ids = [m.skill_id for m in skillset.members]
+        skills = await Skill.find(In(Skill.id, [ObjectId(i) for i in ids])).to_list()
+        skill_by_id = {str(s.id): s for s in skills}
+        labels = await label_service.batch_labels_for_skills(list(skill_by_id))
+        members = [
+            SkillsetMemberOut(
+                slug=skill.slug,
+                name=skill.name,
+                description=skill.description,
+                labels=[label.name for label in labels.get(skill_id, [])],
+                avg_rating=skill.avg_rating,
+                visibility=skill.visibility,
+                status=skill.status,
+            )
+            for skill_id in ids
+            if (skill := skill_by_id.get(skill_id)) is not None
+        ]
+        return SkillsetOut(
+            slug=skillset.slug,
+            name=skillset.name,
+            description=skillset.description,
+            created_by=skillset.created_by,
+            member_count=len(members),
+            created_at=skillset.created_at,
+            version=skillset.version,
+            skills=members,
+        )
 
     async def list(
         self, page: int, page_size: int, created_by: Optional[str] = None

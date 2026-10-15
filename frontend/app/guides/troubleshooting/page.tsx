@@ -95,6 +95,63 @@ export default function TroubleshootingPage() {
 
         <details className="rounded-lg border p-4 open:pb-4">
           <summary className="font-medium cursor-pointer text-sm">
+            /agent-knowledge-hub says it found no S3DF sign-in, or that the catalog did not accept it
+          </summary>
+          <div className="mt-3 text-sm text-muted-foreground space-y-2">
+            <p>
+              Every catalog command sends your S3DF sign-in. When the token file is missing, holds
+              something that is not a token, or holds a token the catalog refuses, the client shows
+              these steps:
+            </p>
+            <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
+{`To sign in again:
+  - In Cogito: open Cogito in a new private browser window and sign in.
+  - On an S3DF node outside Cogito: run  s3df login
+    (if the shell cannot find s3df: /sdf/sw/s3df-cli/bin/s3df login)
+  - On a computer outside S3DF: use this client from Cogito or from an S3DF node.
+Then ask again here; this session does not need to restart.
+If the same message comes back right after you sign in, the problem is probably
+on the catalog's side: report it at https://agent-knowledge-hub.slac.stanford.edu`}
+            </pre>
+            <p>
+              See 
+              <Link href="/guides/agent-knowledge-hub#cli-auth" className="text-primary underline">CLI authentication</Link> 
+              for where the client looks for the token.
+            </p>
+          </div>
+        </details>
+
+        <details className="rounded-lg border p-4 open:pb-4">
+          <summary className="font-medium cursor-pointer text-sm">
+            /agent-knowledge-hub says the catalog&apos;s certificate could not be checked (curl exit 60)
+          </summary>
+          <div className="mt-3 text-sm text-muted-foreground space-y-2">
+            <p>
+              The client sends your sign-in only over a connection it can check against the
+              computer&apos;s own certificates, so it does not work through a proxy that decrypts
+              HTTPS. If this session runs behind such a proxy, for example Claude Code&apos;s sandbox
+              with <code className="bg-muted rounded px-1 font-mono text-xs">network.tlsTerminate</code> set, use the client from a session without it.
+            </p>
+          </div>
+        </details>
+
+        <details className="rounded-lg border p-4 open:pb-4">
+          <summary className="font-medium cursor-pointer text-sm">
+            Claude Code asks before every catalog request again after a client update
+          </summary>
+          <div className="mt-3 text-sm text-muted-foreground space-y-2">
+            <p>
+              For a plugin install, the path of the client&apos;s request script holds the
+              plugin&apos;s version, so a saved rule stops matching after each update. Add the rule
+              for the new path, which the client prints the first time it contacts the catalog in a
+              conversation. See 
+              <Link href="/guides/agent-knowledge-hub#cli-auth" className="text-primary underline">CLI authentication</Link>.
+            </p>
+          </div>
+        </details>
+
+        <details className="rounded-lg border p-4 open:pb-4">
+          <summary className="font-medium cursor-pointer text-sm">
             Who do I contact if something is broken?
           </summary>
           <div className="mt-3 text-sm text-muted-foreground">

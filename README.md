@@ -46,6 +46,8 @@ Register the SLAC marketplace once to get started:
 /plugin install agent-knowledge-hub
 ```
 
+The client needs an S3DF sign-in, which it finds without setup in Cogito and which `s3df login` writes on other S3DF nodes; when the sign-in expires, sign in to Cogito again in a new private browser window or rerun `s3df login`.
+
 ## Links
 
 - Catalog: [agent-knowledge-hub.slac.stanford.edu](https://agent-knowledge-hub.slac.stanford.edu)

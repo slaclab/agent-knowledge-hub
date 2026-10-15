@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Client sign-in: one script sends the S3DF token (#050)
+
+Every catalog command in `/agent-knowledge-hub`, Search and Install included, now sends your S3DF sign-in. The client makes each catalog request through `skill/hub-request.sh`, a script that ships with it, reads the token, and sends it only to `https://agent-knowledge-hub.slac.stanford.edu`.
+
+- **Token location** — the client reads `.s3df-access-token` from your account's real home directory, the one `getent passwd` reports, and falls back to `~/.s3df-access-token`. It now finds the token in a Cogito session, where `$HOME` is a different directory. A user whose token is already in their own home directory needs to do nothing.
+- **Sign-in messages** — when the token file is missing, holds something that is not a token, or holds a token the catalog refuses, the client says which case applies and shows the steps to sign in again, in Cogito and on an S3DF node.
+- **Permission prompts** — a session that asks before each Bash command now asks before each catalog request. The client tells you, on its first catalog request in a conversation, which rule stops the prompts.
+- **Fixed destination** — the script accepts only the requests the client sends, follows no redirect, and ignores the CA-bundle and key-log variables, so text in a catalog entry cannot steer the token elsewhere through the script.
+- **Updating an existing install** — run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
+
+**Breaking change:** the client no longer reads `AGENT_KNOWLEDGE_HUB_TOKEN`. A job that set it now gets the "No S3DF sign-in found" message. Write the token to `.s3df-access-token` in the job's home directory instead; that file also works with the previous client, which reads it when the variable is unset.
+
+**New docs:** `docs/adr/adr-u42-client-token-helper.md`.
+
 ### Skillsets: curated skill collections (#006, backend)
 
 Curators can group catalog skills into named, ordered skillsets, and every skill reports which skillsets hold it. This release adds the API; the web pages and the `install skillset` command follow.

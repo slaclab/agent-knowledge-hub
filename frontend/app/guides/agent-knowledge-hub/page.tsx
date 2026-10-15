@@ -137,29 +137,66 @@ export default function AgentKnowledgeHubGuidePage() {
       <section className="space-y-4" id="cli-auth">
         <h2 className="text-xl font-semibold">CLI authentication</h2>
         <p className="text-sm text-muted-foreground">
-          Read-only commands (search, install, list) work without any authentication.
-          Write commands (<code className="bg-muted rounded px-1 font-mono text-xs">rate</code>) require
-          a SLAC token.
+          Every command that contacts the catalog (search, install, update, rate, validate, and 
+          <code className="bg-muted rounded px-1 font-mono text-xs">submit &lt;path&gt;</code>) sends your S3DF sign-in. Catalog commands are
+          supported in Cogito and on S3DF nodes only.
         </p>
         <div className="rounded-lg border p-5 space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Authenticate once with s3df login
+            Where the client finds your sign-in
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The client reads a SLAC-issued JWT from 
+            <code className="bg-muted rounded px-1 font-mono text-xs">.s3df-access-token</code> in your account&apos;s home directory, the one 
+            <code className="bg-muted rounded px-1 font-mono text-xs">getent passwd</code> reports, or from 
+            <code className="bg-muted rounded px-1 font-mono text-xs">~/.s3df-access-token</code> when that file is absent. In a Cogito session it
+            finds the token there with no setup. On an S3DF node outside Cogito, write it once with:
           </p>
           <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
 {`s3df login`}
           </pre>
           <p className="text-xs text-muted-foreground">
-            This writes a SLAC-issued JWT to{" "}
-            <code className="bg-muted rounded px-1 font-mono text-xs">~/.s3df-access-token</code>.
-            The skill reads this file automatically — you never need to paste a token manually.
+            The skill reads this file automatically — you never need to paste a token manually. The
+            token goes only to the catalog, through <code className="bg-muted rounded px-1 font-mono text-xs">hub-request.sh</code>, a script that
+            ships with the client.
           </p>
         </div>
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 space-y-2">
           <p className="font-semibold">Token expiry</p>
           <p>
-            If a write command returns <em>&ldquo;Token expired&rdquo;</em>, run{" "}
-            <code className="bg-amber-100 rounded px-1 font-mono text-xs">s3df login</code> again
-            to refresh your token, then retry the command.
+            If any catalog command says 
+            <em>&ldquo;The catalog did not accept your S3DF sign-in. It has most likely expired.&rdquo;</em>,
+            the client shows these steps:
+          </p>
+          <pre className="bg-amber-100 rounded-md p-3 text-xs overflow-x-auto">
+{`To sign in again:
+  - In Cogito: open Cogito in a new private browser window and sign in.
+  - On an S3DF node outside Cogito: run  s3df login
+    (if the shell cannot find s3df: /sdf/sw/s3df-cli/bin/s3df login)
+  - On a computer outside S3DF: use this client from Cogito or from an S3DF node.
+Then ask again here; this session does not need to restart.
+If the same message comes back right after you sign in, the problem is probably
+on the catalog's side: report it at https://agent-knowledge-hub.slac.stanford.edu`}
+          </pre>
+        </div>
+        <div className="rounded-lg border p-5 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Permission prompts
+          </p>
+          <p className="text-xs text-muted-foreground">
+            A session that asks before each Bash command asks before each catalog request. The first
+            time the client contacts the catalog in a conversation, it tells you, with 
+            <code className="bg-muted rounded px-1 font-mono text-xs">&lt;script&gt;</code> replaced by the script&apos;s full path:
+          </p>
+          <pre className="bg-muted rounded-md p-3 text-xs whitespace-pre-wrap">
+{`Catalog requests run through <script>, a script in this skill that reads your S3DF token and sends it only to https://agent-knowledge-hub.slac.stanford.edu. If Claude Code asks before running it, you can stop the questions: choose "don't ask again" only if the rule it offers starts with sh <script>, or add the rule Bash(sh <script> *) with /permissions. A rule for all of sh would let any shell command run without asking. After a client update the script's path can change, and Claude Code then asks again until you add the rule for the new path.`}
+          </pre>
+          <p className="text-xs text-muted-foreground">
+            To stop the prompts, accept the rule <code className="bg-muted rounded px-1 font-mono text-xs">Bash(sh &lt;script&gt; *)</code>. A rule
+            accepted in the dialog applies in the current repository only. A rule added with 
+            <code className="bg-muted rounded px-1 font-mono text-xs">/permissions</code> to your user settings applies in every project. For a
+            plugin install, the script&apos;s path holds the plugin&apos;s version, so the prompts
+            return after each client update until you add the rule for the new path.
           </p>
         </div>
       </section>

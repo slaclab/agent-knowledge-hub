@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
+from beanie.operators import In
+from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 from slugify import slugify
 
@@ -40,6 +42,10 @@ class SkillsetMemberNotFoundError(SkillsetError):
 
 
 class PermissionDeniedError(SkillsetError):
+    pass
+
+
+class SkillsetVersionConflictError(SkillsetError):
     pass
 
 
@@ -114,6 +120,36 @@ class SkillsetService:
         ).update({"$pull": {"members": {"skill_id": skill_id}}, "$inc": {"version": 1}})
         if result.matched_count == 0:
             raise await _missing_or(skillset, SkillsetMemberNotFoundError("Skill is not in this skillset"))
+
+    async def reorder(
+        self, slug: str, skill_slugs: List[str], version: int, actor: User
+    ) -> Skillset:
+        skillset = await self.get(slug)
+        if not _is_owner_or_admin(skillset, actor):
+            raise PermissionDeniedError("Only the skillset's owner or an admin can reorder it")
+        # Version first: a page made stale by a concurrent add also sends the wrong list,
+        # and it must get the reload path (409), not the mismatch error.
+        if version != skillset.version:
+            raise SkillsetVersionConflictError("Skillset changed since it was loaded")
+        skills = await Skill.find(
+            In(Skill.id, [ObjectId(m.skill_id) for m in skillset.members])
+        ).to_list()
+        slug_by_id = {str(s.id): s.slug for s in skills}
+        # Orphans (no Skill document) are not in this map, so the $set below drops them.
+        member_by_slug = {
+            slug_by_id[m.skill_id]: m for m in skillset.members if m.skill_id in slug_by_id
+        }
+        if len(skill_slugs) != len(set(skill_slugs)) or set(skill_slugs) != set(member_by_slug):
+            raise ValueError("skill_slugs must list every current member exactly once")
+        reordered = [member_by_slug[s].model_dump() for s in skill_slugs]
+        result = await Skillset.find_one({"_id": skillset.id, "version": version}).update(
+            {"$set": {"members": reordered}, "$inc": {"version": 1}}
+        )
+        if result.matched_count == 0:
+            raise await _missing_or(
+                skillset, SkillsetVersionConflictError("Skillset changed since it was loaded")
+            )
+        return await self.get(slug)
 
 
 skillset_service = SkillsetService()

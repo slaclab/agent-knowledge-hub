@@ -5,7 +5,7 @@ import pytest
 
 from app.auth import User
 from app.models.skill import Skill, SkillStatus
-from app.models.skillset import Skillset
+from app.models.skillset import Skillset, SkillsetMember
 from app.services.skillset import (
     PermissionDeniedError,
     SkillNotFoundError,
@@ -13,6 +13,7 @@ from app.services.skillset import (
     SkillsetMemberAlreadyError,
     SkillsetMemberNotFoundError,
     SkillsetNotFoundError,
+    SkillsetVersionConflictError,
     skillset_service,
 )
 
@@ -203,3 +204,90 @@ def _returning(value):
     async def _fake(*_args, **_kwargs):
         return value
     return _fake
+
+
+async def _skillset_with(*skill_slugs: str, owner: User = OWNER) -> Skillset:
+    await _make_skillset(owner=owner)
+    for skill_slug in skill_slugs:
+        await _make_skill(skill_slug)
+        await skillset_service.add_skill("set", skill_slug, owner)
+    return await skillset_service.get("set")
+
+
+class TestSkillsetServiceOrder:
+    async def test_reorder_stores_permutation_and_keeps_audit_fields(self):  # O1
+        before = await _skillset_with("a", "b", "c")
+        added = {m.skill_id: (m.added_by, m.added_at) for m in before.members}
+        after = await skillset_service.reorder("set", ["c", "a", "b"], before.version, OWNER)
+        assert await _member_slugs("set") == ["c", "a", "b"]
+        assert after.version == before.version + 1
+        stored = await skillset_service.get("set")
+        assert {m.skill_id: (m.added_by, m.added_at) for m in stored.members} == added
+
+    async def test_reorder_with_stale_version_conflicts(self):  # O2
+        before = await _skillset_with("a", "b")
+        with pytest.raises(SkillsetVersionConflictError):
+            await skillset_service.reorder("set", ["b", "a"], before.version - 1, OWNER)
+        assert await _member_slugs("set") == ["a", "b"]
+
+    async def test_reorder_missing_member_rejected(self):  # O3
+        before = await _skillset_with("a", "b")
+        with pytest.raises(ValueError):
+            await skillset_service.reorder("set", ["a"], before.version, OWNER)
+
+    @pytest.mark.parametrize("slugs", [["a", "b", "x"], ["a", "a"], ["a", "b", "b"]])  # O4
+    async def test_reorder_extra_or_repeated_slug_rejected(self, slugs):
+        before = await _skillset_with("a", "b")
+        await _make_skill("x")
+        with pytest.raises(ValueError):
+            await skillset_service.reorder("set", slugs, before.version, OWNER)
+
+    async def test_add_after_reorder_appends(self):  # O5
+        before = await _skillset_with("a", "b")
+        await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)
+        await _make_skill("c")
+        await skillset_service.add_skill("set", "c", OWNER)
+        assert await _member_slugs("set") == ["b", "a", "c"]
+
+    async def test_reorder_by_non_owner_denied(self):  # O6
+        before = await _skillset_with("a", "b")
+        with pytest.raises(PermissionDeniedError):
+            await skillset_service.reorder("set", ["b", "a"], before.version, User(user_id="stranger"))
+
+    async def test_reorder_by_admin_allowed(self):  # O7
+        before = await _skillset_with("a", "b")
+        await skillset_service.reorder("set", ["b", "a"], before.version, ADMIN)
+        assert await _member_slugs("set") == ["b", "a"]
+
+    async def test_stale_page_after_add_gets_conflict_not_mismatch(self):  # O8
+        before = await _skillset_with("a", "b")
+        await _make_skill("c")
+        await skillset_service.add_skill("set", "c", OWNER)
+        with pytest.raises(SkillsetVersionConflictError):
+            await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)
+
+    async def test_reorder_write_after_concurrent_change_conflicts(self, monkeypatch):  # ADR-U18 reorder write guard
+        before = await _skillset_with("a", "b")
+        await _make_skill("c")
+        await skillset_service.add_skill("set", "c", OWNER)
+        monkeypatch.setattr(skillset_service, "get", _returning(before))
+        with pytest.raises(SkillsetVersionConflictError):
+            await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)
+        monkeypatch.undo()
+        assert await _member_slugs("set") == ["a", "b", "c"]
+
+    async def test_reorder_keeps_deactivated_member(self):  # O10
+        before = await _skillset_with("a", "b")
+        await (await Skill.find_one(Skill.slug == "a")).set({Skill.status: SkillStatus.deactivated})
+        await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)
+        assert await _member_slugs("set") == ["b", "a"]
+
+    async def test_reorder_drops_orphan_member(self):  # O11
+        await _skillset_with("a", "b")
+        orphan = SkillsetMember(skill_id="0123456789abcdef01234567", added_by="owner")
+        await Skillset.find_one(Skillset.slug == "set").update({"$push": {"members": orphan.model_dump()}})
+        current = await skillset_service.get("set")
+        await skillset_service.reorder("set", ["b", "a"], current.version, OWNER)
+        stored = await skillset_service.get("set")
+        assert "0123456789abcdef01234567" not in [m.skill_id for m in stored.members]
+        assert await _member_slugs("set") == ["b", "a"]

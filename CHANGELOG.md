@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Skillsets: curated skill collections (#006, backend)
+
+Curators can group catalog skills into named, ordered skillsets, and every skill reports which skillsets hold it. This release adds the API; the web pages and the `install skillset` command follow.
+
+- **Skillset endpoints** — `GET`/`POST /api/skillsets` (the list takes `page`, `page_size`, and a `created_by` filter and returns the newest first), `GET`/`PATCH`/`DELETE /api/skillsets/{slug}`, `PUT /api/skillsets/{slug}/skills/{skill_slug}` and `DELETE` on the same path to add and remove members, and `PUT /api/skillsets/{slug}/order` to reorder them. A reorder sends the page's `version` and is refused with 409 if the skillset changed since it was loaded.
+- **Skill responses** — `GET /api/skills/{slug}` now returns `skillset_count` and a `skillsets` list of slugs and names; each item in `GET /api/skills` carries `skillset_count`.
+- **Submit into a skillset** — `POST /api/skills` accepts an optional `skillset_slug` and adds the new skill to that skillset when the submitter owns it. Otherwise the skill is created and the field is ignored.
+- **Removal on delete** — deleting a skill removes it from every skillset that holds it.
+- **Author removal** — a skill's submitter can remove that skill from any skillset, including one another user curates. Only the skillset's owner or an admin can add it back.
+- **Rate limits** — each user can create 20 skillsets and add 50 members per hour, counted across all skillsets.
+- **Audit log** — every skillset write logs one `[SKILLSET]` line naming the action, the user, the skillset, and the skill.
+
 ## 0.17.0 — 2026-06-03
 
 ### Rich revision history: field diffs and label tracking (#013)

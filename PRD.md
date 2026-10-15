@@ -354,6 +354,16 @@ GET    /api/labels                  # list all labels (name + usage_count)
 POST   /api/skills/:slug/labels     # add label to skill (auth required)
 DELETE /api/skills/:slug/labels/:name  # remove label applied by caller
 
+# Skillsets
+GET    /api/skillsets               # list skillsets, newest first (page, page_size, created_by)
+POST   /api/skillsets               # create a skillset (auth required; 20/hour per user)
+GET    /api/skillsets/:slug         # skillset detail: version + members in stored order
+PATCH  /api/skillsets/:slug         # edit name/description (owner or admin)
+DELETE /api/skillsets/:slug         # delete skillset (owner or admin)
+PUT    /api/skillsets/:slug/order   # reorder members; body {skill_slugs, version} (owner or admin)
+PUT    /api/skillsets/:slug/skills/:skill_slug     # add member (owner or admin; 50/hour per user)
+DELETE /api/skillsets/:slug/skills/:skill_slug     # remove member (owner, admin, or the skill's submitter)
+
 # Flagging
 POST   /api/skills/:slug/flag       # submit or update a flag (auth required; upsert semantics)
 DELETE /api/skills/:slug/flag       # retract caller's own active flag (auth required)

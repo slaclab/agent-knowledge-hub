@@ -1,6 +1,6 @@
 # 006 — Skillsets: Curated Skill Collections
 
-**Status:** 🔄 In Progress (Slice 1)
+**Status:** 🔄 In Progress (Slice 1 implemented on its branch, not merged)
 **Branch:** `feat/skillsets-backend`
 **PR:** —
 
@@ -489,19 +489,19 @@ Choice: Auto-derive slug from name (vs. user-chosen slug only)
 ## Definition of Done
 
 - [ ] All acceptance criteria pass
-- [ ] Unit tests: `Skillset` model, `skillset_service` (create, add, remove, reorder, cascade, batch hydration, permission rules), slug validation
-- [ ] Integration tests: all CRUD endpoints, membership add/remove, order endpoint (200, 409, 422), 403 per ADR-U19 › Permission rules, submitter removal (AC-11), skill detail includes skillsets
+- [x] Unit tests: `Skillset` model, `skillset_service` (create, add, remove, reorder, cascade, batch hydration, permission rules), slug validation
+- [x] Integration tests: all CRUD endpoints, membership add/remove, order endpoint (200, 409, 422), 403 per ADR-U19 › Permission rules, submitter removal (AC-11), skill detail includes skillsets
 - [ ] Frontend: `/skillsets` and `/skillsets/[slug]` render correctly; skill detail shows reverse links; create form submits and handles slug collision; owner management actions (search picker, remove, reorder, edit, delete) work; the "Add to skillset" menu and the submitter's Remove control, with its FR-2e confirmation, work on the skill page; each FR-2g outcome shows its message; `<AuthGuard>` fallback renders for unauthenticated users
 - [ ] Frontend: "Add new skill →" button on skillset detail page (owner-only) links to `/skills/submit?skillset=<slug>`; submit form shows "Will be added to skillset: <name>" notice when `skillset` param is present and submitter owns it; after submission redirects to skillset detail page
-- [ ] Backend: `SkillCreate.skillset_slug` adds new skill to owned skillset post-creation; silently ignored if skillset not found or not owned
-- [ ] Backend: each of the seven actions in NFR-5 writes NFR-5's log line, including a submitter's removal from another user's skillset and the cascade (Slice 1)
+- [x] Backend: `SkillCreate.skillset_slug` adds new skill to owned skillset post-creation; silently ignored if skillset not found or not owned
+- [x] Backend: each of the seven actions in NFR-5 writes NFR-5's log line, including a submitter's removal from another user's skillset and the cascade (Slice 1)
 - [ ] AKH skill: `install skillset <slug>` installs members in stored order and follows FR-7's confirm rule, skip rule, failure rule, argument rule, auth rule, and summary line
-- [ ] Security: every row of ADR-U19 › Permission rules has an allow test and a deny test
-- [ ] No N+1 queries on list views (batch hydration verified)
+- [x] Security: every row of ADR-U19 › Permission rules has an allow test and a deny test
+- [x] No N+1 queries on list views (batch hydration verified)
 - [ ] CHANGELOG entry under `## Unreleased`: a feature headline plus bullets, each added in the slice that makes it true. Slice 1: the skillset endpoints, including `PUT /api/skillsets/{slug}/order` and the `created_by` filter on `GET /api/skillsets`; `skillset_count` and `skillsets` on skill responses; removal from every skillset when a skill is deleted; the rule that a skill's submitter can remove the skill from any skillset; and the per-user rate limits on creating a skillset and adding a member (the Slice 1 bullet and the API contract give the numbers). Slice 2+3: the skillset pages, the search picker (which matches part of a word), the "Add to skillset" menu, the submitter's Remove control, and reordering. Slice 4: `install skillset <slug>` with FR-7's confirm prompt and its skip, failure, and summary behaviour; plain `install` now refusing a `repo_url` or `skill_path` that fails FR-7's argument rule; Search and Install now sending the bearer token under FR-7's auth rule; and a note telling existing users how to pick up the updated `/agent-knowledge-hub` skill
 - [ ] ADR files written to `docs/adr/` as `adr-u18-skillset-data-model.md`, `adr-u19-curator-permissions.md`, `adr-u20-akh-install-skillset.md`
 - [ ] `README.md`: in Slice 2+3, a Skillsets paragraph with the `/skillsets` link, covering browsing and creating a skillset, adding a skill from its page with "Add to skillset", reordering, and a skill author's right to remove their skill from any skillset. In Slice 4, `install skillset <slug>` added to the "Install without leaving your assistant" section
-- [ ] `PRD.md` › 5. API Contract (summary): a `# Skillsets` block listing every endpoint in the System Design diagram, including `PUT /api/skillsets/:slug/order` and the `created_by` parameter on `GET /api/skillsets` (Slice 1). The #012 close-out updated the same block.
+- [x] `PRD.md` › 5. API Contract (summary): a `# Skillsets` block listing every endpoint in the System Design diagram, including `PUT /api/skillsets/:slug/order` and the `created_by` parameter on `GET /api/skillsets` (Slice 1). The #012 close-out updated the same block.
 - [ ] `skill/SKILL.md` `install skillset <slug>` sub-command includes: the member list and single prompt from FR-7's confirm rule; the progress line format in ADR-U20 › Consequences; a failure line with the same `[i/M]` prefix that names the member and the reason; the empty-skillset message (`⚠ Skillset '<slug>' contains no skills.`); a 404 error for an unknown skillset slug; the 401 message from FR-7's auth rule; and FR-7's summary line
 - [ ] `skill/SKILL.md` header block states FR-7's auth rule next to **Token file**, and `skill/SKILL.md` › Install states FR-7's argument rule and runs its clone step with the environment from FR-7's failure rule (Slice 4)
 - [ ] `.claude-plugin/plugin.json` `version` is higher than on `main` before Slice 4 (Slice 4)
@@ -522,7 +522,8 @@ No other section restates these values; they reference a row by its name.
 | summary-size | 13 active skills on dev; their slug, name, description, and rating serialize to about 5.9 KB of JSON | `find({"status": "active"})` with that projection in the dev backend pod, then `len(json.dumps(...))` |
 | install-time | 1.3 s and 2.3 s for the two members that installed (`pptx`, `caveman`) | The SKILL.md install steps run in a loop under a temporary HOME, with metadata read from the dev DB |
 | stale-skill-path | The dev catalog entry `compress` points at `/skills/compress`, which no longer exists in its repository; the entry has no pinned SHA | Shallow clone of `https://github.com/juliusbrussee/caveman` at HEAD `d262ab3` (2026-10-13); the skill now lives at `skills/caveman-compress` |
-| test-baseline | 377 passed, 5 skipped, before any change for this task | `python -m pytest -q` in `backend/`, in a fresh venv built from `requirements.txt` and `requirements-dev.txt` |
+| test-baseline | 377 passed, 5 skipped, before any change for this task |
+| slice-1-suite | 478 passed, 5 skipped after Slice 1; the new skillset modules (`models`, `schemas`, `services`, and `routers/skillsets.py`) have 100% line coverage | `python -m pytest -q` in `backend/`, and `--cov` over the four modules with `test_skillset_service.py` and `test_skillset_routes.py`, measured 2026-10-14 | `python -m pytest -q` in `backend/`, in a fresh venv built from `requirements.txt` and `requirements-dev.txt` |
 | cli-auth | Without a token, the prod API answers with 401 `{"error":"no_token"}` on the browser path `/api/skills/summary` and on the CLI paths the AKH skill uses (ADR-P08): `/cli/api/skills/summary`, `/cli/api/skills`, and `/cli/api/skills/<slug>` | `curl -s https://agent-knowledge-hub.slac.stanford.edu/api/skills/summary`, and the same with `/cli/api/skills/summary`, `/cli/api/skills`, and `/cli/api/skills/pptx` |
 
 ---
@@ -1073,6 +1074,14 @@ Key findings: nav entry point (Skillsets top-nav link added to FR-8), copyable C
 ---
 
 ## Problems & Solutions
+
+### Problem: MongoDB sorts skillset names case-sensitively (2026-10-14, Slice 1)
+`batch_skillsets_for_skills` first sorted with `.sort("name")`, which put "Second" before "first" in a skill's `skillsets` list, because MongoDB compares uppercase letters before lowercase ones.
+**Solution:** the service sorts the matching skillsets in Python by the casefolded name, then the slug. The lookup is still one query.
+
+### Problem: R17 passed before anyone checked that it could fail (2026-10-14, Slice 1)
+The membership route tests were written after the router existed, so R17 passed on its first run.
+**Solution:** R17 was run against two deliberate breakages of the add limiter in `app/routers/skillsets.py`: `key_style="url"`, and a per-address key. It failed under both and passed once the limiter was restored.
 
 ### Problem: manual reordering needs multi-document writes the tests cannot run (2026-10-14)
 The 2026-06-03 design kept members in a `SkillsetMember` collection and ruled reordering out of scope. Adding reordering to that design means writing a position on many member rows at once. Those writes are atomic only inside a transaction, and the test database cannot run transactions (Measured facts › transactions-in-tests).

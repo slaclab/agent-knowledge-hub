@@ -272,3 +272,73 @@ class TestSkillsetsRouterMembership:
         assert statuses[50] == 429
         resp = await client.put("/api/skillsets/r17-b/skills/r17-0", headers=_auth("r17-b"))
         assert resp.status_code == 204
+
+
+_LOCAL_SKILL_MD = "---\nname: {name}\ndescription: A locally submitted skill.\n---\n\n# {name}\n"
+
+
+def _local_submission(name: str, skillset_slug: str | None) -> dict:
+    body = {
+        "repo_url": f"local:///home/user/{name}",
+        "source_type": "local",
+        "snapshotted_files": {"SKILL.md": _LOCAL_SKILL_MD.format(name=name)},
+    }
+    if skillset_slug is not None:
+        body["skillset_slug"] = skillset_slug
+    return body
+
+
+class TestCreateSkillAutoAdd:
+    async def test_owner_skillset_gets_new_skill(self, client):  # C1
+        await _skillset_with("a")
+        resp = await client.post("/api/skills", json=_local_submission("fresh", "set"), headers=_auth())
+        assert resp.status_code == 201
+        assert await _member_slugs(client) == ["a", resp.json()["slug"]]
+
+    async def test_other_users_skillset_unchanged(self, client):  # C2
+        before = await _skillset_with("a", owner="other")
+        resp = await client.post("/api/skills", json=_local_submission("fresh", "set"), headers=_auth())
+        assert resp.status_code == 201
+        after = await skillset_service.get("set")
+        assert ([m.skill_id for m in after.members], after.version) == (
+            [m.skill_id for m in before.members], before.version,
+        )
+
+    async def test_admin_does_not_auto_add_to_others(self, client):  # C3
+        before = await _skillset_with("a", owner="other")
+        resp = await client.post("/api/skills", json=_local_submission("fresh", "set"), headers=_auth("admin"))
+        assert resp.status_code == 201
+        assert (await skillset_service.get("set")).version == before.version
+
+    async def test_missing_skillset_ignored(self, client):  # C4
+        resp = await client.post("/api/skills", json=_local_submission("fresh", "nope"), headers=_auth())
+        assert resp.status_code == 201
+
+
+class TestSkillDetailIncludesSkillsets:
+    async def test_detail_lists_skillsets(self, client):  # S1
+        await _skillset_with("a", slug="first")
+        await skillset_service.create(name="Second", description="", actor=OWNER, slug="second")
+        await skillset_service.add_skill("second", "a", OWNER)
+        body = (await client.get("/api/skills/a")).json()
+        assert body["skillset_count"] == 2
+        assert body["skillsets"] == [{"slug": "first", "name": "first"}, {"slug": "second", "name": "Second"}]
+
+    async def test_detail_without_skillsets(self, client):  # S2
+        await _make_skill("a")
+        body = (await client.get("/api/skills/a")).json()
+        assert (body["skillset_count"], body["skillsets"]) == (0, [])
+
+    async def test_list_counts_skillsets(self, client):  # S3
+        await _skillset_with("a", slug="first")
+        await skillset_service.create(name="second", description="", actor=OWNER, slug="second")
+        await skillset_service.add_skill("second", "a", OWNER)
+        await _make_skill("b")
+        items = (await client.get("/api/skills")).json()["items"]
+        assert {i["slug"]: i["skillset_count"] for i in items} == {"a": 2, "b": 0}
+
+    async def test_summary_matches_part_of_a_word(self, client):  # S4
+        await _make_skill("k8s-deploy")
+        await _make_skill("unrelated")
+        body = (await client.get("/api/skills/summary?q=depl")).json()
+        assert [s["slug"] for s in body] == ["k8s-deploy"]

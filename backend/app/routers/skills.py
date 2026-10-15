@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -26,11 +27,15 @@ from app.schemas.skill import (
     SkillCreate,
     SkillListOut,
     SkillOut,
+    SkillsetRef,
     SkillUpdate,
 )
 from app.services.label import label_service
 from app.services.rating import rate_skill
 from app.services.skill import DuplicateSkillError, PinNotSupportedError, SortField, skill_repository
+from app.services.skillset import SkillsetError, skillset_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills")
 github_router = APIRouter(prefix="/api")
@@ -39,7 +44,7 @@ limiter = Limiter(key_func=get_remote_address)
 _flag_limiter = Limiter(key_func=user_id_key_func)
 
 
-def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None, my_flag=None, omit_content: bool = False) -> SkillOut:
+def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Optional[int] = None, my_flag=None, omit_content: bool = False, skillsets: Optional[List[SkillsetRef]] = None) -> SkillOut:
     return SkillOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -84,10 +89,12 @@ def _skill_to_out(skill, labels: Optional[List[LabelOut]] = None, my_rating: Opt
         labels=labels or [],
         my_rating=my_rating,
         my_flag=my_flag,
+        skillset_count=len(skillsets or []),
+        skillsets=skillsets or [],
     )
 
 
-def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillListOut:
+def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None, skillset_count: int = 0) -> SkillListOut:
     return SkillListOut(
         id=str(skill.id),
         slug=skill.slug,
@@ -112,6 +119,7 @@ def _skill_to_list_out(skill, labels: Optional[List[LabelOut]] = None) -> SkillL
         submitted_at=skill.submitted_at,
         updated_at=skill.updated_at,
         labels=labels or [],
+        skillset_count=skillset_count,
     )
 
 
@@ -142,9 +150,17 @@ async def list_skills(
         raise _HTTPException(status_code=422, detail=str(exc))
     skill_ids = [str(s.id) for s in items]
     labels_by_skill = await label_service.batch_labels_for_skills(skill_ids)
+    skillsets_by_skill = await skillset_service.batch_skillsets_for_skills(skill_ids)
     pages = max(1, math.ceil(total / page_size))
     return PaginatedSkills(
-        items=[_skill_to_list_out(s, labels=labels_by_skill.get(str(s.id), [])) for s in items],
+        items=[
+            _skill_to_list_out(
+                s,
+                labels=labels_by_skill.get(str(s.id), []),
+                skillset_count=len(skillsets_by_skill.get(str(s.id), [])),
+            )
+            for s in items
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -167,7 +183,26 @@ async def create_skill(
         if e.existing_slug:
             detail += f" See /skills/{e.existing_slug}"
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    if body.skillset_slug:
+        await _auto_add_to_skillset(body.skillset_slug, skill.slug, user)
     return _skill_to_out(skill)
+
+
+async def _auto_add_to_skillset(skillset_slug: str, skill_slug: str, user: User) -> None:
+    """Add a newly created skill to the submitter's own skillset.
+
+    Owner-only, so an admin's request for another user's skillset is ignored too. A refusal is
+    logged and swallowed: the skill already exists, and failing the request would make a retry
+    fail as a duplicate. skillset_slug is unvalidated request text, hence %r.
+    """
+    try:
+        skillset = await skillset_service.get(skillset_slug)
+        if skillset.created_by != user.user_id:
+            logger.info("[CREATE] auto-add skipped: skillset %r is not owned by %s", skillset_slug, user.user_id)
+            return
+        await skillset_service.add_skill(skillset.slug, skill_slug, user)
+    except SkillsetError as exc:
+        logger.info("[CREATE] auto-add skipped: skillset %r: %s", skillset_slug, exc)
 
 
 @router.get("/{slug}", response_model=SkillOut)
@@ -206,7 +241,8 @@ async def get_skill(slug: str, viewer: Optional[User] = Depends(get_optional_use
             )
     from app.models.skill import VisibilityEnum
     omit_content = skill.visibility == VisibilityEnum.internal and not viewer
-    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating, my_flag=my_flag_out, omit_content=omit_content)
+    skillsets = (await skillset_service.batch_skillsets_for_skills([str(skill.id)]))[str(skill.id)]
+    return _skill_to_out(skill, labels=skill_labels, my_rating=my_rating, my_flag=my_flag_out, omit_content=omit_content, skillsets=skillsets)
 
 
 @router.post("/{slug}/rate", response_model=RateSkillOut)

@@ -238,8 +238,9 @@ class SkillsetService:
         if not skill_ids:
             return {}
         result: dict[str, List[SkillsetRef]] = {sid: [] for sid in skill_ids}
-        holders = await Skillset.find({"members.skill_id": {"$in": skill_ids}}).sort("name").to_list()
-        for skillset in holders:
+        holders = await Skillset.find({"members.skill_id": {"$in": skill_ids}}).to_list()
+        # Case-insensitive name order, so "Second" does not sort before "first".
+        for skillset in sorted(holders, key=lambda h: (h.name.casefold(), h.slug)):
             ref = SkillsetRef(slug=skillset.slug, name=skillset.name)
             for member in skillset.members:
                 if member.skill_id in result:

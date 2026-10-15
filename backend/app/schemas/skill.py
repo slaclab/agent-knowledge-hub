@@ -44,6 +44,8 @@ class SkillCreate(BaseModel):
     # local submission fields (source_type='local')
     source_type: str = "github"
     snapshotted_files: Dict[str, str] = Field(default_factory=dict)
+    # Add the new skill to this skillset when the submitter owns it; ignored otherwise.
+    skillset_slug: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_repo_url(self) -> "SkillCreate":
@@ -138,6 +140,8 @@ class SkillOut(BaseModel):
     rating_count: int
     flag_count: int
     labels: List[LabelOut] = []
+    skillset_count: int = 0
+    skillsets: List[SkillsetRef] = []
     my_rating: Optional[int] = None
     my_flag: Optional[object] = None  # FlagOut | None — avoid circular import; typed at route layer
 
@@ -173,6 +177,7 @@ class SkillListOut(BaseModel):
     submitted_at: datetime
     updated_at: datetime
     labels: List[LabelOut] = []
+    skillset_count: int = 0
 
     model_config = {"from_attributes": True}
 

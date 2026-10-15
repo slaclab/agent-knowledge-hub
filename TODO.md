@@ -51,5 +51,5 @@
 | [047](todo/047-marketplace-route-reachable.md) | marketplace.json route that Claude Code can reach | ⬜ Open |
 | [048](todo/048-install-from-files-route.md) | Install internal skills through the files route, confined to the skill folder | ⬜ Open |
 | [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ⬜ Open |
-| [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | 🔍 Reviewed |
+| [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | 🔄 In Progress |
 | [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client leaves MCP servers to the user and refuses agents it cannot vet | 🔍 Reviewed |

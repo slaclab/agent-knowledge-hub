@@ -47,3 +47,9 @@
 | [043](todo/043-sec-tls-ingress.md) | **SEC MED** — Confirm TLS termination on ingress (HSTS / force SSL redirect) | ✅ Complete |
 | [044](todo/044-sec-low-findings.md) | **SEC LOW** — Low-severity hardening batch (L1–L7, I2): health, log level, header validation, lockfile | ✅ Complete |
 | [045](todo/045-sec-repo-url-skill-path-allowlist.md) | **SEC HIGH** — Allow-list `repo_url` and `skill_path` characters at create time | 📋 Preparing |
+| [046](todo/046-marketplace-git-subdir-sources.md) | marketplace.json plugin sources: `git-subdir` with the skill's path and pinned commit | ⬜ Open |
+| [047](todo/047-marketplace-route-reachable.md) | marketplace.json route that Claude Code can reach | ⬜ Open |
+| [048](todo/048-install-from-files-route.md) | Install internal skills through the files route, confined to the skill folder | ⬜ Open |
+| [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ⬜ Open |
+| [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | ⬜ Open |
+| [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client asks before it adds an MCP server or an agent, and keeps credentials out of them | ⬜ Open |

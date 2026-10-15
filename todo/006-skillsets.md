@@ -1178,6 +1178,10 @@ FR-7 › Failure rule rests on this git behaviour, checked on 2026-10-14:
 
 - `git_prompt()` runs an askpass program from `GIT_ASKPASS`, `core.askPass`, or `SSH_ASKPASS` before it consults `GIT_TERMINAL_PROMPT`, and skips askpass when `GIT_ASKPASS` is set but empty. <https://github.com/git/git/blob/master/prompt.c>, <https://git-scm.com/docs/git#Documentation/git.txt-GITTERMINALPROMPT>. Git Credential Manager's own prompts are governed by `GCM_INTERACTIVE`. <https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/environment.md>
 
+The Cogito deployment depends on this task, recorded on 2026-10-14:
+
+- **Cogito TODO #200 (`slaclab/cogito`), hub request H-4.** Cogito plans for its facility curators to keep Cogito's curated skill sets as skillsets here. For Cogito a skillset is a proposal: a set reaches Cogito sessions only through a reviewed lock file in Cogito's own repository that pins each skill by commit, so what this catalog shows for a set can differ from what a Cogito image carries. Cogito's lock admits only skills from anonymously readable repositories, so it cannot carry `internal` members, and it refuses a set named like any skill slug, because Cogito sessions pick sets and skills by bare name. Cogito's open question of who curates each set waits on this task; no Cogito code waits on it. FR-7 › Auth rule's `$(cat ~/.s3df-access-token)` places the token in curl's arguments and reads a file that a Cogito session's `$HOME` lacks; #050 replaces it with a helper that Slice 4 can call.
+
 ---
 
 ## Test Plan

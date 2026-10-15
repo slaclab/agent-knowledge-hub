@@ -1,7 +1,7 @@
 # TODO #051 — Client Leaves MCP Servers to the User and Refuses Agents It Cannot Vet
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** ⬜ Open (narrowed 2026-10-15 after an UNSTABLE board review; fresh review pending)
+> **Status:** 🔍 Reviewed
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-10-14
@@ -46,38 +46,55 @@ As of 2026-10-14:
 
 ## Goals
 
-1. The client never adds, changes, or removes an MCP server. The user adds one, if at all, after reading its configuration.
+1. The client never adds, changes, or removes an MCP server on its own. The user adds one, if at all, after reading its configuration, by running its printed command or by asking Claude to run it (FR-1 (f)). This covers the servers a skill declares in `plugin.json`, not one its own `SKILL.md` adds when invoked (Non-Goals).
 2. The client writes an agent file only when every frontmatter key it declares is in FR-2's set.
 3. The client writes no plugin manifest and no install manifest taken from the skill's own files.
 4. The install asks no new question, so `install skillset` stays unattended after its one confirmation (#006 › FR-7).
 
 ## Non-Goals
 
-- Commands in `~/.claude/commands/` and the skill's own `SKILL.md`, including their `allowed-tools` and `hooks` frontmatter. They carry the same trust as installing the skill, which the user asked for.
+- Commands in `~/.claude/commands/` and the skill's own `SKILL.md`, including their `allowed-tools` and `hooks` frontmatter. They carry the same trust as installing the skill, which the user asked for. FR-2's rule against replacing a file the user already has still covers command files, because replacing a user's own command is a different harm from the content the user accepts by installing. That trust includes running the author's code: a skill's or command's `` !`…` `` and ```` ```! ```` blocks run each time it is invoked, by Claude or by the user, without a prompt for any command its own `allowed-tools` pre-approves, and its `hooks` stay registered for the rest of that session (Claude Code documentation, `skills` and `hooks`). So FR-1 to FR-3 keep the client from writing the servers, agents and plugin manifest a skill declares; they do not stop an author whose `SKILL.md` runs `claude mcp add-json` or writes into `~/.claude/agents/` itself.
 - Supplying the S3DF token to an MCP server (Follow-ups).
 - The forms Codex and OpenCode need for a server's configuration (Follow-ups).
 - Installing through Claude Code's `/plugin` system (#046, #047).
-- Removing servers that an earlier version of this client added. `remove` prints the command; it runs nothing.
+- Removing servers that an earlier version of this client added. `remove` prints the command; it runs nothing unless the user then asks for it (FR-1 (f)).
 
 ---
 
 ## Requirements
 
-Where: `skill/SKILL.md` › Install, step 4 (FR-1 to FR-3), step 5 and the success line (FR-4, FR-5), and › Update and › Remove (FR-5).
+Where: `skill/SKILL.md` › Install, step 2 (FR-3's clone directory), step 4 (FR-1 to FR-3), step 5 and the success line (FR-4, FR-5), and › Update and › Remove (FR-5).
 
 | ID | Requirement |
 |---|---|
-| FR-1 | **MCP servers.** The client runs no `claude mcp` command at any point. For each entry in the skill's `plugin.json` `mcp-servers` list it does the following. (a) If the entry's `name` does not match `^[A-Za-z0-9][A-Za-z0-9_-]*$`, the server is not shown with a command, and the closing message names it with that reason; a name such as `-sproject` or `$(touch x)` therefore never appears in a command. (b) Otherwise it builds the configuration Claude Code takes: `type` from `transport` (`stdio`, `http` or `sse`); for `stdio`, `command`, `args` (`[]` when absent) and `env`; for `http` and `sse`, `url` and `headers`. Other fields are left out and named. A `transport` outside those three, an `args` that is not a list of strings, or an `env` or `headers` that is not a map of strings to strings leaves the server without a command, with the reason, because `claude mcp add-json` refuses such a configuration (Measured facts › `claude mcp add-json`). (c) It writes the configuration as JSON to `~/.claude/skills/<slug>/.akh-mcp/<name>.json` with its file-writing tool, never through a shell `echo`. (d) After the closing message it prints one block per server in the words of § Server block. (e) An entry whose `auth.type` is `slac-sso` gets its block without a command, and the block says the server needs an S3DF sign-in the client cannot pass to an MCP server. |
-| FR-2 | **Agents.** The client reads each listed agent file's frontmatter from the clone. It writes the file to `~/.claude/agents/` only if every key is one of `name`, `description`, `tools`, `disallowedTools`, `model` and `color`, and only if no file of that name exists there that this skill's manifest does not record. Otherwise it does not write the file, and the closing message names the agent, the keys outside the set or the clash, and the file's address in the repository at the installed commit (`<repo_url>/blob/<commit>/<path>`). Frontmatter the client cannot parse counts as outside the set. A set of allowed keys, not a list of refused ones, keeps a key that a later Claude Code release adds from being written unseen. An agent with no `tools` key gets every tool the session has, which the closing message says. |
-| FR-3 | **Folder copy.** Copying the skill folder into `~/.claude/skills/<slug>/` leaves out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source, and the closing message names any it left out. The first stops the copied folder from loading as a plugin; the second and third stop the skill's own files from standing in for what the client records (FR-5) or prints (FR-1). |
-| FR-4 | **Closing message.** The success line is followed by: the agents written, each with its `tools` or "every tool"; the agents and servers left out, each with its reason; and then the FR-1 blocks. Values from the skill's files are shown with control characters and Unicode line separators, paragraph separators and format characters (categories Zl, Zp, Cf) written as `\uXXXX`, so a value cannot add lines or reorder what is shown. |
-| FR-5 | **Manifest, update, remove.** `.installed-manifest.json` records the agent files the install wrote and the server names it printed a block for. `remove` deletes the recorded agent files and the skill folder, and for each recorded server name prints `claude mcp remove --scope user <name>`, saying the user added it themselves and can remove it with that command; it runs no `claude mcp` command. `update` keeps today's order (remove, then install) and, before it overwrites a server's `.akh-mcp/<name>.json`, compares the old file with the new configuration as parsed JSON; a block whose configuration changed says so, so a user who added that server knows to review it again. |
+| FR-1 | **MCP servers.** The client runs no `claude mcp` command on its own and never offers to run one; (f) is the only case in which it runs one. For each entry in the skill's `plugin.json` `mcp-servers` list it does the following. (a) If the entry's `name` does not match `^[A-Za-z0-9][A-Za-z0-9_-]*$`, the server is not shown with a command, and the closing message names it with that reason; a name such as `-sproject` or `$(touch x)` therefore never appears in a command. A name that more than one entry uses, compared without regard to case, gets no command for any of those entries, because each would write the same `.akh-mcp/<name>.json`, which on a case-insensitive filesystem such as macOS's default is one file for `Foo` and `foo` (FR-3), and the block the user reads could show a configuration other than the one the command adds. (b) Otherwise it builds the configuration Claude Code takes: `type` from `transport` (`stdio`, `http` or `sse`; `stdio` when `transport` is absent, as #023 › plugin.json extended schema and `claude mcp add` both default, and as entries written by this client's earlier `create` scaffold have it); for `stdio`, `command`, `args` (`[]` when absent) and `env`; for `http` and `sse`, `url` and `headers`. Other fields are left out and named. A `transport` outside those three, a `stdio` entry with no `command` string or an `http` or `sse` entry with no `url` string, an `args` that is not a list of strings, or an `env` or `headers` that is not a map of strings to strings leaves the server without a command, with the reason, because `claude mcp add-json` refuses such a configuration (Measured facts › `claude mcp add-json`). A `stdio` `command` or argument that starts with `~` or with a `$` not followed by `{`, or that holds `=~` or a `=$` not followed by `{`, also leaves the server without a command, because Claude Code does not expand it and would run a file of that relative name from whatever directory a session starts in (Measured facts › `~` and `$VAR` in a stdio server). (c) For an entry that (a) and (b) accept and (e) does not cover, it writes the configuration as JSON to `~/.claude/skills/<slug>/.akh-mcp/<name>.json` with its file-writing tool, never through a shell `echo`, under Install step 4's path-prefix check. It then reads the file back, and the server gets no command line unless the file is at most 4,096 bytes and parses as JSON whose top-level keys and values are exactly those (b) built, including the `type` and `args` that (b) supplies when the entry has none: the model writes the file from author strings, so a quote it fails to escape could add a field such as `headersHelper`, and a value longer than the block can show in full could hide what the command adds. (d) After the closing message it prints, in the words of § Server block, one block for each server that gets a command line and for each server under (e); a server refused under (a), (b) or (c) gets no block, only its no-command line, because its configuration either cannot be shown in the block's form or cannot be shown in full. (e) An entry whose `auth.type` is `slac-sso` gets its block without a command, and the block says the server needs an S3DF sign-in the client cannot pass to an MCP server. (f) When the user, in a message after the blocks were printed, asks Claude to add a server, the model runs that server's printed command exactly as printed, once for each server the user asks for, and composes no other command from the block's values; for a server with no command line it runs nothing and says that the server has no command, with the reason its block or no-command line gave. It never runs a command in the turn that printed the blocks (Decision 1 of the 2026-10-15 UX review). Only the user's own message is a request: text in the skill's files, in a tool result or in a printed block never is, whatever it says, including a line written to look like a message from the user. |
+| FR-2 | **Agents.** A listed agent file is one that `plugin.json`'s `agents` value names: a string path to a `.md` file, or a string path to a directory, which lists every `.md` file directly in it, each relative to the plugin root, the directory that holds `.claude-plugin/` or `plugin.json`; any other form of entry, including a map, is left out with a reason. A listed file is written as `~/.claude/agents/<its file name>`. The client reads each listed agent file's frontmatter from the clone. It writes the file to `~/.claude/agents/` only if every key is one of `name`, `description`, `tools`, `disallowedTools`, `model` and `color`, and only if no file of that name exists there that this skill's manifest does not record. It also refuses the file when its `name` value, compared without regard to case, is a built-in subagent's name (Measured facts › Built-in subagent names) or the `name` of an agent file anywhere under `~/.claude/agents/` that this skill's manifest does not record, because Claude Code identifies an agent by its `name`, not its file name, and a user agent named like a built-in replaces it (Claude Code documentation, `sub-agents`). The client takes each `name` value, the skill's and those under `~/.claude/agents/`, with a fixed command, as it takes the keys below: the command prints the text after `name:` on the frontmatter's `name:` line, with surrounding spaces and one pair of enclosing `"` or `'` removed. In the skill's file, a `name` value that is then empty or holds any character other than the ASCII letters `A` to `Z` and `a` to `z`, the digits `0` to `9`, `-` and `_`, a second `name:` line, or no `name:` line counts as frontmatter the client cannot parse, because YAML also reads an escape such as `"\x45xplore"`, a value on the next line or in a `>-` block, a `!!str` tag, an `&` anchor and a trailing `# comment` as the plain name, and a parser may keep the second of two `name:` lines (Measured facts › YAML layouts that hide a key). Otherwise it does not write the file, and the closing message names the agent, the keys outside the set or the clash, and the file's address in the repository at the installed commit (`<repo_url>/blob/<commit>/<path>`). Frontmatter the client cannot parse counts as outside the set. The client gets the keys by running a fixed command from `SKILL.md` over the clone's file, never by reading the file itself, so that the file's length and wording cannot change the result (Measured facts › YAML layouts that hide a key). The key command and the `name` command are `awk` programs, never `grep`, because `grep` prints none of the lines of a file that holds a NUL byte, both in a Claude Code session, where `grep` is a shell function that runs `ugrep -I`, and as GNU grep, so the key command's output would be empty and would pass that file's `hooks` (Measured facts › `grep` on a file with a NUL byte). From line 1, which must be exactly `---`, to the next line that is exactly `---`, the command prints every line that is not blank, does not start with a space or with `- `, and does not start with one of the six keys followed by `:` and then a space or the end of the line, since YAML reads `name:hooks:` as a key `name:hooks`; it also prints the first non-blank line if that line starts with a space, because YAML allows the whole mapping to be indented, and prints a line when either `---` is missing. Any output refuses the file. When every output line starts with a key of ASCII letters, digits, `-` and `_` other than the six, followed by `:` and then a space or the end of the line, the closing message names those keys; any other output counts as frontmatter the client cannot parse. So a `hooks:` line names `hooks`, while an indented first line or a `"hooks":` line gets the cannot-be-read line. A set of allowed keys, not a list of refused ones, keeps a key that a later Claude Code release adds from being written unseen. An agent with no `tools` key gets every tool the session has, which the closing message says. The rule against replacing a file that this skill's manifest does not record also covers each command file in `~/.claude/commands/` and the folder `~/.claude/skills/<slug>/` itself: such a command is not written, and a skill folder that exists without this client's manifest stops the install before anything is written, except for an `install skillset` member whose folder the user agreed to replace (Relationship to Other Tasks › #006). A skill folder that holds this client's manifest also stops `install` before anything is written, because the skill is already installed, FR-3's test would find that manifest and remove the folder, and the files it records would then be recorded nowhere; `update` replaces an installed skill. Install makes both folder checks at the start of step 4, which `update` reaches only after its remove step (FR-5). Every deletion of `~/.claude/skills/<slug>` by the client, after a Yes to #006's replace question, under FR-3's filesystem test, and in `remove` and `update`, removes that path itself, never spelled with a trailing `/`, and when it is a symbolic link removes only the link, because a recursive delete of a link spelled with a trailing `/` deletes the files of the folder it points to, which for a user's own skill is often a working copy (Measured facts › Deleting a link to a folder). The closing message names each, in the words of § Server block › Other closing-message lines. |
+| FR-3 | **Folder copy.** Copying the skill folder into `~/.claude/skills/<slug>/` leaves out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source, and the closing message names any it left out. The first stops the copied folder from loading as a plugin; the second and third stop the skill's own files from standing in for what the client records (FR-5) or prints (FR-1). Install step 2 clones into a new directory made by `mktemp -d`, never a fixed path or one that already exists, and FR-1 to FR-3 read and copy only from that directory, because another user of a shared node could create a predictable directory in `/tmp` first and change its files between FR-2's check and the copy. The client reads, writes and copies no symbolic link from the clone: a listed agent or command file, or an entry in the skill folder, that is a link is left out and named, because reading one can put a file such as `/proc/self/environ` into the session, and a copied link can redirect FR-1 (c)'s write. Right after the copy, before it writes anything else, the client tests through the filesystem that none of the three names exists in `~/.claude/skills/<slug>/`, and if one does it removes that folder and stops the install, because on a case-insensitive filesystem such as macOS's default a source entry spelled differently, including with U+212A KELVIN SIGN for `k`, is the same entry. |
+| FR-4 | **Closing message.** The success line is followed by: the agents written, each with its `tools` or "every tool"; the agents, commands, skill-folder entries, symbolic links and servers left out, each with its reason (FR-1 to FR-3); and then § Server block › Lead-in and the FR-1 blocks, all in the words of § Server block. In `install skillset` these lines follow #006's summary line instead (Relationship to Other Tasks › #006). An install that stops under FR-2's folder checks or FR-3's filesystem test prints its stop line in place of the success line and of every other line. In `update`, the remove step's lines (FR-5) follow the left-out lines and come before the lead-in, so the blocks the user acts on stay last; after an `update` that stops, they follow the stop line, with a remove line for every server the old manifest records, because no version of the skill is then installed. Values from the skill's files are shown with every character outside U+0020 to U+007E written as `\uXXXX` (`\u{XXXXX}` above U+FFFF), so a value cannot add lines or reorder what is shown, and a look-alike letter such as U+0456 in a host name, or a character that prints as blank, shows as its code. Configuration values rarely need other characters, and one range is simpler to apply than a list of categories. The blocks and every line that carries a value from the skill's files are printed inside one fenced code block, so Claude Code's Markdown rendering does not change them; no such value starts a line, so none can close the fence. |
+| FR-5 | **Manifest, update, remove.** `.installed-manifest.json` records `commands` and `agents` as paths relative to `~/.claude/` (for example `agents/reviewer.md`), so that a Cogito session on another host, whose `$HOME` differs, names the same files in the shared `~/.claude/`, and records `mcp_servers`, written even when empty, as the names of the servers whose block carried the add command; a server refused under FR-1 (a), (b), (c) or (e) is not recorded. An entry of an earlier manifest that is an absolute path is read by its part after the last `/.claude/`. `remove` deletes a recorded entry only when, read as a path relative to `~/.claude/`, its first part is `agents` or `commands`, no part is empty, `.` or `..`, and it names a regular file, not a symbolic link or folder; any other entry, including an absolute path with no `/.claude/` in it, is left in place and named, because an entry such as `/x/.claude/agents/../../.ssh/authorized_keys` would otherwise delete a file outside those folders, and Install step 4's path-prefix check guards writes, not deletions. `remove` deletes the recorded command and agent files that pass this test and the skill folder, and for each name in `mcp_servers` prints `claude mcp remove --scope user <name>` in the words of § Server block › Other closing-message lines, which do not assume the user added it; it runs no `claude mcp` command except under FR-1 (f), which applies to a printed `remove` command as to an `add-json` one. A manifest without the server key was written by an earlier client, which ran `claude mcp add` at its default local scope (Measured facts › `claude mcp add` scope). For such an install `remove` takes the names from the installed `plugin.json`'s `mcp-servers` list, keeps those that match FR-1 (a)'s pattern, and for each prints that an earlier version of this client may have added it for the directory that install ran in, with `claude mcp remove --scope local <name>` to run from that directory. `update` keeps today's order (remove, then install), with Install steps 1 to 3 moved first: it reads the old manifest and every old `.akh-mcp/<name>.json`, fetches and clones the new version and reads its `plugin.json`, then runs the remove step, then Install from step 4 on that clone, so a failed fetch or clone leaves the old install as it was. When `~/.claude/skills/<slug>/` exists and holds no `.installed-manifest.json`, `update` stops before Install step 1 with FR-2's line for a folder /agent-knowledge-hub did not install, and removes nothing, because its remove step would otherwise delete a folder that FR-2 keeps `install` from replacing, before step 4's folder check could see it. Its remove step prints a server's remove line only when the new version gives that server no command line, either because it no longer lists the server or because it refuses it under FR-1 (a), (b), (c) or (e). A remove line printed above a block that offers the same server's add command would tell the user, or the model under FR-1 (f), to remove a server the skill still uses. A server that gets no command line is recorded in no manifest, so no later `remove` would print its line. For a manifest with no server key it prints the earlier-client line for every name that `remove` would take from the installed `plugin.json`, whether or not the new version lists it, because that server was added at local scope without the user's choice, has no old `.akh-mcp/` file for a "Changed" line to compare with, and would otherwise be named nowhere while its new block offers to add it again at user scope. It compares each old `.akh-mcp/<name>.json` with the new configuration as parsed JSON; a block whose configuration changed says so, so a user who added that server knows to review it again. |
 
 ---
 
 ## Server block
 
-The block FR-1 prints for each server, with `<…>` filled from the configuration and each line after the first present only when it applies:
+This section owns the words of the closing message's MCP server and agent lines; where another section paraphrases them, this section wins. `<…>` is filled from the configuration, and a line with a condition in parentheses at its end is printed only when the condition holds; the parenthesised condition itself is never printed.
+
+### Lead-in
+
+Printed once, before the first block, and not at all when no server gets a block (FR-1 (d)). `<N>` and the names count the servers that get a block:
+
+```
+<slug> uses <N> MCP server(s) that were not added: <name>, <name>. The parts of <slug> that use them will not work until you add them yourself.
+To add one, read its block below, then run its command yourself, in a terminal on this machine or after typing ! in this Claude Code session, or ask Claude to add it by name. The server is then available in every project <in Cogito sessions on <host> only; on another Cogito host, run the command again | on every S3DF machine that shares your home directory>, in Claude Code sessions you start after adding it. A server you already added needs nothing unless its block says "Changed".
+```
+
+In `install skillset` the first line is replaced by `<K> of the installed skills use MCP servers that were not added: <slug> (<name>, <name>), <slug> (<name>). Each of these skills works only in part until you add its servers.`, and each member's lines and blocks follow under a line `── <slug> ──`, in install order. A member with no FR-4 line gets no such line, and a run in which no member's server gets a block prints no lead-in but still groups the members' FR-4 lines this way.
+
+The client prints the Cogito form when `getent passwd "$(id -un)" | cut -d: -f6` reports a home directory and `$HOME` is not that directory (#050 › Measured facts › `$HOME` in a Cogito session). An empty result, as on macOS, which has no `getent`, counts as no home and gives the other form, as in #050 › FR-2. `<host>` comes from `hostname -s`. The scope sentence follows Measured facts › `$HOME` and `~/.claude` in a Cogito session and › `~/.claude.json` outside Cogito.
+
+### Block
+
+Printed once for each server FR-1 (d) gives a block:
 
 ```
 MCP server "<name>" (<stdio | http | sse>) — not added
@@ -85,19 +102,43 @@ MCP server "<name>" (<stdio | http | sse>) — not added
   Connects to: <url>                         (http, sse)
   env <KEY>=<value>  /  header <Name>: <value>   (one line each, in full)
   Warning: this runs a program as you, with access to every file you can read.   (stdio)
-  Warning: ${<VAR>} is filled from your environment and sent to this server.     (any ${…})
-  Warning: <npx | uvx | pipx> downloads and runs code each time the server starts.
+  Warning: ${<VAR>} is filled from your environment and passed to this program. Set <VAR> before you start Claude Code; this server needs it.     (stdio; one line per ${…} variable, except a ${HOME} that starts a ${HOME}/.claude/skills/<slug>/… path)
+  Warning: ${<VAR>} is filled from your environment and sent to <host>. Add this server only if you would give <host> the value of <VAR>.     (http, sse; one line per ${…} variable; <host> is the host part of url)
+  Warning: <npx | uvx | pipx> fetches the code it runs from the internet, so that code can change without a new install of <slug>.
   Warning: runs inline shell code (sh -c, bash -c, python -c).
-  Warning: <~/… | $VAR/…> is not expanded by Claude Code and is read from the directory the session starts in.
-  Runs <path> from this skill's folder.      (a ${HOME}/.claude/skills/<slug>/… path)
-  Changed since the last install of <slug>.  (update, FR-5)
-  This server needs your S3DF sign-in, which this client cannot pass to an MCP server yet, so it is not added.   (auth.type slac-sso; no command line follows)
-  To add it yourself after reviewing the above:
+  Warning: env <KEY> starts with ~ or $, which Claude Code does not expand, so the program gets it as written and may read a file of that name from whatever directory a session starts in. Tell the skill's submitter to write ${HOME} instead.   (an env value starting with ~, or with $ not followed by {; a command or argument of that form gets no command line, FR-1 (b))
+  Runs <path> from this skill's folder. An update of <slug> can change that file without this block saying "Changed".   (a ${HOME}/.claude/skills/<slug>/… path)
+  Changed since the last install of <slug>. If you added it before, remove the old one first: claude mcp remove --scope user <name>   (update, FR-5)
+  Another skill in this run also brings a server named "<name>"; only one of them can be added under that name.   (install skillset, second and later blocks of one name)
+  This server needs your S3DF sign-in, which /agent-knowledge-hub cannot yet pass to an MCP server, so there is no command to add it.   (auth.type slac-sso; no command line follows)
+  To add it, run:
     claude mcp add-json --scope user <name> "$(cat ~/.claude/skills/<slug>/.akh-mcp/<name>.json)"
-  With --scope user it applies in every project <on this machine (Cogito) | on every S3DF machine that shares your home>.
 ```
 
-The command reads the configuration from the file FR-1 wrote, so no value from the skill's author is parsed by the shell: a command substitution's output is not expanded again (Measured facts › Command substitution). The scope line follows Measured facts › `$HOME` and `~/.claude` in a Cogito session and › `~/.claude.json` outside Cogito.
+The command reads the configuration from the file FR-1 wrote, so no value from the skill's author is parsed by the shell: a command substitution's output is not expanded again (Measured facts › Command substitution).
+
+### Other closing-message lines
+
+```
+Agent <name> installed as ~/.claude/agents/<file>; it can use <tools | every tool this session has, because it lists no tools>.
+Agent <name> not installed: it declares <keys>, which /agent-knowledge-hub does not install. <one sentence per key, below> Read it at <address>. To use it anyway, save that file as ~/.claude/agents/<file> yourself; until then, <slug> works except where it calls this agent.
+Agent <file> not installed: <its settings could not be read | its name: line does not hold a name of only letters, digits, - and _>, so /agent-knowledge-hub cannot tell what it would do or which agent it would replace. Read it at <address> and tell the skill's submitter; until it is fixed, <slug> works except where it calls this agent.   (FR-2, frontmatter the client cannot parse; the second form when FR-2's name rule refused it)
+Agent <name> not installed: ~/.claude/agents/<file> already exists and is not a file /agent-knowledge-hub installed for <slug>, so it was left unchanged. To use this skill's agent instead, compare yours with <address>, move yours elsewhere, and run /agent-knowledge-hub update <slug>.
+Agent <name> not installed: its name is that of <Claude Code's built-in <name> agent | the agent in ~/.claude/agents/<file>>, which Claude Code would replace with it. Read it at <address> and tell the skill's submitter; until it has a name of its own, <slug> works except where it calls this agent.
+MCP server "<name>" has no command: <reason, below>. Tell the skill's submitter, or flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.
+Left out of ~/.claude/skills/<slug>/: <.claude-plugin/ | .installed-manifest.json | .akh-mcp/>, which /agent-knowledge-hub never copies from a skill.
+Command <file> not installed: ~/.claude/commands/<file> already exists and is not a file /agent-knowledge-hub installed for <slug>, so it was left unchanged. To use this skill's command instead, compare yours with <address>, move yours elsewhere, and run /agent-knowledge-hub update <slug>.   (FR-2)
+Not installed: ~/.claude/skills/<slug>/ already exists and has no record of an install by /agent-knowledge-hub, so nothing was written. Move it elsewhere and run the install again.   (FR-2; also `update`, FR-5)
+Not installed: <slug> is already installed, so nothing was written. To replace it with the current version, run /agent-knowledge-hub update <slug>.   (FR-2, a skill folder that holds this client's manifest)
+Left out: <path>, a symbolic link <listed as an agent | listed as a command | in the skill folder>, which /agent-knowledge-hub never reads or copies from a skill. If <slug> needs it, tell the skill's submitter.   (FR-3)
+Not installed: <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. Tell the skill's submitter.   (FR-3, the filesystem test, in install)
+Not updated: the new version of <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. The update had already removed the version you had; MCP servers you added for it are still set up, and claude mcp list shows them. Tell the skill's submitter.   (FR-3, the filesystem test, in update)
+MCP server "<name>" from <slug> is still set up if you added it. To remove it: claude mcp remove --scope user <name>   (claude mcp list shows every MCP server you have)   (remove, and update for a server to which the new version gives no command line, FR-5)
+MCP server "<name>" from <slug> may have been added by an earlier version of /agent-knowledge-hub, only for the directory that install ran in, or for the whole git repository that holds it. To remove it, run this from that directory: claude mcp remove --scope local <name>   (remove and update, FR-5, a manifest with no server key)
+Not removed: <entry>, which the manifest of <slug> lists but which is not a file in ~/.claude/agents/ or ~/.claude/commands/, so it was left in place.   (remove, and update's remove step, FR-5; <entry> written with FR-4's escapes)
+```
+
+The key sentences: `hooks` — "hooks runs commands or sends requests automatically."; `mcpServers` — "mcpServers connects MCP servers of its own."; `permissionMode` — "permissionMode changes which actions Claude may take without asking you."; any other key — "<key> is a setting /agent-knowledge-hub does not check."; frontmatter that cannot be parsed gets its own line above, named by its file name, because its name may be what could not be read, and with no step to save it by hand, because it may carry a built-in agent's name in a form the name rule refuses; an `agents` entry that is not a path — "the skill lists it in a form /agent-knowledge-hub does not read." `<address>` is FR-2's repository address. The no-command reasons: a name outside FR-1 (a)'s pattern — "its name may hold only letters, digits, - and _, and must start with a letter or digit"; a transport outside FR-1 (b)'s three — "its transport "<value>" is not stdio, http or sse"; a missing `command` or `url` — "it has no <command | url>, which a <stdio | http or sse> server needs"; a value of the wrong type — "its <args | env | headers> is not in the form Claude Code accepts (<args must be a list of text values | each env or header value must be text>)"; a `~` or `$` path under FR-1 (b) — "its <command | argument> <value> starts with ~ or $, which Claude Code does not expand, so it would run whatever file has that name in the directory a session starts in; the submitter should write ${HOME} instead"; a file over 4,096 bytes — "its configuration is too long to show in full"; a name that another entry uses — "another MCP server in <slug> has the same name, or one that differs only in capital letters", printed once for each spelling of the name; a file that does not match FR-1 (b)'s configuration — "the configuration file /agent-knowledge-hub wrote did not match the skill's entry".
 
 ---
 
@@ -105,7 +146,7 @@ The command reads the configuration from the file FR-1 wrote, so no value from t
 
 ### Why print, not add
 
-The first design added a server or agent after a question the model showed (§ Board Review). Each review round found configuration that acted despite the question, because the client was copying author-controlled configuration into the user's account and the only gate was text the model is told to follow. Printing the configuration and the command moves the decision to the user, who acts outside the client; the client then needs no clash checks, staging directory, manifest of server configurations, or prompt that the model must reproduce exactly. A refusal by key set, for agents, fails closed where a question would rely on the model's summary.
+The first design added a server or agent after a question the model showed (§ Board Review). Each review round found configuration that acted despite the question, because the client was copying author-controlled configuration into the user's account and the only gate was text the model is told to follow. Printing the configuration and the command moves the decision to the user, who acts by running the command or by asking Claude to run it in a later message (FR-1 (f)); the client then needs no clash checks, staging directory, manifest of server configurations, or prompt that the model must reproduce exactly. A refusal by key set, for agents, fails closed where a question would rely on the model's summary.
 
 ### Trade-offs
 
@@ -122,6 +163,7 @@ The first design added a server or agent after a question the model showed (§ B
 | Ask before adding each server and agent (the first design) | Three review rounds kept finding configuration that acted despite the question (§ Board Review) |
 | Install through Claude Code's `/plugin` system | Claude Code only; Codex and OpenCode have no such route, and #046 and #047 are not built (Follow-ups) |
 | A `headersHelper` that supplies the S3DF token | No catalog skill names a SLAC endpoint for its origin list; deferred (Follow-ups) |
+| The model declines to run a printed command even when the user asks, and tells the user to run it | A Cogito session may offer neither `!` nor a terminal (Implementation step 1 measures it), which would leave its users no way to add a server; and a `SKILL.md` with no rule for the request leaves the model to improvise a command from the block's values, which FR-1 (f)'s "exactly as printed" prevents |
 
 ---
 
@@ -130,10 +172,16 @@ The first design added a server or agent after a question the model showed (§ B
 | Fact | Value | How |
 |---|---|---|
 | Claude Code version | 2.1.281 | `claude --version` |
-| `claude mcp add-json` | Takes `<name> <json>` and `--scope` (`local`, `user` or `project`; default `local`). It refuses, with `Invalid configuration: : Invalid input` and exit 1, a configuration that has a `url` and no `type`, one that names the transport as `transport`, and one whose `env` value is an object. It stores a stdio configuration with no `args` with `"args": []` added and its top-level keys reordered. It refuses a name that already exists at that scope | `claude mcp add-json --help`; `add-json -s user` probes with `HOME` and `CLAUDE_CONFIG_DIR` set to a scratch directory, then reading that directory's `.claude.json` |
+| `claude mcp add-json` | Takes `<name> <json>` and `--scope` (`local`, `user` or `project`; default `local`). It refuses, with `Invalid configuration: : Invalid input` and exit 1, a configuration that has a `url` and no `type`, one that names the transport as `transport`, and one whose `env` value is an object. It stores a stdio configuration with no `args` with `"args": []` added and its top-level keys reordered. It refuses a name that already exists at that scope. On 2026-10-15 it accepted, exit 0, each shape FR-1 (b) builds, `stdio` with and without `env`, `http` and `sse` with and without `headers`, and printed no deprecation notice for `"type": "sse"`; it stored `headersHelper` as given and dropped an unknown `cwd` without a message | `claude mcp add-json --help`; `add-json -s user` probes with `HOME` and `CLAUDE_CONFIG_DIR` set to a scratch directory, then reading that directory's `.claude.json` |
+| `claude mcp add` scope | `claude mcp add` defaults to `local` scope (`-s, --scope <scope> Configuration scope (local, user, or project) (default: "local")`), and `claude mcp remove` with no `--scope` "removes from whichever scope it exists in". `skill/SKILL.md` › Install step 4 on `main` runs `claude mcp add <name> <command> [args...]` with no `--scope`, as every revision of that file has since commit `70a5ab8`, which added it, so a server an earlier client added is at local scope for the directory the install ran in. Local scope is stored in `.claude.json` under `projects` keyed by the git repository root that holds that directory, or by the directory itself outside a repository: `claude mcp add` run in `repo/sub` was stored under `repo`, and `claude mcp remove --scope local <name>` from `repo/sub` removed it, while one added in a non-repository `plain/sub` was not found from `plain` (`No MCP server named "<name>" in local scope`, exit 1) | `claude mcp add --help` and `claude mcp remove --help` on 2.1.281, 2026-10-15; `git log -S 'claude mcp add' --format=%h -- skill/SKILL.md` and `git show <commit>:skill/SKILL.md` for each revision; `claude mcp add`, `list` and `remove --scope local` in a throwaway `HOME`, 2026-10-15 (research review, round 2) |
 | `${VAR}` references | Claude Code stores a `${VAR}` in a stdio server's `env` or `args` or an `http` server's `headers` unexpanded, and expands it from its own environment when it starts or connects the server: a local listener received the expanded header value. A stdio server also inherits Claude Code's whole environment | Same scratch setup, with `PROBE_SECRET=<value> claude mcp get <name>` |
 | `~` and `$VAR` in a stdio server | Claude Code expands only `${VAR}`. `command` `~/tilde.sh` fails with `ENOENT: no such file or directory, posix_spawn '~/tilde.sh'`, while `${HOME}/brace.sh` runs. An unexpanded `~/…` is a path relative to the directory `claude` runs in | Same scratch setup |
-| Command substitution | `"$(cat <file>)"` passes the file's content as one argument without expanding a `$(…)` or `'` inside it, in bash and zsh | Measured in the first design's review, round 2 |
+| Command substitution | `"$(cat <file>)"` passes the file's content as one argument without expanding a `$(…)` or `'` inside it, in bash and zsh | Measured in the first design's review, round 2; repeated 2026-10-15 with `bash -c` and `zsh -f -c` on a file whose `args` held `$(touch <file>)`, which was not created |
+| Built-in subagent names | `Explore`, `Plan`, `general-purpose`, `claude`, `statusline-setup`, `claude-code-guide`, and `fork`, the subagent type Claude requests through the Agent tool to fork the conversation ("Claude starts a fork by requesting the `fork` subagent type"; an `Agent(fork)` deny rule names it as it names agents). Only `Explore` is documented as replaced by a user subagent of the same name ("A user or project subagent named `Explore` overrides the built-in"); for the rest the documentation does not say which one runs, because its priority table covers managed, `--agents`, project, user and plugin agents, not built-ins | `sub-agents` documentation › Built-in subagents and › Fork the current conversation, read 2026-10-15; not measured, because listing a session's agents needs a signed-in session |
+| YAML layouts that hide a key | PyYAML reads `hooks` as a top-level key in a frontmatter whose whole mapping is indented by two spaces, in flow style `{name: a, hooks: {}}`, under a quoted `"hooks":` key, and after a `description: \|` of 2,500 lines, where `hooks:` sits at line 2,504, past the Read tool's 2,000-line default. FR-2's command printed a line for each of these, for a file starting with a byte-order mark, for CRLF line ends and for an unclosed frontmatter, and nothing for a valid file or for a `description: \|` whose text holds an indented `hooks:`. PyYAML and js-yaml 4.1.1 also read `hooks` as a top-level key under `<<: {hooks: {}}` and an explicit `? hooks` key, for which FR-2's command printed a line, and read `name: "\x45xplore"`, and the same name with a `\u` or `\U` escape for the `E`, `name:` with `Explore` on the next indented line, `name: >-` with an indented `Explore`, `name: !!str Explore`, `name: &a Explore` and `name: Explore # c` as the name `Explore`, for which the key test prints nothing; for two `name:` lines PyYAML kept the second and js-yaml refused the file. Both read `name:hooks: {}` as a key `name:hooks`. `claude plugin validate` reported `YAML Parse error: Unexpected character` for a double-quoted value continued at column 0, and no error for a closing `--- ` with a trailing space followed by `hooks: {}`, which PyYAML and js-yaml refuse as a second document, so Claude Code ends the frontmatter at that line, before FR-2's command does | PyYAML 6.0.3 `yaml.safe_load` and a seven-line `awk` version of FR-2's command over scratch files on `sdfiana008`, 2026-10-15 (security review, round 1); js-yaml 4.1.1 from `frontend/node_modules` and `claude plugin validate --strict --json <dir>` on 2.1.281 over scratch files, 2026-10-15 (research review, round 2; the escaped forms repeated in round 3). Which parser Claude Code uses for agent frontmatter was not measured beyond its validator's error text |
+| `claude plugin list` and `CLAUDE_CONFIG_DIR` | With `HOME` set to a scratch directory and `CLAUDE_CONFIG_DIR` unset, `claude plugin list --json` listed `<name>@skills-dir` for a folder under `$HOME/.claude/skills/` holding `.claude-plugin/plugin.json`, and nothing for folders holding only `.mcp.json`, `hooks/hooks.json`, `settings.json`, `.claude/` files, a root `plugin.json` or `.akh-mcp/`. With both set to one directory, it reads `<dir>/skills/` instead (first design's review, round 3) | `HOME=<scratch> claude plugin list --json`, 2026-10-15 |
+| Deleting a link to a folder | With `skills/my-skill` a symbolic link to a directory holding `SKILL.md`, `rm -rf skills/my-skill/` exited 0, deleted `SKILL.md` from the directory the link points to, and left the link; `rm -rf skills/s2`, for a second such link spelled without the `/`, removed only the link and left its target's file | GNU coreutils `rm` 9.7 in a scratch directory on `sdfiana008`, 2026-10-15 (security review, round 2) |
+| `grep` on a file with a NUL byte | For an agent file whose frontmatter holds `name`, `description` and `hooks` and whose body holds one NUL byte, a `grep -v -E` form of FR-2's key test printed nothing: the session's `grep`, a shell function that runs `ugrep -I`, exited 1, and GNU grep 3.11 wrote only `binary file matches` to stderr. The session's `grep` also printed nothing for a `\xff` byte in the body or in `description`. The `awk` form printed `hooks:` for each file under gawk 5.2.1 and mawk 1.3.4, with `LC_ALL=C` and `C.UTF-8`. `claude plugin validate --strict --json` parsed the frontmatter of such files: one whose frontmatter is a list got `Frontmatter must be a YAML mapping (key: value pairs), got an array.` | `type grep` in a Claude Code Bash tool call; scratch files on `sdfiana008` (Debian 13, `/bin/sh` dash 0.5.12), 2026-10-15 (research review, round 3) |
 | `$HOME` and `~/.claude` in a Cogito session | `$HOME` is a per-machine directory, so `~/.claude.json` is per machine; `~/.claude` is a symlink to the real home's `.claude`, so skill folders and agent files are shared | `ls -ld ~/.claude` gave `/sdf/home/y/ytl/.cogito/hosts/sdfiana008/.claude -> /sdf/home/y/ytl/.claude` |
 | `~/.claude.json` outside Cogito | The real home holds its own `.claude.json` on the `sdfhome/home` network filesystem | `ls -l /sdf/home/y/ytl/.claude.json`; `df -h /sdf/home/y/ytl` gave `sdfhome/home` |
 
@@ -141,39 +189,46 @@ The first design added a server or agent after a question the model showed (§ B
 
 ## Acceptance criteria
 
-The fixture is § Test Plan › Fixture; each run uses a throwaway `HOME`.
+The fixture is § Test Plan › Fixture; each run uses a throwaway `HOME` with `CLAUDE_CONFIG_DIR` unset, because with both set to one directory Claude Code reads skills from a different folder than the client writes to, and AC-5's `claude plugin list` check would pass for any client (Measured facts › `claude plugin list` and `CLAUDE_CONFIG_DIR`). Before N1, a folder in that `HOME`'s `.claude/skills/` holding a `.claude-plugin/plugin.json` must appear in `claude plugin list` as `<name>@skills-dir`, and is then deleted, so that AC-5's empty result means something.
 
 - [ ] AC-1: Installing the fixture adds no MCP server: the throwaway `.claude.json` has no `mcpServers` entry at any level afterwards, and the client ran no `claude mcp` command.
-- [ ] AC-2: Each fixture server with a valid name and valid values has `~/.claude/skills/<slug>/.akh-mcp/<name>.json` and a printed block with its warning lines and the command; `-sproject`, `akh-bad-env` and `akh-sso` have no command line, each with its reason.
+- [ ] AC-2: `akh-stdio`, `akh-http` and `akh-notransport` each have `~/.claude/skills/<slug>/.akh-mcp/<name>.json` and a printed block with its warning lines and the command; `akh-sso` has a block with its sign-in line and no command line; `-sproject`, `akh-bad-env`, `akh-dup`, `akh-tilde` and `akh-long` have no block and no command line, only a no-command line with their reason (FR-1 (d)).
 - [ ] AC-3: Running the printed command for `akh-stdio` adds it at user scope, and `claude mcp get akh-stdio` exits 0.
-- [ ] AC-4: `agent-hooks`, `agent-servers` and `agent-memory` are not written, and the closing message names each one's keys and repository address; `agent-plain` is written, with "every tool" shown.
+- [ ] AC-4: `agent-hooks`, `agent-servers`, `agent-memory`, `agent-nul`, `agent-indented`, `agent-long`, `agent-escaped` and `agent-nextline` are not written, and the closing message gives each one's repository address and names the keys of `agent-hooks`, `agent-servers`, `agent-memory`, `agent-nul` and `agent-long`; `agent-indented` gets the cannot-be-read line of § Server block › Other closing-message lines, and `agent-escaped` and `agent-nextline` its name form, each named by its file name and with no step to save it by hand; `agent-plain` is written, with "every tool" shown.
 - [ ] AC-5: `~/.claude/skills/<slug>/` holds no `.claude-plugin/`, no `.installed-manifest.json` from the source, and no `.akh-mcp/` file the client did not write; `claude plugin list` in a new session shows no `<name>@skills-dir` row for it.
-- [ ] AC-6: A pre-existing `~/.claude/agents/agent-plain.md` that the manifest does not record is unchanged after the install, and the closing message names the clash.
+- [ ] AC-6: A pre-existing `~/.claude/agents/agent-plain.md` that the manifest does not record is unchanged after the install, and the closing message names the clash. `agent-explore` and `agent-samename` are not written, and the closing message names, for each, the agent whose name it has. A pre-existing `~/.claude/commands/commit.md` that the manifest does not record is unchanged, and the closing message names it; the folder link `notes.md` is not in `~/.claude/skills/<slug>/`, and the closing message names it. Installing the fixture a second time prints the already-installed line of § Server block › Other closing-message lines and changes no file; after `~/.claude/skills/<slug>/.installed-manifest.json` is deleted, a third install prints the line for a folder /agent-knowledge-hub did not install and changes no file (FR-2), and `update` of that folder prints the same line and changes no file (FR-5).
 - [ ] AC-7: After AC-3, `remove` deletes `agent-plain`, leaves `akh-stdio` in `.claude.json`, and prints `claude mcp remove --scope user akh-stdio`.
-- [ ] AC-8: `update` from a fixture commit whose `akh-stdio` `args` differ prints that block with "Changed since the last install".
-- [ ] AC-9: A header value holding a newline and a U+2028 character prints as `\n` and ` `.
+- [ ] AC-8: `update` to a fixture commit whose `akh-stdio` `args` differ, whose `akh-notransport` `command` starts with `~`, and which no longer lists `akh-http` prints the `akh-stdio` block with "Changed since the last install", prints the remove line for `akh-http` and for `akh-notransport`, which now has no command line, and prints no remove line for `akh-stdio`, which the new commit still lists with a command (FR-5).
+- [ ] AC-9: A header value holding a newline and a U+2028 character prints as `\u000A` and `\u2028`, and `akh-http`'s `url` prints its U+0456 as `\u0456`.
+- [ ] AC-10: Given a skill folder whose `.installed-manifest.json` has no server key, as the client on `main` before this change writes it, and whose `plugin.json` lists `akh-stdio` and `-sproject`, `remove` prints the earlier-client line of § Server block › Other closing-message lines for `akh-stdio`, prints no line with a command for `-sproject`, and runs no `claude mcp` command. That manifest also lists `/x/.claude/agents/../../keep.txt` and `/x/keep.txt`, with a file `~/keep.txt` present; `remove` leaves `~/keep.txt` and prints the not-removed line for both entries (FR-5). In a second throwaway `HOME` holding the same folder, `update` to the fixture's commit, which still lists `akh-stdio`, prints the earlier-client line for `akh-stdio` before the lead-in and its block (FR-4, FR-5).
+- [ ] AC-11: After the install, the reply "add akh-stdio" makes the model run the printed `akh-stdio` command exactly as printed and no other `claude mcp` command, and the reply "add akh-sso" makes it run nothing and say that `akh-sso` has no command, with the sign-in reason (FR-1 (f)).
 
 ---
 
 ## Implementation Plan
 
-1. **Re-derive Measured facts** with `HOME` and `CLAUDE_CONFIG_DIR` set to a scratch directory. A changed result changes FR-1 before anything is written.
-2. **`skill/SKILL.md` › Install.** Step 4's `skills` line states FR-3; its `agents` line states FR-2; its `mcp-servers` line states FR-1 and points to the § Server block wording, which goes into `SKILL.md` verbatim. Step 5 states FR-5's manifest records. The success line states FR-4.
+1. **Re-derive Measured facts** with `HOME` and `CLAUDE_CONFIG_DIR` set to a scratch directory. A changed result changes FR-1 before anything is written. Also measure, and add to Measured facts, two facts the lead-in's second sentence rests on: whether a Cogito session lets the user run a typed command with `!` or offers a terminal, and whether a server added with `add-json` during a session can be used in that session or only in one started afterwards; if it can, the lead-in says how. If a Cogito session offers neither `!` nor a terminal, the Cogito form of the lead-in names only asking Claude (FR-1 (f)).
+2. **`skill/SKILL.md` › Install.** Step 2 states FR-3's `mktemp -d` clone directory. Step 4's `skills` line states FR-3; its `commands` line states FR-2's rule against replacing a file; its `agents` line states FR-2, with its key command; its `mcp-servers` line states FR-1 and points to the § Server block wording, which goes into `SKILL.md` verbatim. Step 5 states FR-5's manifest records. The success line states FR-4.
 3. **`skill/SKILL.md` › Update and › Remove** per FR-5.
-4. **`skill/SKILL.md` › Error handling** gains the FR-1 and FR-2 reasons.
+4. **`skill/SKILL.md` › Error handling** gains the FR-1 and FR-2 reasons, FR-3's symbolic-link line and filesystem-test stop, and FR-5's not-removed line.
 5. **Fixture and checks** per § Test Plan.
 
 ---
 
 ## Definition of Done
 
-- [ ] AC-1 to AC-9 checked and recorded with the Claude Code version used
-- [ ] `skill/SKILL.md` › Install, Update, Remove and Error handling carry FR-1 to FR-5 and § Server block; no line of `SKILL.md` tells the model to run `claude mcp add` or `claude mcp add-json`, and the only `add-json` text is inside the Server block the client prints
-- [ ] `frontend/app/guides/agent-knowledge-hub/page.tsx`, `frontend/app/guides/why-agent-knowledge-hub/page.tsx`, `docs/why-agent-knowledge-hub.md` and `README.md` no longer say install registers MCP servers; they say the client shows each server's configuration and the command, and leaves adding it to the user
-- [ ] `frontend/app/guides/create-a-skill/page.tsx` states FR-2's agent key set, that servers are shown rather than added, and that a script in the installed folder is named as `${HOME}/.claude/skills/<slug>/…`, never `~/…`
-- [ ] `PRD.md` › 15 › Skill file structure ("No execution happens at install time") checked against FR-1 and corrected if needed
-- [ ] An ADR in `docs/adr/`, numbered with the next ADR-U number not already used in `docs/adr/` or `todo/` (`grep -rhoE 'ADR-U[0-9]+' docs todo | sort -uV | tail -1`), recording § Design › Why print, not add and the rejected alternatives
-- [ ] CHANGELOG entry under `## Unreleased`. Install no longer adds MCP servers and refuses agents outside FR-2's set; servers that an earlier client added stay, and `remove` prints the command to remove one. It names the update commands for existing plugin installs (#006 › References › Claude Code plugin updates)
+- [ ] AC-1 to AC-11 checked and recorded with the Claude Code version used
+- [ ] `skill/SKILL.md` › Install, Update, Remove and Error handling carry FR-1 to FR-5 and § Server block; no line of `SKILL.md` tells the model to run any `claude mcp` command, including today's › Update and › Remove instruction to deregister MCP servers, except FR-1 (f)'s rule for a printed command the user asks for, and the only `add-json` text is inside the Server block the client prints
+- [ ] `docs/why-agent-knowledge-hub.md` › In-agent installation ("registers any MCP servers") and the In-agent installation card in `frontend/app/guides/why-agent-knowledge-hub/page.tsx` ("MCP servers are registered") say instead that the client shows each server's configuration and the command, and leaves adding it to the user
+- [ ] `frontend/app/guides/agent-knowledge-hub/page.tsx` › Install a skill gains that sentence, a second saying that the skill works only in part until the user adds its servers and that each one is added by running its printed command in a terminal or after `!`, or by asking Claude to add it by name (§ Server block › Lead-in), and one saying that an agent outside FR-2's set, or named like a built-in or another agent in `~/.claude/agents/`, is not installed and is linked instead, and that an agent, command or skill folder the user already has is left unchanged; › Manage installed skills says that `remove` leaves any server the user added and prints the command to remove it, and that `install` of a skill already installed writes nothing and says to run `update`, which is the command that replaces an installed skill
+- [ ] `README.md` › Install without leaving your assistant: "No configuration. No manual file copying." is qualified for a skill that brings an MCP server, which the user adds with the command the client prints
+- [ ] `frontend/app/guides/troubleshooting/page.tsx` gains an entry for a skill whose MCP tools or agent are missing after install: read the install's closing message, add each server with its printed command, and run `/agent-knowledge-hub update <slug>` to print the blocks again; a server the message lists as having no command gets none until the skill's submitter changes its entry, so tell the submitter or flag the skill on its catalog page, and a refused agent's line gives the step that applies to it. The entry "Skill not found after installing via /agent-knowledge-hub" gains a sentence saying that an install can stop with nothing installed, and that the closing message gives the reason and the next step: `update` for a skill already installed, moving the existing folder, or telling the submitter (FR-2, FR-3)
+- [ ] `frontend/app/guides/create-a-skill/page.tsx` states FR-2's agent key set, that servers are shown rather than added, the `mcp-servers` entry form FR-1 gives a command to (a name matching FR-1 (a)'s pattern and used by no other entry of the skill, a `transport` of `stdio`, `http` or `sse`, `args`, `env` and `headers` values as text, and a configuration of at most 4,096 bytes as JSON), and that a script in the installed folder is named as `${HOME}/.claude/skills/<slug>/…`, never `~/…` or `$HOME/…`. It also states FR-2's agent `name` rule (only ASCII letters, digits, `-` and `_`, on the `name:` line, and not the name of a built-in subagent in Measured facts › Built-in subagent names, compared without regard to case), that `agents` lists paths to agent files or folders, and that the install leaves out every symbolic link, whether a listed agent or command file or an entry in the skill folder, and never copies the skill folder's `.claude-plugin/`, `.installed-manifest.json` or `.akh-mcp/` (FR-3)
+- [ ] `skill/SKILL.md` › Create scaffold: an agent stub declares only FR-2's keys, with a `name` that FR-2's `name` rule accepts and that is no built-in subagent's name, and an MCP stub takes the form the create-a-skill row above describes, so the client never refuses what it scaffolded
+- [ ] `PRD.md`: § 1 › Out of scope (v1) › MCP server catalog's "Users never configure MCP directly" says instead that the user adds a skill's MCP servers with the command the client prints; § 15 › Skill file structure says the install copies the skill folder without `.claude-plugin/`, `.installed-manifest.json`, `.akh-mcp/` or symbolic links (FR-3), writes an agent only within FR-2's set, and adds no MCP server; § 15 › Additional commands' `install <slug>` row says it writes nothing, and says to run `update`, when the skill is already installed, and writes nothing when `~/.claude/skills/<slug>/` exists without this client's manifest (FR-2); its `remove` row says it also deletes the command and agent files the install wrote, and prints, without running, the command for each server
+- [ ] An ADR in `docs/adr/`, numbered with the next ADR-U number not already used in `docs/adr/` or `todo/` (`grep -rhoE 'ADR-U[0-9]+' docs todo | sort -uV | tail -1`), recording § Design: why print, not add, the agent key allow-list from Trade-offs, and the rejected alternatives
+- [ ] CHANGELOG entry under `## Unreleased`, headed as a behaviour change. Install no longer adds MCP servers: it prints each server's configuration and the command to add it, which the user runs or asks Claude to run by name (FR-1 (f)), and a server that FR-1 (a) to (c) refuses, for example one whose command starts with `~`, is listed with its reason and no command. Install refuses agents outside FR-2's set and agents named like a built-in or another agent, and leaves unchanged an agent or command file the user already has. `install` of a skill already installed now writes nothing and says to run `update`, and `install` writes nothing when `~/.claude/skills/<slug>/` exists without this client's manifest (FR-2). For existing users it says: a server an earlier client added stays where that client put it, at local scope for the directory the install ran in, or for the git repository that holds it (Measured facts › `claude mcp add` scope), so `claude mcp list` run from that directory shows it; `remove` leaves it and prints `claude mcp remove --scope local <name>` to run from there, and the first `update` does the same, even for a server the new version still lists (FR-5); and a plugin install keeps the earlier client, which still adds servers without asking, until the user runs the update commands, which the entry names (#006 › References › Claude Code plugin updates)
+- [ ] `install skillset`: whichever of this task and #006 Slice 4 merges second puts Relationship › #006's rule into `skill/SKILL.md` › install skillset, and #006 › FR-7 › Confirm rule's "MCP servers that the per-skill flow registers with `claude mcp add`" is corrected to say the per-skill flow shows them for the user to add
 - [ ] `version` in `.claude-plugin/plugin.json` raised above the value on `main` at merge, rechecked after any rebase, because #006 Slice 4, #048 and #050 raise it too
 
 ---
@@ -187,20 +242,33 @@ A skill `akh-test-051` at a commit of a test repository, reached through a fake 
 | Item | Declaration | Expected |
 |---|---|---|
 | server `akh-stdio` | `stdio`, `command` `/bin/true`, `env` `{"T": "${AKH_TEST_SECRET}"}` | block with the stdio and `${…}` warnings and a command |
-| server `akh-http` | `http`, `url` `https://example.invalid/mcp`, `headers` `{"X": "a\nb c"}` | block with escaped header value (AC-9) and a command |
+| server `akh-http` | `http`, `url` `https://g\u0456thub.invalid/mcp`, `headers` `{"X": "a\nb\u2028c"}` | block with escaped `url` and header value (AC-9) and a command |
+| server `akh-tilde` | `stdio`, `command` `~/.claude/skills/akh-test-051/s.sh` | no command; `~` reason |
+| server `akh-long` | `stdio`, `command` `/bin/true`, `args` holding one 5,000-character string | no command; too-long reason |
+| server `akh-notransport` | no `transport`, `command` `/bin/true` | block as `stdio`, with a command |
 | server `-sproject` | `stdio`, `command` `/bin/true` | no command; name reason |
-| server `akh-bad-env` | `stdio`, `env` `{"A": {"description": "x"}}` | no command; value-type reason |
-| server `akh-sso` | `http`, `auth.type` `slac-sso` | block without a command, sign-in line |
+| server `akh-bad-env` | `stdio`, `command` `/bin/true`, `env` `{"A": {"description": "x"}}` | no command; value-type reason |
+| server `akh-dup`, two entries | each `stdio`, `command` `/bin/true`, one with `args` `["1"]` and one with `args` `["2"]` | no command for either; same-name reason; no `.akh-mcp/akh-dup.json` |
+| server `akh-sso` | `http`, `url` `https://akh-sso.invalid/mcp`, `auth.type` `slac-sso` | block without a command, sign-in line |
 | agent `agent-plain` | `name`, `description` only | written; "every tool" |
+| agent `agent-explore` | `name: explore`, `description` only | not written; built-in name named (AC-6) |
+| agent `agent-samename` | `name: my-reviewer`, `description` only, with a pre-existing `~/.claude/agents/mine/reviewer.md` declaring `name: my-reviewer` | not written; the user's agent named; theirs unchanged (AC-6) |
 | agent `agent-hooks` | `hooks` with a `PreToolUse` `Bash` hook | not written; key named |
 | agent `agent-servers` | `mcpServers` and `permissionMode` | not written; keys named |
 | agent `agent-memory` | `memory: user` | not written; key named |
+| agent `agent-nul` | `hooks` as in `agent-hooks`, and one NUL byte in the body | not written; key named (Measured facts › `grep` on a file with a NUL byte) |
+| agent `agent-indented` | `name`, `description` and `hooks`, the whole mapping indented by two spaces | not written; cannot be read (Measured facts › YAML layouts that hide a key) |
+| agent `agent-long` | `name`, a `description: \|` of 2,500 lines, then `hooks` | not written; key named, as for `agent-hooks` (FR-2's key command prints the same `hooks:` line for both) |
+| agent `agent-escaped` | `name: "\x45xplore"`, `description` only | not written; cannot be read (FR-2's `name` rule) |
+| agent `agent-nextline` | `name:` with `Explore` on the next line, indented by two spaces, and `description` | not written; cannot be read (FR-2's `name` rule: an empty value) |
+| command `commit.md` | any body, with a pre-existing `~/.claude/commands/commit.md` the manifest does not record | not written; theirs unchanged (FR-2) |
 | folder files | `.claude-plugin/plugin.json` with `mcpServers`, `.installed-manifest.json`, `.akh-mcp/akh-stdio.json` holding a different configuration | all three left out; the client's own `.akh-mcp/akh-stdio.json` written (AC-5) |
+| folder link | `notes.md`, a symbolic link to `../../../etc/hostname` | left out and named (FR-3) |
 
 ### Checks
 
-- **T1 — static, in `backend/tests/`:** `skill/SKILL.md` has no instruction to run `claude mcp add` or `claude mcp add-json`, holds § Server block's lines, and passes #050 › AC-7's frontmatter and inline-shell rule.
-- **N1 to N7 — by hand, in a throwaway `HOME` with a signed-in Claude Code:** N1 install (AC-1, AC-2, AC-4, AC-5, AC-9); N2 run the printed `akh-stdio` command (AC-3); N3 pre-existing agent clash (AC-6); N4 remove (AC-7); N5 update to the changed commit (AC-8); N6 `install skillset` with a member that brings servers: no new question, and the blocks print after the summary line (#006); N7 the same install in a Cogito session, checking the scope line.
+- **T1 — static, in `backend/tests/`:** `skill/SKILL.md` has no instruction to run any `claude mcp` command other than FR-1 (f)'s rule, holds § Server block's lines, names `mktemp -d` and no fixed path for Install step 2's clone (FR-3), holds FR-2's key command, and passes #050 › AC-7's frontmatter and inline-shell rule. FR-2's key command, run over the fixture's agent files, prints nothing for `agent-plain` and a line for `agent-nul`, `agent-indented` and `agent-long`, and its `name` rule refuses `agent-escaped` and `agent-nextline` and takes `explore` from `agent-explore`.
+- **N1 to N9 — by hand, in a throwaway `HOME` with a signed-in Claude Code:** N1, N2 and N4 run in that order in one `HOME`, which holds none of the pre-existing files the fixture rows name; N3, N5, N8 and N9 each start in a new throwaway `HOME`, because AC-4 and AC-6 need `agent-plain.md` absent and present, N4 has removed the skill, and N2 has already added `akh-stdio`. N1 install (AC-1, AC-2, AC-4, AC-5, AC-9); N2 run the printed `akh-stdio` command (AC-3); N3 pre-existing files, placed before the install, and the second and third installs (AC-6); N4 remove (AC-7); N5 install the fixture, move the fake catalog's pinned commit to the changed commit, then update (AC-8); N6 `install skillset` with two members that bring servers, one server name shared by both and one refused agent: no new question, and the refused-agent line, the run's single lead-in and both members' blocks, each group under its `── <slug> ──` line, print after the summary line, with the shared-name line in the second block (#006); a third member whose `~/.claude/skills/<slug>/` exists without a manifest is installed in place of that folder after a Yes to #006's replace question, and that folder is a symbolic link to a directory holding a file, which is unchanged afterwards while the link has been replaced by a real folder (FR-2); N7 the same install in a Cogito session, checking the scope line; N8 `remove` of an install whose manifest was written by the client on `main` before this change, then `update` of the same install in a second throwaway `HOME` (AC-10); N9 install the fixture, then in the same session reply "add akh-stdio", then "add akh-sso" (AC-11).
 
 `AKH_TEST_SECRET`'s value must appear in no file under the throwaway directory and in no transcript line other than the block's unexpanded `${AKH_TEST_SECRET}`.
 
@@ -208,13 +276,13 @@ A skill `akh-test-051` at a commit of a test repository, reached through a fake 
 
 ## Relationship to Other Tasks
 
-- **#006 (Skillsets), Slice 4:** `install skillset` keeps FR-7's single confirmation and its "MCP server" marker, which now means the member brings servers the user can add afterwards. The command prints every member's FR-1 blocks after its summary line. FR-2 and FR-3 apply to each member without a question, so "a user who confirms can leave the run unattended" stays true.
+- **#006 (Skillsets), Slice 4:** `install skillset` keeps FR-7's single confirmation and its "MCP server" marker, which now means the member brings servers the user can add afterwards; the marker reads `MCP server, not added`, and FR-7's clause "including MCP servers that the per-skill flow registers with `claude mcp add`" is corrected in #006 by whichever of the two tasks merges second. The command prints every member's FR-4 lines and FR-1 blocks after its summary line and the failure lines and retry line that #006 prints below it, not after each member's success line, so that none scrolls past during the run and #006's own ending stays together; § Server block › Lead-in gives the run's single lead-in and the per-member grouping. FR-2 and FR-3 apply to each member without a question, so "a user who confirms can leave the run unattended" stays true. A member whose install stops under FR-3's filesystem test fails under #006's failure rule, as a path-guard abort does, and its stop line is the failure's report. #006's skip rule asks, before the first clone, whether to replace a member's `~/.claude/skills/<slug>/` that has no manifest; a Yes is the user's consent, so FR-2's folder check does not stop that member, and its install deletes the folder at the start of step 4, before the copy. A No skips the member, as #006 says.
 - **#050 (Client token helper):** both rewrite `skill/SKILL.md` › Install, so the second to merge rebases on the first; each raises `version` under the rule in the Definition of Done. This task reads no token.
-- **#023 (MCP server registry):** defines `auth.type`, which FR-1 reads. If #023 ships, the skill page can show the same configuration before install.
+- **#023 (MCP server registry):** defines `auth.type`, which FR-1 reads, and the absent-`transport` default FR-1 (b) follows. If #023 ships, the skill page can show the same configuration before install. #023 › plugin.json extended schema also makes `env` a map of variable name to `{description, required, example}`, which FR-1 (b) refuses (the fixture's `akh-bad-env` row); #023 must move those descriptors out of `env` before it ships, or FR-1 must accept them.
 - **#046 and #047 (marketplace sources and route):** a `/plugin` install, once they ship, gives Claude Code users Claude Code's own handling of plugin agents and servers; this client's rules still apply to its own install.
-- **#048 (Install through the files route):** installs skill-folder files only, so FR-3 applies to it.
+- **#048 (Install through the files route):** installs skill-folder files only, so FR-3 applies to it: a top-level `.installed-manifest.json` in a skill's `file_manifest` would otherwise be written through the route. Whichever of the two merges second states FR-3 for the route install in `skill/SKILL.md` › Install.
 - **#020 (installer extension):** its planned Codex slice is where printed Codex and OpenCode forms would go (Follow-ups).
-- **Cogito TODO #200 (`slaclab/cogito`), H-7:** the control is now refusal plus the user's own action, not a confirmation; Cogito's slice 2 FAQ answer should say so.
+- **Cogito TODO #200 (`slaclab/cogito`), H-7:** the control is now refusal plus the user's own action, not a confirmation; Cogito's slice 2 FAQ answer should say so. That answer should also say what the control does not cover: a skill's own `SKILL.md` can run `claude mcp add-json` or write an agent file when it is invoked (Non-Goals), so the client keeps a skill's declared servers and agents out of the account but does not stop a hostile author. Cogito's managed settings can narrow that route without locking MCP servers: `disableSkillShellExecution: true` stops `` !`…` `` blocks in user, project and plugin skills, users' own included, though not skill `hooks` (Claude Code documentation, `skills`). The `version` raise reaches plugin installs only; Cogito loads this repository from a pinned lock row (Cogito's slice 2 FR-5; #050 › Relationship to Other Tasks › Cogito TODO #200), so H-7 holds in Cogito sessions once that row pins a commit that contains this change.
 
 ---
 
@@ -234,6 +302,25 @@ The items below come from the 2026-10-14 to 2026-10-15 board review's Opportunit
 - Remove `version` from `.claude-plugin/plugin.json` so the four tasks that raise it cannot collide. [dc]
 - Link a refused agent to the catalog's flag feature (`backend/app/services/flag.py`). [ux]
 
+From the narrowed design's board review (2026-10-15), deduplicated:
+
+- Read no file of an installed folder through a symbolic link in `update` and `remove` (the old manifest, old `.akh-mcp/` files, the installed `plugin.json`), as FR-3 already rules for the clone; read old `.akh-mcp/` files only for names in the old manifest's `mcp_servers`. [sr, er]
+- Apply FR-1 (a)'s name pattern to every server name `remove` and `update` print, including names from `mcp_servers`. [sr, er]
+- Add to the earlier-client remove line: "This removes any server of that name for the directory you run it in, including one you added yourself." [sr]
+- Have #006's "Replace it?" question say when `~/.claude/skills/<slug>` is a symbolic link and name its target. [sr]
+- For a folder with no manifest, have `update`'s stop also print the earlier-client line for each server in the folder's `plugin.json`. [ux]
+- Run FR-3's filesystem test in `update` before its remove step, which would make the `Not updated:` line unnecessary. [ux]
+- Have `list` print, per skill, the servers that were not added and point to `update <slug>` to show their blocks again; have the skill page's "MCP server" badge say install does not add it. [dc, ux]
+- Have `validate` apply FR-1 (a)–(b) and FR-2's key set so authors learn what install will leave out; have the catalog report `!` blocks, `hooks`, or `allowed-tools` naming `Bash` at submit time. [dc, dr]
+- Widen FR-2's set with keys that only limit or tune an agent (`maxTurns`, `effort`, `background`, `omitClaudeMd`), and let the line test skip `#` comment lines at column 0. [dr]
+- Warn on more downloaders and inline interpreters (`bunx`, `pnpm dlx`, `yarn dlx`, `docker run`, `deno run`, `go run …@latest`, `zsh -c`, `node -e`, `perl -e`); add one line for `http`/`sse` servers that Claude reads their tool descriptions in every session. [sr]
+- Tell the user, before adding a server, which of its `${VAR}` variables is unset, without printing values; refuse a header or `env` value holding a control character, which never connects. [ux, dr]
+- Print `cat ~/.claude/skills/<slug>/.akh-mcp/<name>.json` beside each command; show `model` on the written-agent line; note "(bash or zsh)" after the command. [sr, dr]
+- Report refusals in the install event so the catalog learns which skills ship `hooks`, `mcpServers`, or `~` paths. [sr]
+- Delete a configuration file that fails FR-1 (c)'s read-back; under FR-1 (f), ask which skill's server the user means when two blocks share a name. [er]
+- Write the name check with explicit ranges under `LC_ALL=C`, and scan `~/.claude/agents/` with its trailing `/` so a linked folder is searched. [dr]
+- Test gaps: require T1's key command to print a line for every refused fixture agent; spell the second `akh-dup` entry `AKH-dup`; run FR-3's filesystem test once on macOS's default filesystem. [er, ux]
+- Process note: the edit tools turned a typed `\u` escape into its letter during this review; write author text with `\x` escapes or check it with `od -c`. [dr]
 ---
 
 ## References
@@ -242,14 +329,371 @@ The items below come from the 2026-10-14 to 2026-10-15 board review's Opportunit
 - [#006](006-skillsets.md) — skill sets; `install skillset` prints each member's server blocks after its summary line (Relationship to Other Tasks).
 - Cogito `slaclab/cogito` TODO #200, Open Question 1, decided 2026-10-14: no managed MCP or agent lock; this client is the control.
 - Claude Code MCP documentation, read 2026-10-14: https://code.claude.com/docs/en/mcp — installation scopes and where each is stored; environment variable expansion; plugin-provided servers.
-- Claude Code sub-agents documentation, read 2026-10-14: https://code.claude.com/docs/en/sub-agents — frontmatter fields; `hooks`, `mcpServers` and `permissionMode` ignored for plugin subagents; hooks and inline servers from `~/.claude/agents/` run without the folder-trust check.
-- Claude Code hooks documentation, read 2026-10-15: https://code.claude.com/docs/en/hooks — hook types, including `http` hooks and `allowedEnvVars`.
+- Claude Code sub-agents documentation, read 2026-10-14 and 2026-10-15: https://code.claude.com/docs/en/sub-agents — frontmatter fields; `hooks`, `mcpServers` and `permissionMode` ignored for plugin subagents; hooks and inline servers from `~/.claude/agents/` run without the folder-trust check; identity from the `name` field, the built-in subagents, and a user subagent named `Explore` overriding the built-in.
+- Claude Code hooks documentation, read 2026-10-15: https://code.claude.com/docs/en/hooks — hook types, including `http` hooks and `allowedEnvVars`; skill hooks run for the rest of the session, subagent hooks only while the subagent runs; a skill folder that is not a plugin has no hooks file.
+- Claude Code skills documentation, read 2026-10-15: https://code.claude.com/docs/en/skills — frontmatter fields, including `allowed-tools` and `hooks`; injected `` !`…` `` commands and their permission checks; `disableSkillShellExecution`; a skill folder with `.claude-plugin/plugin.json` loading as `<name>@skills-dir`.
 - Claude Code plugin loading reference, read 2026-10-14: https://code.claude.com/docs/en/plugins/loading — `<name>@skills-dir` plugins under `~/.claude/skills/`.
 - Claude Code plugin manifest reference, read 2026-10-14: https://code.claude.com/docs/en/plugins-reference — `mcpServers`, `agents` and `hooks` keys; unknown top-level keys, such as this catalog's `mcp-servers`, are stripped.
 
 ---
 
 ## Board Review
+
+**Verdict:** CLEAR WITH WARNINGS
+**Date:** 2026-10-15
+**Rounds:** 3 (fresh review of the narrowed design)
+
+The board's rule marks a plan UNSTABLE when any reviewer makes a design amendment in Round 3. This review had two, both narrow and measured: `update` now stops, removing nothing, when the skill folder has no manifest, because it otherwise deleted a user's own folder; and FR-2's checks are `awk` programs, because `grep`, both GNU grep and the `ugrep -I` function a Claude Code session runs, prints nothing for a file holding a NUL byte, so a `grep` key check would pass an agent with `hooks`. Design amendments fell from 24 to 15 to 2 across the three rounds, and the Round 3 security review found nothing at the round's bar. The user accepted the plan as CLEAR WITH WARNINGS on that basis, with the not-installed line reworded to "has no record of an install by /agent-knowledge-hub".
+
+| Reviewer | Result | Amended | Key findings |
+|---|---|---|---|
+| research | ⚠️ WARN | R1 2/4 · R2 4/4 · R3 1/5 | Agent names that replace a built-in; YAML spellings that bypass the `name` check; macOS Cogito detection; `grep` and NUL bytes |
+| codebase-arch-review | — | skipped | Client-only change: no new data store, async channel, service boundary, or infrastructure |
+| codebase-eng-review | ⚠️ WARN | R1 4/2 (truncated; applied by the main session) · R2 3/9 · R3 1/2 | Duplicate names; manifest records; reinstall and #006 "Replace?" conflicts; `update` order; `update` on a folder with no manifest |
+| doc-review | ⚠️ WARN | R1 3/8 · R2 0/8 | Remove commands for earlier-client servers; "Changed" ordering; entries without `transport`; CHANGELOG and guide rows |
+| security-review | ⚠️ WARN | R1 9/2 · R2 3/1 · R3 0/0 | `mktemp -d` clone; YAML-hidden keys; JSON read-back; non-ASCII escaping; symlinks; bounded `remove`; link-only folder deletion |
+| codebase-ux-review | ⚠️ WARN | R1 6/3 · R2 5/5 · R3 0/3 | Lead-in; FR-1 (f); wording for every message; earlier-client lines on `update`; `Not updated:`; AC-4 made satisfiable |
+
+**Process notes:** the Round 1 engineering reviewer and three Round 2 reviewers stalled without output and were stopped; the Round 2 ones were relaunched one at a time with a stall watcher, and Round 3 ran one reviewer at a time. One Round 3 reviewer stopped on the account's session limit and was resumed.
+**Accepted warnings:** the client's checks are rules the model follows from `SKILL.md`, not a separate script (Follow-ups). FR-3's filesystem test is untested on a case-insensitive filesystem. Whether Cogito offers `!` or a terminal, and whether a server added mid-session works at once, are measured in Implementation step 1. A skill's own `SKILL.md` can still run commands its `allowed-tools` pre-approve (Non-Goals).
+**Unresolved decisions:** none
+**Amendments:** 41 design / 56 precision (Round 1 24/19, Round 2 15/27, Round 3 2/10)
+
+### Reviewer output (final round per reviewer)
+
+<details>
+<summary>research — Round 3 (PASS WITH WARNINGS)</summary>
+
+# Round 3 — Deep Research (DR) review of #051
+
+**Summary**
+
+Most of the claims added since Round 2 hold. On `sdfiana008` (Debian 13, `/bin/sh` dash, `LANG=C.UTF-8`), `rm -rf` on a link to a folder spelled with a trailing `/` deleted the target's file and kept the link, and the same command without the `/` removed only the link, in dash and in bash. The ASCII `name` rule, written with explicit ranges, refused Kelvin-sign, Cyrillic, fullwidth, zero-width and accented names in every shell, tool and locale tested, and accepted `my-reviewer_2`. A `name` that YAML reads as null does not load from `~/.claude/agents/` (`sub-agents` documentation), so it is not a bypass.
+
+Two defects met the round bar, and both are amended. First, the escaped-name example had lost its backslash in three places, so `agent-escaped` was `name: "Explore"`: the built-in rule would refuse it, not the name rule AC-4 expects, and the escape was never tested. Second, FR-2 left open which program runs the key test. In a Claude Code session `grep` is a function that runs `ugrep -I`, and both it and GNU grep print none of the lines of an agent file that holds a NUL byte. Claude Code still parses that file's frontmatter, so a `grep` key command would write an agent whose `hooks` the test never saw. FR-2 now requires `awk`, which printed `hooks:` in every case. A Measured facts row and an `agent-nul` fixture back that rule. One LOW warning is left unamended: a name scan spelled without a trailing `/` misses a linked `~/.claude/agents`.
+
+**Issues**
+
+*1. The escaped-name example lost its escape, so `agent-escaped` tests nothing and AC-4 contradicts FR-2 (HIGH, amended)*
+
+Round 2's probe file (`scratchpad/dr2/agents/name-escape.md`) holds `name: "\u0045xplore"`, a YAML double-quoted escape that PyYAML and js-yaml read as `Explore`. The plan spells it `name: "Explore"` in three places (FR-2's reason clause, Measured facts › YAML layouts that hide a key, and Test Plan › Fixture › `agent-escaped`); `od -c` shows no backslash in any of them, while the plan's other escapes (`\u000A`, `\u0456`, `\u2028`) are intact. The backslash was lost when the Round 2 edit was written.
+
+As written, `agent-escaped` is `name: "Explore"`. FR-2's name command removes the one pair of enclosing quotes and prints `Explore`, which passes the ASCII rule, so the built-in-name rule refuses the file with the built-in line. AC-4 and T1 instead require the name rule to refuse it with the cannot-be-read line. A correct implementation therefore fails AC-4, and the escape attack the row was added for (Round 2 Decision 1) is not tested: an implementation that dropped the `\` check would still pass. This is the failure precision rule 8 names.
+
+The escape is spelled `\x45` in the amendment, not `E`: a test in the scratchpad showed that the edit tools used by this review turn a typed `E` into `E` (the same loss as Round 2), while `\x45` is written as typed. YAML double-quoted scalars accept `\x45` as they accept `E` (measurement in Issue 3). An implementer who writes the fixture with an agent meets the same hazard, so the `\x45` spelling also protects the fixture. Amended: the three sites now spell the value `"\x45xplore"`.
+
+*2. Measured facts › Deleting a link to a folder holds, in dash and in bash (no amendment)*
+
+On `sdfiana008` (Debian GNU/Linux 13, GNU coreutils `rm` 9.7 at both `/usr/bin/rm` and `/bin/rm`), with `skills/my-skill` a link to a directory holding `SKILL.md`, run through `dash -c` and `bash -c`:
+
+| Spelling | Exit | Link | Target's `SKILL.md` |
+|---|---|---|---|
+| `rm -rf skills/my-skill/` | 0 | kept | deleted |
+| `rm -rf skills/my-skill` | 0 | removed | kept |
+| `rm -rf skills/my-skill/.` | 1 (`refusing to remove '.' or '..' directory`) | kept | kept |
+
+The row's claim and FR-2's rule (remove the path itself, never with a trailing `/`) are correct; the shell makes no difference. BSD `rm` on macOS was not measured; the row says GNU.
+
+*3. A `grep`-based key command passes `hooks` in a file that holds a NUL or invalid UTF-8 byte (HIGH, amended)*
+
+FR-2 fixes what the key command prints, not which program prints it, and "any output counts as frontmatter the client cannot parse" turns a program that prints nothing into an accept. In a Claude Code session on `sdfiana008`, `grep` is a shell function from the session's shell snapshot that runs `ugrep` with `-I` (`type grep` reports `grep is a shell function from …/shell-snapshots/snapshot-zsh-….sh`); `find` is likewise a function that runs `bfs`, while `awk`, `sed`, `head` and `tr` are the system binaries. Over an agent file whose frontmatter is `name`, `description` and `hooks`, a `grep -v -E` form of the key test printed:
+
+| File | Session `grep` (ugrep `-I`) | GNU grep 3.11 (`command grep`) | gawk 5.2.1 and mawk 1.3.4, `LC_ALL=C` and `C.UTF-8` |
+|---|---|---|---|
+| no odd byte | `hooks:` | `hooks:` | `hooks:` |
+| NUL byte in the body | nothing, exit 1 | nothing on stdout; `binary file matches` on stderr | `hooks:` |
+| `\xff` byte in the body | nothing, exit 1 | `hooks:`, then `binary file matches` | `hooks:` |
+| `\xff` byte in `description` | nothing, exit 1 | `hooks:` | `hooks:` |
+
+`claude plugin validate --strict --json` on 2.1.281 parsed the frontmatter of such files: an agent file whose frontmatter is a sequence and whose body holds a NUL or `\xff` byte, or whose frontmatter holds `\xff`, got `Frontmatter must be a YAML mapping (key: value pairs), got an array.`, and the `hooks` files got no error, so Claude Code does not set these files aside as binary. A key command written with `grep` therefore writes an agent with `hooks` to `~/.claude/agents/` when the author adds one NUL byte to its body, and T1, which runs in `backend/tests/` without the session's function and with a fixture that holds no such byte, would not notice. The Round 2 `awk` form printed `hooks:` for every file under both awks and both locales. Amended: FR-2 requires the key and `name` commands to be `awk` programs, Measured facts gains the row, and the fixture gains `agent-nul` (listed in AC-4 and T1).
+
+*4. The `name` rule's ASCII test holds under dash, bash, `C` and `C.UTF-8` when written with explicit ranges (no amendment)*
+
+`/bin/sh` on this node is dash 0.5.12; bash is 5.2.37; glibc is 2.41; the installed locales are `C`, `C.utf8` and `POSIX`, and the session runs with `LANG=C.UTF-8`. For the values `for\u212A` (KELVIN SIGN, which JavaScript's `toLowerCase()` turns into `fork`), `\u0415xplore`, `\uFF25xplore`, `Ex\u200Bplore` and `r\u00E9viseur`, each of `case $v in ''|*[!A-Za-z0-9_-]*)` in dash and bash, `grep -E '^[A-Za-z0-9_-]+$'` (GNU and the session's ugrep), and `/^[A-Za-z0-9_-]+$/` in gawk and mawk refused the value under both `C` and `C.UTF-8`, and accepted `my-reviewer_2`. `grep -E '^[[:alnum:]_-]+$'` under `C.UTF-8` accepted the Kelvin, Cyrillic, fullwidth and accented values, so a character class would break the rule; FR-2 already names the ASCII letters, so this is an implementation hazard, not a plan defect. `en_US.UTF-8`, where some tools order a range by collation, is not installed here and was not measured. PyYAML 6.0.3 and js-yaml 4.1.1 read `"\x45xplore"`, `"\u0045xplore"` and `"\U00000045xplore"` as `Explore`; the Round 2 `awk` name command printed each with its backslash, which the rule refuses.
+
+*5. A name scan spelled `find ~/.claude/agents` misses every agent when that folder is a link (LOW, not amended)*
+
+GNU find 4.10 and the session's `bfs` both printed nothing for `find <dir>/agents -name '*.md'` when `<dir>/agents` is a link to a folder of agent files, and printed every file for `find <dir>/agents/ -name '*.md'`. A user who links `~/.claude/agents` to a dotfiles folder would then have no agent names for FR-2's clash rule to compare with. This is the reverse of FR-2's `rm` rule, where the trailing `/` is the hazard. The plan writes the scan's scope as `~/.claude/agents/`, and Cogito's own link is `~/.claude`, which path resolution follows, so the default layouts are covered; it is recorded for the implementer, not amended.
+
+*6. Names that YAML reads as null, a number or a boolean are not a bypass (no amendment)*
+
+`name: null`, `Null` and `NULL` pass FR-2's ASCII rule, and PyYAML and js-yaml read each as null; `name: 123` and `name: true` pass it too. `claude plugin validate --strict --json` reported `name must be a string, got number.` and `got boolean.` for the latter two and nothing for a null or missing `name`. The `sub-agents` documentation (› Subagent files Claude Code skips) says a user-directory agent file with no `name` is treated as documentation and not loaded; only a plugin subagent loads under its file name. So an `Explore.md` with `name: null` written to `~/.claude/agents/` does not become `Explore`, and the rule as written accepts no unsafe agent here. The rule refuses no catalog-style name either: `my-reviewer_2` passed every tool and locale in Issue 4.
+
+**Opportunities**
+
+- Write the `SKILL.md` name check with explicit ranges (`[A-Za-z0-9_-]`) under `LC_ALL=C`, never with `[[:alnum:]]`, which accepted non-ASCII letters under `C.UTF-8` (Issue 4); `LC_ALL=C` also covers a host with `en_US.UTF-8`, which was not measured.
+- Scan user agent names with `~/.claude/agents/`, keeping the trailing `/`, so a linked agents folder is searched (Issue 5).
+- Any author text that a review agent or implementer writes into a file should be written with `\x` escapes or checked with `od -c` afterwards: the edit tools in this session turn a typed `\u` escape of a printable character into the character (Issue 1).
+
+**Decisions Required**
+
+None. Both amendments fix a test or a rule that was wrong as written; neither changes what the user accepted.
+
+**Amendments**
+
+The plan was re-read from disk before each edit; each edit used the Edit tool with exact strings. Afterwards `grep -c 'name: "Explore"'` over the plan returned 0, the three escaped sites read `"\x45xplore"`, and the only non-ASCII characters above `## Board Review` are the typography already there (`§`, `—`, `…`, `›`, `─` and the two status emoji).
+
+- precision: FR-2 — the `name` rule's example escape reads `"\x45xplore"` instead of `"Explore"`, which had lost its backslash (Issue 1).
+- precision: Measured facts › YAML layouts that hide a key — reads `name: "\x45xplore"`, and the same name with a `\u` or `\U` escape for the `E`; its How column notes the escaped forms were repeated in round 3 (Issue 1).
+- precision: Test Plan › Fixture › `agent-escaped` — `name: "\x45xplore"`, so the row tests the escape and AC-4's cannot-be-read line is what a correct implementation prints (Issue 1).
+- design: FR-2 — the key command and the `name` command are `awk` programs, never `grep`, because `grep` prints none of the lines of a file that holds a NUL byte, both as the session's `ugrep -I` function and as GNU grep (Issue 3).
+- precision: Measured facts — new row `grep` on a file with a NUL byte, with the measured outputs and how they were taken (Issue 3).
+- precision: Test Plan › Fixture gains `agent-nul` (`hooks`, and one NUL byte in the body; not written, key named); AC-4 and T1 list it (Issue 3).
+
+TOTAL: 1 design, 5 precision
+
+**Status**
+
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>codebase-eng-review — Round 3 (PASS WITH WARNINGS)</summary>
+
+# Round 3 — Engineering Review — #051
+
+**Summary**
+
+I walked Install, `update` (a normal update, the first update of an earlier-client install, and an update stopped by FR-3's filesystem test) and `remove` end to end. An implementer can write `skill/SKILL.md` from the plan without meeting contradictory rules, with one exception. FR-5's remove-line rules from Round 2 (main session, engineering and UX) agree with one another, with FR-4's order and stopped-update rule, with § Server block's conditions, with AC-8 and AC-10, and with the CHANGELOG row.
+
+The one defect is in `update`. FR-2 protects a skill folder that has no manifest, but `update` deletes it in its remove step before step 4's folder check runs, so the check never sees it. As written, `update <slug>` on a user's own skill folder deletes it without asking. That is unsafe, so it was amended (1 design, 2 precision). The other findings fall below the round bar and are listed as Opportunities.
+
+**Issues**
+
+- HIGH | design | FR-5 › `update` against FR-2's folder rule | FR-2 says its rule against replacing an unrecorded file "also covers ... the folder `~/.claude/skills/<slug>/` itself", and that "a skill folder that exists without this client's manifest stops the install before anything is written". FR-2 also says "Install makes both folder checks at the start of step 4, which `update` reaches only after its remove step", and FR-5's `update` reads the old manifest, runs the remove step, which deletes "the skill folder", then installs. Nothing in FR-5 says what `update` does when `~/.claude/skills/<slug>/` exists with no `.installed-manifest.json`. An implementer following the plan as written makes `update <slug>` on such a folder delete it, recursively when it is a real folder, and only then reach FR-2's check, which passes because the folder is gone. That folder is, by FR-2's and #006's own reasoning, often the user's own skill or working copy. #006 asks before replacing it and FR-2 stops `install`; `update` asks nothing and deletes it. The user is steered towards `update` by the already-installed line, the clash lines and the troubleshooting entry, so running it on the wrong slug is a plausible slip. The two rules contradict each other, and following FR-5 makes the result unsafe. Amended: `update` stops before Install step 1 with FR-2's not-installed line and removes nothing, and AC-6 checks it (see Decision 1).
+- PASS | Install walk (fresh, fixture) | FR-1 to FR-5 | Step 2 clones into `mktemp -d`; step 4 runs the folder checks, copies the folder without the three names or links, runs FR-3's filesystem test before any other write, then writes commands and agents (FR-2's checks find no manifest, so every existing file counts as unrecorded) and the `.akh-mcp/` files into the copied folder; step 5 writes the manifest with only the servers that got a command line. The closing order is the one FR-4 gives. No conflicting rule found.
+- PASS | Normal `update` walk | FR-4, FR-5, AC-8 | Old manifest and old `.akh-mcp/` files are read before the remove step deletes them; the remove step's user-scope lines depend on FR-1 (c)'s read-back, which runs later in step 4, but FR-4 prints them in the closing message after the left-out lines, so they can be computed at the end. A server that the new version refuses under (e) gets a remove line and a block with no command, which matches the rule's stated reason (no add command below it). The "Changed" line's own `remove --scope user` sits in a block that offers the add command on purpose, which is a different case from the rule's reason. AC-8 matches the rule.
+- PASS | First `update` of an earlier-client install | FR-5, § Server block, AC-10, DoD › CHANGELOG | With no server key there are no `mcp_servers` names, so the user-scope line and the earlier-client line never print for the same name. The earlier-client line prints for every pattern-matching name from the installed `plugin.json`, whether or not the new version lists it; FR-5, the line's condition, AC-10 and the CHANGELOG row now all say this. The remove step must read the installed `plugin.json` before it deletes the folder; the order is implied by the remove step itself and needs no amendment.
+- PASS | Stopped `update` (FR-3's filesystem test) | FR-4, "Not updated:" line | FR-4's "a remove line for every server the old manifest records" agrees with FR-5's update rule: once the update stops, no server has a command line from the new version, so every recorded server qualifies. For an earlier-client manifest the set is empty, and the remove step's earlier-client lines are what follow the stop line. FR-4's install-only "in place of ... every other line" is overridden by the more specific `update` sentence after it; the wording could be tighter but it does not contradict.
+- PASS | `remove` walk | FR-5, AC-7, AC-10 | Deletes only entries that pass the path test, removes the folder without a trailing `/`, prints user-scope lines for `mcp_servers` names and pattern-filtered earlier-client lines, and runs no `claude mcp` command. FR-1's opening sentence, FR-5, the DoD row and T1 all allow `claude mcp` only under FR-1 (f). No conflict.
+- LOW | not amended | Old `.akh-mcp/` read for an earlier-client install | `update` reads "every old `.akh-mcp/<name>.json`". An earlier client copied the whole source folder, links included, so an author's `.akh-mcp/` file, or a link from it, could be read into the session on the first update. Precondition: an author who planted that folder before this feature existed, and whose skill could already run code at invocation (Non-Goals). Below the round bar; listed in Opportunities.
+
+**Opportunities**
+
+- `update` could read old `.akh-mcp/` files only for names in the old manifest's `mcp_servers`, and never through a symbolic link, so that an earlier client's copy of an author's folder cannot put a file into the session on the first update.
+- FR-4's stopped-`update` sentence could say "a remove line for every server the old manifest records, in place of the remove step's user-scope lines", so an implementer does not print a server's line twice.
+- `remove` could apply FR-1 (a)'s pattern to `mcp_servers` names as well (already listed by the Round 2 security review).
+
+**Decisions Required**
+
+*Decision: what `update` does with a skill folder that has no manifest*
+
+- **Severity:** HIGH
+- **Question:** When `~/.claude/skills/<slug>/` exists without `.installed-manifest.json`, should `update <slug>` stop, ask before replacing it as #006 does, or replace it as today's client does?
+- **Options:** A — stop before Install step 1 with FR-2's not-installed line, removing nothing; B — ask "Replace it?" as #006 does, and replace it on a Yes; C — keep today's behaviour and replace it without asking.
+- **Assumed:** A. It matches FR-2's stop for `install`, adds no question, and needs no new line.
+- **Impact if wrong:** under A, an install by the client of 2026-04-23 to 2026-05-04, which wrote no manifest (Round 2 research review), cannot be updated in place; its user is told to move the folder and install again, and the line's "was not installed by /agent-knowledge-hub" is wrong for that install. Under C, `update` on the wrong slug deletes a user's own skill folder, including uncommitted work in it.
+
+**Amendments**
+
+The plan was re-read from disk before each edit, and each edit used the Edit tool with exact strings.
+
+- design: FR-5 › `update` — when `~/.claude/skills/<slug>/` exists and holds no `.installed-manifest.json`, `update` stops before Install step 1 with FR-2's line for a folder /agent-knowledge-hub did not install, and removes nothing (Decision 1).
+- precision: § Server block › Other closing-message lines — the not-installed line's condition reads "(FR-2; also `update`, FR-5)".
+- precision: AC-6 — after the manifest is deleted, `update` of that folder prints the same line and changes no file.
+
+TOTAL: 1 design, 2 precision
+
+**Status**
+
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>doc-review — Round 2 (PASS WITH WARNINGS)</summary>
+
+# Doc Review — Round 2 — #051 client confirms MCP servers and agents
+
+**Summary**
+
+- The amendments since Round 1 are self-consistent as doc work: every new rule reaches `skill/SKILL.md` through the DoD row "carry FR-1 to FR-5", and no DoD row is duplicated or contradicts another.
+- The user-facing rows had not followed the amendments. The CHANGELOG row said nothing of FR-1 (f), the new server and agent refusals, or the new `install` stop that points to `update`, and its earlier-client clause predated research's repository-root measurement. The agent-knowledge-hub guide, troubleshooting, create-a-skill, Create scaffold and PRD rows each lacked one or more new rules. All eight gaps are amended in the plan as precision; none ships wrong behaviour.
+- Verified: the ADR row covers the new rejected alternative; #006's replace rule agrees with this plan's; the manifest format change needs no doc row; `update` can reprint the blocks, which the troubleshooting row relies on now that `install` stops.
+- No decisions are open.
+
+**Issues**
+
+> Mode: Codebase. Reviewed the plan above `## Board Review` as it stands after the Round 2 research, engineering and security amendments, against `git diff todo/051-client-confirms-mcp-servers-and-agents.md`. Only rules added or changed since Round 1 are checked against the Definition of Done; Round 1's impact table stands.
+
+*New rules against the Definition of Done*
+
+| New rule | `skill/SKILL.md` row | Guide rows | README | PRD | CHANGELOG | ADR |
+|---|---|---|---|---|---|---|
+| FR-1 (f): Claude runs a printed command when the user asks in a later message | yes (carve-out named) | yes, agent-knowledge-hub guide | yes ("adds with the command the client prints" holds when Claude runs it) | n-a | no | yes (rejected alternative) |
+| FR-1 (a) duplicate names; (b) `~` and `$` paths; (c) 4,096-byte and read-back refusals | yes | create-a-skill names `~/…` only; troubleshooting says "add each server with its printed command" | n-a | n-a | no | n-a |
+| FR-2 strict `name` rule, built-in names including `fork`, name of another agent | yes | create-a-skill names the key set only; agent-knowledge-hub guide names the key set only | n-a | n-a | no | n-a |
+| FR-2 `install` of an installed skill stops and points to `update`; a folder without the manifest stops the install | yes | agent-knowledge-hub guide › Manage and troubleshooting say nothing | n-a | § 15 `install` row says nothing | no | n-a |
+| FR-2 #006 replace Yes deletes the folder; a link is removed, not its target | yes (via Relationship › #006 row) | n-a | n-a | n-a | n-a | n-a |
+| FR-3 symbolic links left out; filesystem test removes the folder and stops | yes (Implementation step 4 names only FR-1 and FR-2 reasons) | create-a-skill and troubleshooting say nothing | n-a | § 15 row names `.claude-plugin/` only | n-a | n-a |
+| FR-5 `mcp_servers` key, relative paths, bounded deletion, earlier-manifest lines, `update` order | yes | agent-knowledge-hub guide › Manage covers `remove` | n-a | yes | yes, but the earlier-client clause predates research's repository-root measurement | n-a |
+
+*Findings*
+
+- MEDIUM | precision | DoD › CHANGELOG | The row describes the server and agent change and the earlier-client servers, and nothing an amendment added. A user reading it does not learn that they can ask Claude to add a printed server by name (FR-1 (f)); that `install` of a skill already installed now stops, writes nothing, and says to run `update` (today's `skill/SKILL.md` › Install has no such stop, so this changes what an existing command does); that `install` also stops when `~/.claude/skills/<slug>/` exists without this client's manifest, and leaves an agent or command file the user already has in place; or that some servers are shown with no command and some agents are refused for their `name`. Amended.
+- LOW | precision | DoD › CHANGELOG | The row says an earlier client's server is "at local scope for the directory the install ran in". Research's Round 2 measurement (Measured facts › `claude mcp add` scope) found local scope keyed by the git repository root that holds the directory, and § Server block's earlier-client line was amended to say "or for the whole git repository that holds it"; the CHANGELOG row was not. Amended to match.
+- MEDIUM | precision | DoD › agent-knowledge-hub guide | › Manage installed skills says nothing of the new `install` stop, though `update` is now the only command that replaces an installed skill; › Install a skill names only the key-set refusal, not that the client leaves an agent, command or skill folder the user already has unchanged, or refuses an agent named like a built-in or another agent. Amended.
+- MEDIUM | precision | DoD › troubleshooting guide | The new entry says "add each server with its printed command", but a server refused under FR-1 (a) to (c) has no command, and its no-command line tells the user to tell the submitter or flag the skill; the entry does not say so. The existing entry "Skill not found after installing via /agent-knowledge-hub" tells the user to check that the folder was created; under FR-2 and FR-3 an install can now stop with nothing written, and that entry does not point to the closing message's reason. The row's "run `update` to print the blocks again" is right under the install stop: `update` has no up-to-date short cut in today's `skill/SKILL.md`, and `install` no longer reprints them. Amended.
+- MEDIUM | precision | DoD › create-a-skill guide | The row gives authors the agent key set, the server name pattern, the transports, the value types and `${HOME}`. Each rule below was added by an amendment, makes install refuse what an author wrote, and is in no row: server names unique within one skill (FR-1 (a)); `$HOME/…` without braces refused as well as `~/…` (FR-1 (b)); a configuration of at most 4,096 bytes as JSON (FR-1 (c)); an agent `name` of ASCII letters, digits, `-` and `_` on its `name:` line that is no built-in subagent's name, compared without regard to case (FR-2); an `agents` value that is a path to a file or directory, not a map (FR-2); no symbolic links in the skill folder, and `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` never copied from it (FR-3). Amended.
+- LOW | precision | DoD › Create scaffold | The row keeps agent stubs to FR-2's keys. The scaffold is interactive, so a name the user types with a space, or `plan`, would be scaffolded and then refused by FR-2's `name` rule. Amended: the stub's `name` passes that rule and is no built-in name. The MCP stub follows the create-a-skill row, so the amended row carries the duplicate-name and `$HOME` rules to it.
+- LOW | precision | DoD › PRD | § 15 › Additional commands' `install <slug>` row ("Direct install by slug (no LLM step)") is not named, though FR-2 now makes `install` stop for an installed skill or a folder without the manifest; § 15 › Skill file structure names `.claude-plugin/` but not the other entries FR-3 leaves out, including symbolic links. Amended.
+- LOW | precision | Implementation Plan step 4 | "`skill/SKILL.md` › Error handling gains the FR-1 and FR-2 reasons" leaves out FR-3's filesystem-test stop and symbolic-link line, and FR-5's not-removed line, all added since Round 1. The DoD's `SKILL.md` row ("carry FR-1 to FR-5") already covers them, so the step is the narrower of two statements; amended so they agree.
+- INFO | verified | DoD › ADR | § Design › Rejected alternatives gained the FR-1 (f) alternative; the ADR row's "the rejected alternatives" covers it.
+- INFO | verified | DoD › `install skillset` and Relationship › #006 | #006 › FR-7 › Skip rule's "Yes lists the member for install, and its install replaces the directory" agrees with this plan's "deletes the folder at the start of step 4, before the copy", and #006 skips a member whose manifest exists, so FR-2's already-installed stop never fires inside `install skillset`. The DoD row that moves Relationship › #006's rule into `skill/SKILL.md` carries the Yes rule.
+- INFO | verified | FR-5 manifest format | No doc outside `todo/` and `source/research/` describes `.installed-manifest.json`'s fields; CHANGELOG 0.16.0 describes the manifest as it shipped then and is history. The relative paths and the `mcp_servers` key need no doc row.
+- INFO | verified | Duplicates and contradictions | No DoD row is duplicated. The why-doc row ("leaves adding it to the user") and README row ("adds with the command the client prints") stay true under FR-1 (f), because the user still decides and Claude runs the printed command. No row contradicts FR-1 to FR-5 after the amendments below.
+
+**Opportunities**
+
+- Not raised under the round bar, because no amendment created it: the DoD `SKILL.md` row and T1 forbid instructions to run `claude mcp add` and `claude mcp add-json` only. Goal 1 also forbids removing a server, and today's `skill/SKILL.md` › Update and › Remove say "MCP servers" and "deregister MCP servers". Widening both to "any `claude mcp` command except under FR-1 (f)" would let T1 catch a leftover `claude mcp remove` instruction.
+
+**Decisions Required**
+
+None. Every gap was a missing or narrower doc row, and the safe default (add it to the plan) needs no judgement.
+
+**Amendments**
+
+Each edit used the Edit tool after re-reading the lines it changed.
+
+- precision: Definition of Done › CHANGELOG — the entry also tells users that they can ask Claude to add a printed server by name (FR-1 (f)); that a server FR-1 (a) to (c) refuses is listed with its reason and no command; that agents named like a built-in or another agent are refused and a user's own agent or command file is left unchanged; and that `install` of an installed skill writes nothing and says to run `update`, as does `install` over a folder without this client's manifest (FR-2).
+- precision: Definition of Done › CHANGELOG — an earlier client's server is at local scope "for the directory the install ran in, or for the git repository that holds it", matching Measured facts › `claude mcp add` scope and § Server block's earlier-client line.
+- precision: Definition of Done › agent-knowledge-hub guide — › Install a skill also names the name-clash refusals and that an agent, command or skill folder the user already has is left unchanged; › Manage installed skills says `install` of an installed skill writes nothing and says to run `update`.
+- precision: Definition of Done › troubleshooting guide — the new entry says a server with no command gets none until the submitter changes its entry, and a refused agent's line gives its own step; the existing "Skill not found after installing via /agent-knowledge-hub" entry gains a sentence pointing to the closing message's reason and next step (FR-2, FR-3).
+- precision: Definition of Done › create-a-skill guide — adds unique server names, `$HOME/…` beside `~/…`, the 4,096-byte limit, FR-2's agent `name` rule and built-in names, the path form of `agents`, and FR-3's symbolic links and three names never copied.
+- precision: Definition of Done › Create scaffold — an agent stub's `name` passes FR-2's `name` rule and is no built-in subagent's name.
+- precision: Definition of Done › PRD — § 15 › Skill file structure names every entry FR-3 leaves out, and § 15 › Additional commands' `install <slug>` row is named with FR-2's two stops.
+- precision: Implementation Plan step 4 — › Error handling also gains FR-3's symbolic-link line and filesystem-test stop and FR-5's not-removed line, matching the DoD `SKILL.md` row.
+
+TOTAL: 0 design, 8 precision
+
+**Status**
+
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>security-review — Round 3 (PASS WITH WARNINGS)</summary>
+
+# Security Review — Round 3 — #051 client confirms MCP servers and agents
+
+**Summary**
+
+- No change since Round 2 reopens a path that Round 2 closed, and all four Round 2 amendments are in the plan as amended: the ASCII-only, non-empty `name` rule with `agent-nextline`; FR-5's deletion bound with the "Not removed:" line; the rule that deleting a link removes only the link, which now covers the #006 Yes; and FR-1 (f)'s sentence that only the user's own message is a request.
+- Every name printed in a command line still passes FR-1 (a)'s pattern. The earlier-client `--scope local` names are filtered from the installed `plugin.json`. The user-scope remove lines, including those for a server the new version refuses and those after a stopped `update`, take only names from the old manifest's `mcp_servers`, which the client checked when it wrote them. None can start with `-` or carry a shell character.
+- The `update` order holds. Engineering's no-manifest stop runs before Install step 1 and removes nothing. A slug or fetch that fails stops the update before anything is deleted. FR-3's stop deletes only the folder that the copy made. Every deletion of the folder keeps the link rule.
+- Findings: 0 blocking, 0 high, 0 medium, 3 low (an author's manifest in a folder the user cloned by hand, `remove` on a folder with no manifest, and reading an earlier client's files through a link). None meets the round bar. TOTAL: 0 design, 0 precision.
+- This was a review on paper of a plan with no code. The hunt tables have no code to run against, so the status is PASS WITH WARNINGS, and the shallow coverage is the warning.
+
+**Issues**
+
+**Threat model, change since Round 2.** The assets, adversaries and inherited trust are the same as in Rounds 1 and 2. The changes since Round 2 add no new zone crossing. They widen three existing ones: the earlier-client `--scope local` line is now printed on every first `update` of such an install, not only on `remove`; the user-scope remove line is now printed for a server that the new version still lists but refuses; and `update` now has a stop of its own, before Install step 1. The #006 Yes deletion and the install-on-installed stop were in place in Round 2.
+
+**Attack surface: 10 entrypoints, 0 without a stated control.** These are Round 2's ten entrypoints. The two gaps that round found, a deletion with no bound and a link with no deletion rule, are closed in the plan as it stands (FR-5 and FR-2). Nothing added since Round 2 is a new entrypoint.
+
+**Findings:**
+
+- PASS | Round 2 amendments survived | plan FR-1 (f), FR-2, FR-5, § Server block › Other closing-message lines, Measured facts › Deleting a link to a folder, Fixture, AC-4, AC-10, T1, N6 | All four are in the plan as amended. FR-2's `name` rule still reads "empty or holds any character other than the ASCII letters `A` to `Z` and `a` to `z`, the digits `0` to `9`, `-` and `_`", and `agent-nextline` is in the fixture, AC-4 and T1. FR-5's deletion bound (first part `agents` or `commands`, no empty, `.` or `..` part, a regular file) and the "Not removed:" line are unchanged, and AC-10 still checks `~/keep.txt`. FR-2's rule that every deletion of `~/.claude/skills/<slug>` removes the path itself, with no trailing `/`, and only the link when it is one, still names all four deleting paths, the #006 Yes among them, and N6's third member still checks it. FR-1 (f)'s sentence saying that only the user's own message is a request is in place.
+- PASS | earlier-client `--scope local` line on every `update` | plan FR-5 ("For a manifest with no server key it prints the earlier-client line for every name that `remove` would take from the installed `plugin.json`"); § Server block › Other closing-message lines | The names come from the installed `plugin.json`, which the author controls, but they pass through the same filter as `remove`'s: only names matching FR-1 (a)'s `^[A-Za-z0-9][A-Za-z0-9_-]*$` are kept. No name can then start with `-` and act as a flag, or carry a shell character, a space or a line break into `claude mcp remove --scope local <name>`, which the model runs exactly as printed under FR-1 (f). The line sits inside FR-4's fenced block, and its name does not start the line. Printing the line on every first update widens Round 2's LOW finding: run from the session's directory under FR-1 (f), the line removes a local server of the same name that the user added there. It still needs the user's request, and the server can be added again. It stays LOW (Opportunities, carried from Round 2). The change also helps security: an earlier client's local-scope server takes precedence over a user-scope server of the same name in that directory, so without the line it would keep running the configuration the user never reviewed, in place of the one the user added from the block.
+- PASS | user-scope remove line for a server the new version lists but refuses | plan FR-5 ("Its remove step prints a server's remove line only when the new version gives that server no command line …"); FR-4 (stopped `update`) | Asked: can the new version choose the name printed in a remove line? No. The remove step prints only for names in the old manifest's `mcp_servers`, and "only when" narrows that set; it adds no names. FR-4's stopped-`update` rule also takes "every server the old manifest records". Those names passed FR-1 (a) when the client wrote them. The new version can be refused under (a) only through the case-insensitive duplicate rule, and the printed name is still the old, valid one. What the author can do is make a remove line appear, by adding a `~` to the command or a second entry that differs only in case. Dropping the server from the list did the same before, so this is not new, and it removes only a server the user approved, at the user's own request.
+- PASS | `update` order and its stops | plan FR-5, FR-2, FR-3, FR-4 | I walked four cases: a folder with no manifest, a slug that does not exist, a failed fetch, and FR-3's stop. Engineering's no-manifest stop runs before Install step 1 and before the remove step, and removes nothing, so `update` can no longer delete a folder that FR-2 keeps `install` from replacing. The check follows a link, which is the safe direction: a link to a working copy with no manifest stops the update. A slug that does not exist in the catalog cannot reach the remove step, because the fetch at Install step 1 fails first, and a failed fetch "leaves the old install as it was". The skill slugs that reach the commands are `slugify` output (`backend/app/services/skill.py:108`). After the remove step, step 4's folder checks see no folder and pass. FR-3's stop then deletes only the folder that the copy just made, which is a real folder because the remove step removed only a link. Every deletion of the folder keeps FR-2's link rule.
+- PASS | install-on-installed stop and the #006 Yes | plan FR-2; Relationship › #006 | With both of FR-2's folder stops, `install` never copies into an existing folder, so FR-3's filesystem test can delete only a folder that the copy created. The one exception is a #006 Yes, and its deletion at the start of step 4 follows FR-2's link rule. These checks only stop an install, and stopping is the safe direction.
+- PASS | colon-space key test and case-insensitive duplicate server names | plan FR-2, FR-1 (a) | Walked on paper: `name:Explore`, `name:<TAB>Explore`, `hooks:`, `--- ` followed by a key, `...`, `? hooks`, `<<:` and a tab-indented line each make the command print, so the file is refused. `name:` at the end of a line followed by an indented value is skipped by the key test and refused by the `name` rule as empty. The case-insensitive duplicate rule closes a case where, on macOS's default filesystem, the command in the `Foo` block would add the `foo` entry's configuration. FR-1 (a) admits only ASCII names, so case folding raises no Unicode question.
+- PASS | DoD and T1 forbid any `claude mcp` instruction except FR-1 (f) | plan Definition of Done (`SKILL.md` row), Test Plan › T1 | This removes today's › Update and › Remove instruction to "deregister MCP servers" (`skill/SKILL.md:57`, `skill/SKILL.md:64`), the only route by which the client itself ran `claude mcp` outside an install.
+- LOW | an author's `.installed-manifest.json` in a folder the user cloned by hand | plan FR-2 (install-on-installed stop, which points to `update`); FR-5 | The client takes any `.installed-manifest.json` to be its own. Suppose a user has cloned a skill repository by hand into `~/.claude/skills/<slug>` and that repository holds such a file, for example because its author committed a folder that the hub had installed. Then `install <slug>` stops with the already-installed line and tells the user to run `update`. `update` then deletes every regular file under `~/.claude/agents/` and `~/.claude/commands/` that the file lists, and the cloned folder. This route existed before this task, because `update` on `main` always removes first. The plan narrows it: deletions are bounded and a link is never followed. The precondition is a skill from the same author already installed by hand, and that skill's own `SKILL.md` can already run commands (Non-Goals). Not amended.
+- LOW | `remove` on a folder with no manifest | plan FR-5; `skill/SKILL.md:64` ("Confirm with the user, then delete …") | Engineering's stop covers `update`, not `remove`. A `remove <slug>` of a folder with no manifest still deletes it, but only after `remove`'s existing confirmation, which this plan keeps, and only the link when the folder is one. Nothing the client prints points the user to `remove`. Not amended.
+- LOW | reading files of an earlier client's install through a link | plan FR-5 (`update` reads "every old `.akh-mcp/<name>.json`"; `remove` reads "the installed `plugin.json`") | The earlier client copied links. An `.akh-mcp/` file or a `plugin.json` that is a link can therefore put the file it points to into the session the first time `update` or `remove` runs on that install. This is the same finding as engineering's Round 3 LOW, widened to the installed `plugin.json`. The precondition is an author who planted the link before this task, whose skill can already run code. Not amended.
+
+**Unverified Leads**
+
+- Whether Claude Code treats `_` and `-` as the same in agent names, so that `general_purpose` would name `general-purpose`. FR-2 compares names to the built-in list without regard to case, but not with `_` and `-` swapped. Nothing in the `sub-agents` documentation the plan cites suggests that it does. Checking needs a signed-in session with such an agent and `/agents`. If it does, the fix is one clause in FR-2's built-in comparison.
+- Where "the installed `plugin.json`" lives for an earlier-client install whose `plugin.json` was at the repository root and not in the skill folder. In that case the earlier-client line has no names to print. That would be a gap in correctness and in what the user is told, not something an attacker can use, and AC-10 and N8 would detect it. Not checked against the earlier client's copy rule.
+
+**Opportunities**
+
+- Carried from Round 2: the earlier-client remove line could add "This removes any server of that name for the directory you run it in, including one you added yourself." It matters more now, because the line is printed on every first `update`.
+- Carried from Round 2: apply FR-1 (a)'s pattern to every server name that `remove` and `update` print, from `mcp_servers` as well as from the installed `plugin.json`.
+- `update` and `remove` could read no file of the installed folder through a symbolic link, as FR-3 already rules for the clone. That covers the old manifest, the old `.akh-mcp/` files and the installed `plugin.json`, and closes the third LOW finding.
+- #006's replace question could say when `~/.claude/skills/<slug>` is a symbolic link and name its target (carried from Round 2).
+
+**Decisions Required**
+
+None. No finding in this round needs a decision.
+
+**Amendments**
+
+None. No finding meets the round bar, and the plan file was not edited.
+
+TOTAL: 0 design, 0 precision
+
+**Status**
+
+PASS WITH WARNINGS
+
+</details>
+
+<details>
+<summary>codebase-ux-review — Round 3 (PASS WITH WARNINGS)</summary>
+
+# Round 3 UX Review: #051 Client confirms MCP servers and agents
+
+**Summary**
+
+| Dimension | As received | After amendments | Key gap |
+|---|---|---|---|
+| Discoverability | 7/10 | 7/10 | Unchanged since Round 2 |
+| First-Use Clarity | 7/10 | 7/10 | Unchanged since Round 2; `!` and terminals in Cogito are still to be measured |
+| Documentation Quality | 8/10 | 8/10 | Unchanged since Round 2 |
+| Error UX | 7/10 | 8/10 | Taken word for word, FR-2 gave every agent refused by key the cannot-be-read line, and AC-4 could not be met |
+| Workflow Fit | 8/10 | 8/10 | `update` of a folder with no manifest stops with nothing removed |
+| Trust & Reliability | 8/10 | 8/10 | The `update` stop says "was not installed by /agent-knowledge-hub" for an install made before 2026-05-05 |
+| **UX Readiness Score** | **7.5/10** | **7.7/10** | |
+
+**Verdict:** UX WARNINGS, computed from the after column. Engineering's `update` stop removes nothing, and its next step works. It closes a real loss: as Round 2 left it, `update` deleted a user's own folder.
+
+- One defect met the round bar, and it is mine from Round 2. FR-2 says any output of the key command counts as frontmatter the client cannot parse, while AC-4 wants the keys named for `agent-hooks` and the cannot-be-read line for `agent-long`. Both files give the same output, so no implementation could meet AC-4. Taken word for word, FR-2 would tell the user the client "cannot tell what it would do" about an agent whose `hooks:` line it has just found. Amended: FR-2 says which output names keys, and `agent-long` moves to AC-4's keys group (3 precision).
+- The `update` stop falsely says "was not installed by /agent-knowledge-hub" for a folder that a client from before 2026-05-05 installed and that no later client has updated. Nothing is lost, the step it gives works, and the user accepted this cost under engineering's Decision 1, so it is not amended. A rewording is listed in Opportunities.
+- Top three risks if shipped as received: a user told that an agent with plain `hooks` could not be read, and not offered the copy-by-hand step; an implementer stuck on an AC-4 that no implementation meets; an early user told their own hub install was not made by the hub. The fix with the highest impact is FR-2's rule for which output names keys.
+- No decision is open.
+
+**Issues**
+
+Read as an S3DF scientist who runs `install`, `update` or `remove` and reads the closing message, checking each change since my Round 2 (engineering's `update` stop, research's `awk` rule and corrected `agent-escaped`, security's Round 3 edits) against what the user is told and what they could lose. The plan is reviewed above `## Board Review`.
+
+- MEDIUM | precision | FR-2 key command × AC-4 × Fixture `agent-long` | FR-2 says "Any output counts as frontmatter the client cannot parse", and § Server block gives such frontmatter the cannot-be-read line ("so /agent-knowledge-hub cannot tell what it would do"), with no save-it-yourself step. AC-4 requires the keys line, with its key sentences, for `agent-hooks`, `agent-servers`, `agent-memory` and the new `agent-nul`, and the cannot-be-read line for `agent-long`. No implementation can meet AC-4. A sketch of the key command in `awk` printed exactly `hooks:` for both an `agent-hooks`-shaped file and an `agent-long`-shaped file, so nothing in the output can give them different lines, and FR-2 forbids looking at the file's length. An implementer who follows FR-2's sentence word for word prints the cannot-be-read line for every agent refused by key, which tells the user the client "cannot tell what it would do" about an agent whose `hooks:` it has just found, and drops the step the Trade-offs table promises ("The closing message links the file, and the user can copy it by hand"). The split between the two lines came from my own Round 2 amendment, which never said which output gives which line. Research's `agent-nul` row, added this round, depends on the same split. Amended: FR-2 states that output lines which all start with a key other than the six name those keys, and that any other output counts as frontmatter the client cannot parse; `agent-long` moves to AC-4's keys group, and its fixture row says its key is named.
+- warning | Trust & Reliability | score 8/10 — not amended. FR-5 › `update` stop × installs made before 2026-05-05. The clients from `c6f45e9` (2026-04-22) to before `c17e539` (2026-05-05) wrote no `.installed-manifest.json` (`git log -S 'installed-manifest' -- skill/SKILL.md`). `c17e539` and later clients updated such a folder as a "pre-manifest install", so the only installs still without a manifest are ones never updated or reinstalled since 2026-05-05. For those, `update` now prints `Not installed: ~/.claude/skills/<slug>/ already exists and was not installed by /agent-knowledge-hub`, which is false. The next step it gives (move the folder, install again) works, and nothing is lost: the folder is moved, not deleted, and the agents, commands and local-scope servers the early client wrote stay where they are. Afterwards the user meets two more consequences. The new install refuses the early client's agent and command files with the "not a file /agent-knowledge-hub installed for <slug>" line, which was already the case under Round 2 and whose step (move yours, run `update`) works. A server the 2026-04-23 to 2026-05-04 client added at local scope is never named, because `install` prints no earlier-client line; the CHANGELOG paragraph for existing users covers it. Engineering's Decision 1 names the false line as the cost of option A, and the user accepted A. The wording is left as it is under the round bar; see Opportunities.
+- PASS | `update` stop | FR-5, FR-4, AC-6 | The stop runs before Install step 1, so nothing is fetched or removed. FR-4's sentence for an `update` that stops ("a remove line for every server the old manifest records") prints nothing here, because there is no old manifest, so the user sees the stop line alone. A skill cannot plant a manifest to pass the stop, because FR-3 leaves `.installed-manifest.json` out of the copy. `remove` was not changed this round.
+- PASS | `awk` rule and corrected `agent-escaped` | FR-2, AC-4, T1 | `agent-nul` is named by its key, as `agent-hooks` is. `name: "\x45xplore"` reaches the name rule as `\x45xplore`, which the rule refuses, so the user reads the second form of the cannot-be-read line, which is true for that file.
+
+**Opportunities**
+
+- The not-installed line could say the folder "has no record of an install by /agent-knowledge-hub" instead of "was not installed by /agent-knowledge-hub". That is true both for a user's own folder and for an install made before 2026-05-05, and it changes no behaviour. It is a wording change, so it is left for the implementer or a later task.
+- For a folder with no manifest, `update`'s stop could add the earlier-client line for each name in the folder's `plugin.json` `mcp-servers` list, as FR-5 does for a manifest with no server key, so that a server the 2026-04-23 to 2026-05-04 client added at local scope is named before the user adds it again at user scope.
+
+**Decisions Required**
+
+None. Engineering's Decision 1 (stop `update` on a folder with no manifest) already names the false line as the cost of its default, and the user accepted that default.
+
+**Amendments**
+
+The plan was re-read from disk before each edit, and each edit used the Edit tool with exact strings. Afterwards no site above `## Board Review` says that `agent-long` gets the cannot-be-read line.
+
+- precision: FR-2 — "Any output counts as frontmatter the client cannot parse" becomes: any output refuses the file; when every output line starts with a key other than the six, of ASCII letters, digits, `-` and `_`, followed by `:` and then a space or the end of the line, the closing message names those keys; any other output counts as frontmatter the client cannot parse (Issue 1).
+- precision: AC-4 — `agent-long` moves to the group whose keys the closing message names; `agent-indented` alone gets the cannot-be-read line (Issue 1).
+- precision: Test Plan › Fixture › `agent-long` — expected result is "key named", because the key command prints the same `hooks:` line for it as for `agent-hooks` (Issue 1).
+
+TOTAL: 0 design, 3 precision
+
+**Status**
+
+PASS WITH WARNINGS
+
+</details>
+
+---
+
+## Board Review — first design (UNSTABLE, 2026-10-15)
 
 **Verdict:** UNSTABLE
 **Date:** 2026-10-15

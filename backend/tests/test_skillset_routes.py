@@ -146,3 +146,129 @@ class TestSkillsetsRouterCRUD:
         body = (await client.get("/api/skillsets/set")).json()
         assert [s["slug"] for s in body["skills"]] == ["a"]
         assert body["member_count"] == 1
+
+
+class TestSkillsetsRouterMembership:
+    async def test_add(self, client):  # R1
+        await _make_skill("a")
+        await _skillset_with()
+        resp = await client.put("/api/skillsets/set/skills/a", headers=_auth())
+        assert resp.status_code == 204
+        assert await _member_slugs(client) == ["a"]
+
+    async def test_add_twice(self, client):  # R2
+        await _skillset_with("a")
+        assert (await client.put("/api/skillsets/set/skills/a", headers=_auth())).status_code == 409
+
+    async def test_add_unknown_skill(self, client):  # R3
+        await _skillset_with()
+        assert (await client.put("/api/skillsets/set/skills/missing", headers=_auth())).status_code == 404
+
+    async def test_remove(self, client):  # R4
+        await _skillset_with("a", "b")
+        assert (await client.delete("/api/skillsets/set/skills/a", headers=_auth())).status_code == 204
+        assert await _member_slugs(client) == ["b"]
+
+    async def test_remove_non_member(self, client):  # R5
+        await _make_skill("a")
+        await _skillset_with()
+        assert (await client.delete("/api/skillsets/set/skills/a", headers=_auth())).status_code == 404
+
+    async def test_add_by_non_owner(self, client):  # R6
+        await _skillset_with("a")
+        await _make_skill("b")
+        for skill_slug in ("a", "b"):
+            resp = await client.put(f"/api/skillsets/set/skills/{skill_slug}", headers=_auth("stranger"))
+            assert resp.status_code == 403
+
+    async def test_remove_by_unrelated_user(self, client):  # R7
+        await _skillset_with("a")
+        resp = await client.delete("/api/skillsets/set/skills/a", headers=_auth("stranger"))
+        assert resp.status_code == 403
+
+    async def test_remove_by_skill_submitter(self, client):  # R8
+        await _skillset_with("a")
+        resp = await client.delete("/api/skillsets/set/skills/a", headers=_auth("author"))
+        assert resp.status_code == 204
+        assert await _member_slugs(client) == []
+
+    async def test_reorder(self, client):  # R9
+        before = await _skillset_with("a", "b")
+        resp = await client.put(
+            "/api/skillsets/set/order",
+            json={"skill_slugs": ["b", "a"], "version": before.version},
+            headers=_auth(),
+        )
+        assert resp.status_code == 200
+        assert [s["slug"] for s in resp.json()["skills"]] == ["b", "a"]
+        assert resp.json()["version"] == before.version + 1
+
+    async def test_reorder_stale_version(self, client):  # R10
+        before = await _skillset_with("a", "b")
+        resp = await client.put(
+            "/api/skillsets/set/order",
+            json={"skill_slugs": ["b", "a"], "version": before.version - 1},
+            headers=_auth(),
+        )
+        assert resp.status_code == 409
+
+    async def test_reorder_wrong_member_set(self, client):  # R11
+        before = await _skillset_with("a", "b")
+        resp = await client.put(
+            "/api/skillsets/set/order",
+            json={"skill_slugs": ["a"], "version": before.version},
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
+
+    async def test_list_by_creator(self, client):  # R12
+        await _skillset_with(slug="mine")
+        await _skillset_with(slug="theirs", owner="other")
+        body = (await client.get("/api/skillsets?created_by=owner")).json()
+        assert [s["slug"] for s in body["items"]] == ["mine"]
+
+    async def test_reorder_by_non_owner(self, client):  # R13
+        before = await _skillset_with("a", "b")
+        resp = await client.put(
+            "/api/skillsets/set/order",
+            json={"skill_slugs": ["b", "a"], "version": before.version},
+            headers=_auth("stranger"),
+        )
+        assert resp.status_code == 403
+
+    async def test_writes_need_identity(self, client):  # R14
+        await _skillset_with("a")
+        assert (await client.put("/api/skillsets/set/skills/a")).status_code == 401
+        assert (await client.delete("/api/skillsets/set/skills/a")).status_code == 401
+        resp = await client.put("/api/skillsets/set/order", json={"skill_slugs": ["a"], "version": 1})
+        assert resp.status_code == 401
+
+    async def test_remove_deactivated_member(self, client):  # R15
+        await _skillset_with("a")
+        await (await Skill.find_one(Skill.slug == "a")).set({Skill.status: SkillStatus.deactivated})
+        assert (await client.delete("/api/skillsets/set/skills/a", headers=_auth())).status_code == 204
+
+    async def test_submitter_can_only_remove(self, client):  # R16
+        before = await _skillset_with("a", "b")
+        author = _auth("author")
+        reorder = {"skill_slugs": ["b", "a"], "version": before.version}
+        assert (await client.put("/api/skillsets/set/order", json=reorder, headers=author)).status_code == 403
+        assert (await client.patch("/api/skillsets/set", json={"name": "X"}, headers=author)).status_code == 403
+        assert (await client.delete("/api/skillsets/set", headers=author)).status_code == 403
+        after = await skillset_service.get("set")
+        assert (after.name, after.version) == ("set", before.version)
+
+    async def test_add_limit_counts_per_user_across_paths(self, client):  # R17
+        # User ids unique to this test: limiter counts live in process memory for the whole run.
+        await skillset_service.create(name="r17", description="", actor=User(user_id="r17-a"), slug="r17-a")
+        await skillset_service.create(name="r17", description="", actor=User(user_id="r17-b"), slug="r17-b")
+        for i in range(51):
+            await _make_skill(f"r17-{i}")
+        statuses = [
+            (await client.put(f"/api/skillsets/r17-a/skills/r17-{i}", headers=_auth("r17-a"))).status_code
+            for i in range(51)
+        ]
+        assert statuses[:50] == [204] * 50
+        assert statuses[50] == 429
+        resp = await client.put("/api/skillsets/r17-b/skills/r17-0", headers=_auth("r17-b"))
+        assert resp.status_code == 204

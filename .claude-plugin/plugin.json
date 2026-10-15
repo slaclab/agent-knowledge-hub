@@ -1,6 +1,6 @@
 {
   "name": "agent-knowledge-hub",
   "description": "Discover, install, rate, and submit skills from the SLAC S3DF catalog — entirely within your agent session.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "skills": "./skill/"
 }

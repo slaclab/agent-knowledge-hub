@@ -52,4 +52,4 @@
 | [048](todo/048-install-from-files-route.md) | Install internal skills through the files route, confined to the skill folder | ⬜ Open |
 | [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ⬜ Open |
 | [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | 🔍 Reviewed |
-| [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client asks before it adds an MCP server or an agent, and keeps credentials out of them | 🔎 In Review |
+| [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client asks before it adds an MCP server or an agent, and keeps credentials out of them | ⬜ Open |

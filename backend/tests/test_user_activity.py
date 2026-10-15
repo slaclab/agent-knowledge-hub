@@ -366,7 +366,7 @@ class TestInstallEventCascade:
         ev = SkillInstallEvent(user_id="alice", skill_slug="deletable-skill", skill_id=skill_id)
         await ev.insert()
 
-        await skill_repository.delete(skill)
+        await skill_repository.delete(skill, actor_id="alice")
 
         updated = await SkillInstallEvent.find_one(
             SkillInstallEvent.skill_slug == "deletable-skill"
@@ -381,7 +381,7 @@ class TestInstallEventCascade:
         ev = SkillInstallEvent(user_id="alice", skill_slug="survive-skill", skill_id=str(skill.id))
         await ev.insert()
 
-        await skill_repository.delete(skill)
+        await skill_repository.delete(skill, actor_id="alice")
 
         r = await client.get("/api/me/installs", headers=_auth("alice"))
         assert r.status_code == 200

@@ -85,5 +85,5 @@ async def test_update_skill_records_revision():
 async def test_delete_skill():
     data = SkillCreate(repo_url="https://github.com/x/del", name="Delete Me")
     skill = await skill_repository.create(data, submitter_id="alice")
-    await skill_repository.delete(skill)
+    await skill_repository.delete(skill, actor_id="alice")
     assert await skill_repository.get(skill.slug) is None

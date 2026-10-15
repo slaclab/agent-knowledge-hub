@@ -19,6 +19,11 @@ class LabelOut(BaseModel):
     applied_by_me: bool = False
 
 
+class SkillsetRef(BaseModel):
+    slug: str
+    name: str
+
+
 class AdminLabelOut(BaseModel):
     id: str
     name: str

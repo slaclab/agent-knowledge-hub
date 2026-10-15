@@ -28,6 +28,7 @@ from app.schemas.skill import SkillCreate, SkillUpdate
 from app.services.github import GitHubFetchError, GitHubRef, _normalize_github_url, extract_repo_root_url, github_fetcher, github_scanner
 from app.services.revision import revision_service
 from app.services import label as label_module
+from app.services import skillset as skillset_module
 
 
 SortField = Literal["newest", "highest_rated", "most_rated", "most_stars"]
@@ -752,9 +753,10 @@ class SkillRepository:
             logger.warning("[PIN] github_fetcher failed: %s", exc)
         return skill
 
-    async def delete(self, skill: Skill) -> None:
+    async def delete(self, skill: Skill, actor_id: str) -> None:
         skill_id = str(skill.id)
 
+        await skillset_module.skillset_service.purge_for_skill(skill_id, skill.slug, actor_id)
         await label_module.label_service.purge_for_skill(skill_id)
         await Rating.find(Rating.skill_id == skill_id).delete()
         await SkillRevision.find(SkillRevision.skill_id == skill_id).delete()

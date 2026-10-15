@@ -16,6 +16,7 @@ from app.services.skillset import (
     SkillsetVersionConflictError,
     skillset_service,
 )
+from app.services.skill import skill_repository
 
 OWNER = User(user_id="owner")
 ADMIN = User(user_id="admin", is_admin=True)
@@ -355,3 +356,69 @@ class TestSkillsetServiceList:
         await _make_skillset("theirs", owner=User(user_id="other"))
         items, total = await skillset_service.list(page=1, page_size=20, created_by="owner")
         assert (total, [s.slug for s in items]) == (1, ["mine"])
+
+
+class TestSkillsetServiceBatchHydration:
+    async def test_one_query_for_a_page_of_skills(self, monkeypatch):  # B1
+        a = await _make_skill("a")
+        b = await _make_skill("b")
+        await _make_skillset()
+        await skillset_service.add_skill("set", "a", OWNER)
+        calls = []
+        original = Skillset.find
+
+        def spy(*args, **kwargs):
+            calls.append(args)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(Skillset, "find", spy)
+        await skillset_service.batch_skillsets_for_skills([str(a.id), str(b.id)])
+        assert len(calls) == 1
+
+    async def test_skill_in_two_skillsets(self):  # B2
+        a = await _make_skill("a")
+        for slug in ("first", "second"):
+            await _make_skillset(slug)
+            await skillset_service.add_skill(slug, "a", OWNER)
+        result = await skillset_service.batch_skillsets_for_skills([str(a.id)])
+        assert [(r.slug, r.name) for r in result[str(a.id)]] == [("first", "first"), ("second", "second")]
+
+    async def test_skill_in_no_skillset(self):  # B3
+        a = await _make_skill("a")
+        await _make_skillset()
+        assert await skillset_service.batch_skillsets_for_skills([str(a.id)]) == {str(a.id): []}
+
+    async def test_empty_input(self):  # B4
+        assert await skillset_service.batch_skillsets_for_skills([]) == {}
+
+
+class TestSkillsetServiceCascade:
+    async def test_purge_removes_skill_everywhere(self):  # M9
+        a = await _make_skill("a")
+        await _make_skill("b")
+        for slug in ("first", "second"):
+            await _make_skillset(slug)
+            await skillset_service.add_skill(slug, "a", OWNER)
+        await skillset_service.add_skill("first", "b", OWNER)
+        await skillset_service.purge_for_skill(str(a.id), "a", "owner")
+        first = await skillset_service.get("first")
+        second = await skillset_service.get("second")
+        assert await _member_slugs("first") == ["b"]
+        assert second.members == []
+        assert (first.version, second.version) == (3, 2)
+
+    async def test_skill_delete_cascades(self):  # M13
+        a = await _make_skill("a")
+        for slug in ("first", "second"):
+            await _make_skillset(slug)
+            await skillset_service.add_skill(slug, "a", OWNER)
+        await skill_repository.delete(a, actor_id="author")
+        for slug in ("first", "second"):
+            stored = await skillset_service.get(slug)
+            assert (stored.members, stored.version) == ([], 2)
+
+    async def test_reorder_after_member_skill_deleted_conflicts(self):  # O9
+        before = await _skillset_with("a", "b")
+        await skill_repository.delete(await Skill.find_one(Skill.slug == "a"), actor_id="author")
+        with pytest.raises(SkillsetVersionConflictError):
+            await skillset_service.reorder("set", ["b", "a"], before.version, OWNER)

@@ -12,6 +12,7 @@ from slugify import slugify
 from app.auth import User
 from app.models.skill import Skill, SkillStatus
 from app.models.skillset import Skillset, SkillsetMember
+from app.schemas.skill import SkillsetRef
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,25 @@ class SkillsetService:
                 skillset, SkillsetVersionConflictError("Skillset changed since it was loaded")
             )
         return await self.get(slug)
+
+    async def batch_skillsets_for_skills(self, skill_ids: List[str]) -> dict[str, List[SkillsetRef]]:
+        """Map each skill id to the skillsets that hold it, in one query."""
+        if not skill_ids:
+            return {}
+        result: dict[str, List[SkillsetRef]] = {sid: [] for sid in skill_ids}
+        holders = await Skillset.find({"members.skill_id": {"$in": skill_ids}}).sort("name").to_list()
+        for skillset in holders:
+            ref = SkillsetRef(slug=skillset.slug, name=skillset.name)
+            for member in skillset.members:
+                if member.skill_id in result:
+                    result[member.skill_id].append(ref)
+        return result
+
+    async def purge_for_skill(self, skill_id: str, skill_slug: str, actor_id: str) -> None:
+        """Remove a skill from every skillset; called before the skill document is deleted."""
+        await Skillset.find({"members.skill_id": skill_id}).update(
+            {"$pull": {"members": {"skill_id": skill_id}}, "$inc": {"version": 1}}
+        )
 
 
 skillset_service = SkillsetService()

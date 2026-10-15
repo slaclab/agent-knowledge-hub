@@ -276,7 +276,7 @@ async def test_stale_cursor_returns_partial_page_not_error():
 
     # Use a cursor pointing at a deleted skill's position
     cursor = _encode_cursor(last.submitted_at.isoformat(), str(last.id))
-    await skill_repository.delete(skills[0])
+    await skill_repository.delete(skills[0], actor_id="alice")
 
     # Should not raise — returns partial/empty result
     items, _ = await skill_repository.list(sort="newest", page_size=2, cursor=cursor)

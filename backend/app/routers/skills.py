@@ -312,7 +312,7 @@ async def delete_skill(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     if skill.submitter_id != user.user_id and not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your skill")
-    await skill_repository.delete(skill)
+    await skill_repository.delete(skill, actor_id=user.user_id)
 
 
 @router.post("/{slug}/refetch", response_model=SkillOut)

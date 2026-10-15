@@ -291,3 +291,67 @@ class TestSkillsetServiceOrder:
         stored = await skillset_service.get("set")
         assert "0123456789abcdef01234567" not in [m.skill_id for m in stored.members]
         assert await _member_slugs("set") == ["b", "a"]
+
+
+class TestSkillsetServicePermissions:
+    async def test_update_by_owner(self):  # P1
+        await _make_skillset()
+        updated = await skillset_service.update("set", OWNER, name="Renamed", description="New")
+        assert (updated.name, updated.description) == ("Renamed", "New")
+
+    async def test_update_by_non_owner_denied(self):  # P2
+        await _make_skillset()
+        with pytest.raises(PermissionDeniedError):
+            await skillset_service.update("set", User(user_id="stranger"), name="Renamed")
+        assert (await skillset_service.get("set")).name == "set"
+
+    async def test_update_by_admin(self):  # P3
+        await _make_skillset()
+        updated = await skillset_service.update("set", ADMIN, name="Renamed")
+        assert updated.name == "Renamed"
+
+    async def test_update_leaves_unset_fields(self):
+        await skillset_service.create(name="n", description="keep", actor=OWNER, slug="set")
+        updated = await skillset_service.update("set", OWNER, name="Renamed")
+        assert updated.description == "keep"
+
+    async def test_delete_by_owner_removes_document(self):  # P4
+        await _skillset_with("a")
+        await skillset_service.delete("set", OWNER)
+        assert await Skillset.find_one(Skillset.slug == "set") is None
+
+    async def test_delete_by_non_owner_denied(self):  # P5
+        await _make_skillset()
+        with pytest.raises(PermissionDeniedError):
+            await skillset_service.delete("set", User(user_id="stranger"))
+        assert await Skillset.find_one(Skillset.slug == "set") is not None
+
+    async def test_update_from_stale_read_keeps_concurrent_add(self, monkeypatch):  # P6
+        stale = await _skillset_with("a")
+        await _make_skill("b")
+        await skillset_service.add_skill("set", "b", OWNER)
+        after_add = await skillset_service.get("set")
+        monkeypatch.setattr(skillset_service, "get", _returning(stale))
+        await skillset_service.update("set", OWNER, name="Renamed")
+        monkeypatch.undo()
+        stored = await skillset_service.get("set")
+        assert stored.name == "Renamed"
+        assert [m.skill_id for m in stored.members] == [m.skill_id for m in after_add.members]
+        assert stored.version == after_add.version
+
+
+class TestSkillsetServiceList:
+    async def test_list_newest_first_with_total(self):
+        for slug in ("one", "two", "three"):
+            await _make_skillset(slug)
+        items, total = await skillset_service.list(page=1, page_size=2)
+        assert total == 3
+        assert [s.slug for s in items] == ["three", "two"]
+        items, _ = await skillset_service.list(page=2, page_size=2)
+        assert [s.slug for s in items] == ["one"]
+
+    async def test_list_filters_by_creator(self):
+        await _make_skillset("mine")
+        await _make_skillset("theirs", owner=User(user_id="other"))
+        items, total = await skillset_service.list(page=1, page_size=20, created_by="owner")
+        assert (total, [s.slug for s in items]) == (1, ["mine"])

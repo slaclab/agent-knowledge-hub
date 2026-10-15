@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import List, Optional, Tuple
 
 from beanie.operators import In
 from bson import ObjectId
@@ -88,6 +89,40 @@ class SkillsetService:
         if skillset is None:
             raise SkillsetNotFoundError("Skillset not found")
         return skillset
+
+    async def list(
+        self, page: int, page_size: int, created_by: Optional[str] = None
+    ) -> Tuple[List[Skillset], int]:
+        query = Skillset.find(Skillset.created_by == created_by) if created_by else Skillset.find()
+        total = await query.count()
+        items = await query.sort(
+            [("created_at", -1), ("_id", -1)]
+        ).skip((page - 1) * page_size).limit(page_size).to_list()
+        return items, total
+
+    async def update(
+        self,
+        slug: str,
+        actor: User,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Skillset:
+        skillset = await self.get(slug)
+        if not _is_owner_or_admin(skillset, actor):
+            raise PermissionDeniedError("Only the skillset's owner or an admin can edit it")
+        changes = {k: v for k, v in (("name", name), ("description", description)) if v is not None}
+        # $set only the requested fields: save() would write back the members and version
+        # of the copy read above, dropping any member added since.
+        await Skillset.find_one(Skillset.id == skillset.id).update(
+            {"$set": {**changes, "updated_at": datetime.now(timezone.utc)}}
+        )
+        return await Skillset.get(skillset.id)
+
+    async def delete(self, slug: str, actor: User) -> None:
+        skillset = await self.get(slug)
+        if not _is_owner_or_admin(skillset, actor):
+            raise PermissionDeniedError("Only the skillset's owner or an admin can delete it")
+        await skillset.delete()
 
     async def add_skill(self, slug: str, skill_slug: str, actor: User) -> None:
         skillset = await self.get(slug)

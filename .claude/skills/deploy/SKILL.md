@@ -39,24 +39,7 @@ git commit -m "chore: bump version to X.Y.Z"
 
 Never reuse a tag that prod already runs: the build pushes the tag again with different contents.
 
-### Step 2 — Update the prod manifests
-
-Edit the two prod deployment files in the **ai-playground-deploy** repo. Dev's files stay at
-`:latest`.
-
-```
-kubernetes/overlays/prod/agent-knowledge-hub/backend-deployment.yaml
-kubernetes/overlays/prod/agent-knowledge-hub/frontend-deployment.yaml
-```
-
-Change `image: slaclab/agent-knowledge-hub-{backend,frontend}:OLD` → `:X.Y.Z` in both, then commit
-in that repo:
-```bash
-git -C /sdf/home/y/ytl/k8s/ai-playground-deploy add kubernetes/overlays/prod/agent-knowledge-hub/backend-deployment.yaml kubernetes/overlays/prod/agent-knowledge-hub/frontend-deployment.yaml
-git -C /sdf/home/y/ytl/k8s/ai-playground-deploy commit -m "chore: bump agent-knowledge-hub prod to X.Y.Z"
-```
-
-### Step 3 — Build and push images
+### Step 2 — Build and push images
 
 Build with rootless `podman` on the host `sdfiana008`, over `ssh`, never with `sudo`. Keep podman's
 storage, the build context and its temporary files on `/lscratch`, not on the NFS home: export the
@@ -71,21 +54,48 @@ ssh sdfiana008 'podman info --format "{{.Store.GraphRoot}}"; podman login --get-
 
 Then build and push both images:
 ```bash
-ssh sdfiana008 'set -e; W=/lscratch/ytl/akh-build-X.Y.Z; rm -rf "$W"; mkdir -p "$W" /lscratch/ytl/tmp
+ssh sdfiana008 'set -e; W=/lscratch/ytl/akh-build-X.Y.Z; rm -rf "$W"; mkdir -p "$W" /lscratch/ytl/tmp /lscratch/ytl/pip-cache
   git -C /sdf/home/y/ytl/k8s/agent-knowledge-hub archive --format=tar <commit> | tar -x -C "$W"
-  export TMPDIR=/lscratch/ytl/tmp; make -C "$W" containers'
+  export TMPDIR=/lscratch/ytl/tmp PIP_CACHE_DIR=/lscratch/ytl/pip-cache; make -C "$W" PYTHON3=python3.12 containers'
 ```
 
-`make containers` pushes `:X.Y.Z` and `:latest` for each image. The `TAG` comes from
+Before it pushes the backend, `make containers` runs `make -C backend lock-check audit` in a venv it
+builds under the export, so it needs `PYTHON3=python3.12`: the host's `python3` is 3.6, and the
+lockfiles are compiled with Python 3.12. It stops if `requirements.lock` is stale or pip-audit finds a
+known vulnerability. `make containers` pushes `:X.Y.Z` and `:latest` for each image. The `TAG` comes from
 `backend/pyproject.toml`, because the export holds no git tag. The frontend image installs from
 `package-lock.json` with `npm ci`.
+
+### Step 3 — Pin the prod manifests to the new digests
+
+Run from this repo's root once the images are pushed (TODO #034,
+`docs/runbooks/image-digest-pinning.md`):
+```bash
+make pin-digests
+```
+
+It looks up the registry digest of each image's `X.Y.Z` tag and rewrites the image lines of the two
+prod deployment files in **ai-playground-deploy**, and of this repo's prod and stage copies, to
+`slaclab/agent-knowledge-hub-{backend,frontend}:X.Y.Z@sha256:<digest>`. Dev's files stay at
+`:latest`. Commit both repos:
+```bash
+git -C /sdf/home/y/ytl/k8s/ai-playground-deploy add kubernetes/overlays/prod/agent-knowledge-hub/backend-deployment.yaml kubernetes/overlays/prod/agent-knowledge-hub/frontend-deployment.yaml
+git -C /sdf/home/y/ytl/k8s/ai-playground-deploy commit -m "chore: bump agent-knowledge-hub prod to X.Y.Z"
+```
 
 ### Step 4 — Deploy to dev
 
 Do not use `make dev-deploy` or `make prod-deploy` for a hub release: they apply every app in the
 overlay (LibreChat, LiteLLM, agentgateway, the MCP servers and more) and pull secrets.
 
-Dev runs `:latest`, so restart the two hub deployments:
+Dev runs `:latest`. When the release changes dev's hub manifests, diff and apply the hub's own dev
+kustomization, which also rolls the pods:
+```bash
+KUBECONFIG=~/.kube/config.sage-dev kubectl diff -k /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/dev/agent-knowledge-hub/
+KUBECONFIG=~/.kube/config.sage-dev kubectl apply -k /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/dev/agent-knowledge-hub/
+```
+
+Otherwise restart the two hub deployments:
 ```bash
 KUBECONFIG=~/.kube/config.sage-dev kubectl -n dev rollout restart deployment agent-knowledge-hub-backend agent-knowledge-hub-frontend
 KUBECONFIG=~/.kube/config.sage-dev kubectl -n dev rollout status deployment/agent-knowledge-hub-backend --timeout=300s
@@ -97,7 +107,7 @@ Then run the smoke tests below against dev.
 ### Step 5 — Deploy to prod
 
 Only after dev passes the smoke tests. Diff the hub's own kustomization first; it should show only
-the two image lines:
+the two image lines, plus any manifest change the release makes:
 ```bash
 KUBECONFIG=~/.kube/config.sage kubectl diff -k /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/prod/agent-knowledge-hub/
 KUBECONFIG=~/.kube/config.sage kubectl apply -k /sdf/home/y/ytl/k8s/ai-playground-deploy/kubernetes/overlays/prod/agent-knowledge-hub/
@@ -113,7 +123,10 @@ Rollback: `KUBECONFIG=~/.kube/config.sage kubectl -n prod rollout undo deploymen
 Run against dev, then prod, with the matching `KUBECONFIG` and namespace.
 
 - Pods: `Running`, 0 restarts. Prod's image digests (`.status.containerStatuses[0].imageID`) equal
-  dev's, so prod runs what dev tested.
+  dev's, and equal the digests in prod's image lines, so prod runs what dev tested.
+- Both containers run as `uid=1000` with a read-only root (TODO #033): `kubectl -n <ns> exec
+  deploy/agent-knowledge-hub-<backend|frontend> -- id` prints `uid=1000`, and `touch /app/x` fails with
+  `Read-only file system`. No log line holds `EROFS`, `EACCES` or `Permission denied`.
 - Backend log: `Beanie ready` and `Application startup complete`, no `ERROR` or `Traceback`.
 - Backend, from inside its pod: `/health` answers 200, and `/openapi.json` lists the routes the
   release adds.

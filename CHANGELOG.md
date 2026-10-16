@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Skillsets: `install skillset` (#006, client)
+
+- **`/agent-knowledge-hub install skillset <slug>`** — installs every skill in a skillset, in the order its curator chose. Before it installs anything it fetches every member, asks whether to replace a skill folder it did not install, then lists the skills it will install, with each repository and `MCP server, not added` or `scripts` where they apply, and asks once. An installed member is skipped and a failed one is reported while the rest install; the run ends with a summary line, one line per failure, and the server blocks of every member, grouped by member.
+- **Checked catalog values** — plain `install` and `install skillset` now refuse a catalog entry whose `repo_url`, `skill_path` or pinned commit falls outside the characters the client's commands can take, before any command runs. Clones and pinned fetches fail instead of waiting for a password when a repository cannot be read, and an internal repository's failure points to `gh auth login`.
+- **Client 2.3.0** — an existing plugin install keeps the earlier client until you run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
+
+**New docs:** `docs/adr/adr-u20-akh-install-skillset.md`.
+
 ## 0.20.2 — 2026-10-16
 
 ### Security: the backend no longer logs the internal API secret

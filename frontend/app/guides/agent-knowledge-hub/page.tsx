@@ -96,6 +96,22 @@ export default function AgentKnowledgeHubGuidePage() {
           </p>
         </div>
 
+        {/* Install a skillset */}
+        <div className="space-y-2">
+          <h3 className="font-semibold text-sm">Install a skillset</h3>
+          <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
+{`/${PLUGIN_SLUG} install skillset lcls-starter`}
+          </pre>
+          <p className="text-sm text-muted-foreground">
+            Installs every skill in a curated skillset, in the order its curator chose. Before it
+            installs anything, it lists the skills it will install, with each one&apos;s repository and
+            whether it brings an MCP server or scripts, and asks once. A skill already installed is
+            skipped, and a skill that fails is reported while the others still install, so running the
+            command again retries only the failures. Like every catalog command, it needs your S3DF
+            sign-in (see <a href="#cli-auth" className="text-primary underline">CLI authentication</a>).
+          </p>
+        </div>
+
         {/* List / update / remove */}
         <div className="space-y-2">
           <h3 className="font-semibold text-sm">Manage installed skills</h3>

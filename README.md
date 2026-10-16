@@ -35,7 +35,10 @@ Ask your AI assistant what you need, in plain English, and it finds and installs
 ```
 /agent-knowledge-hub I'm trying to figure out what's wrong with my Kubernetes deployment
 /agent-knowledge-hub find me something for analysing NeXus files
+/agent-knowledge-hub install skillset lcls-starter
 ```
+
+`install skillset <slug>` installs every skill in a curated skillset, after listing them and asking once.
 
 No configuration. No manual file copying. A skill that brings an MCP server is the one exception: the client does not add the server, and prints the command that adds it for you to run.
 

@@ -1,11 +1,11 @@
 # TODO #049 — Security: Refuse Absolute and `..` File Names in Local Skill Submissions
 
 > **Priority:** 🟢 P3 — Low
-> **Status:** ⬜ Open
+> **Status:** ✅ Complete — shipped in 0.20.2
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-10-14
-> **Shipped:** —
+> **Shipped:** 2026-10-16, 0.20.2, dev and prod
 
 ---
 
@@ -60,16 +60,16 @@ As of 2026-10-14, read from the code:
 
 ### Definition of Done
 
-- [ ] FR-1 and FR-2 built; AC-1 to AC-4 pass
-- [ ] Tests for AC-1 to AC-3 in `backend/tests/test_skill_create_validation.py`, the file #045 creates
-- [ ] CHANGELOG entry
+- [x] FR-1 and FR-2 built; AC-1 to AC-4 pass
+- [x] Tests for AC-1 to AC-3 in `backend/tests/test_skill_create_validation.py`, the file #045 creates
+- [x] CHANGELOG entry
 
 ---
 
 ## Open Design Questions
 
-1. **Which other names to refuse.** Candidates: a backslash or a drive letter, which a client on Windows reads as a path; NUL; empty and `.` segments; and a name that `get_skill_file`'s `{path:path}` route cannot address.
-2. **Where the check lives.** A `field_validator` on `snapshotted_files` in `SkillCreate`, beside the existing `validate_repo_url` model validator, refuses the body before any service code runs. A check in `_create_local` would also cover a future caller that builds `SkillCreate` without validation, which no code does as of 2026-10-14.
+1. **Which other names to refuse.** Candidates: a backslash or a drive letter, which a client on Windows reads as a path; NUL; empty and `.` segments; and a name that `get_skill_file`'s `{path:path}` route cannot address. *Decided 2026-10-16: refuse a backslash, a leading drive letter (`C:`), every control character including NUL, and empty, `.` and `..` segments, which also refuses a trailing `/` and an empty name. Whether the files route can address every remaining name was not checked.*
+2. **Where the check lives.** A `field_validator` on `snapshotted_files` in `SkillCreate`, beside the existing `validate_repo_url` model validator, refuses the body before any service code runs. A check in `_create_local` would also cover a future caller that builds `SkillCreate` without validation, which no code does as of 2026-10-14. *Decided 2026-10-16: a `model_validator` on `SkillCreate`, `validate_local_file_names`, because the rule applies only when `source_type` is `local` (AC-3). The 422 names the file and the rule it breaks.*
 
 ---
 
@@ -83,6 +83,8 @@ As of 2026-10-14, read from the code:
 | Existing `..` check | `create()` raises `ValueError` when `..` is a component of `skill_path` | `backend/app/services/skill.py` |
 | Disk-side containment | `_safe_read` resolves the path and calls `relative_to` on the resolved skill root; the module docstring calls this `is_relative_to()` | `backend/app/services/local.py` |
 | Severity | LOW | Cogito TODO #200 › Board Review, security reviewer, round 2 |
+| stored-failing (FR-2, AC-4) | Dev and prod each hold no `local` skill, so no stored name breaks FR-1 | Read-only `find` on `skills` with `source_type: "local"`, checking every `snapshotted_files` key and `file_manifest` path, run with `kubectl exec` in each backend pod, 2026-10-16 |
+| After deploy | On dev and then prod, with 0.20.2, `POST /api/skills` for a `local` skill with a file named `../../settings.json`, `/etc/profile` or `a\\b` returned 422 each time | In-pod request with the internal secret, 2026-10-16 |
 
 ---
 

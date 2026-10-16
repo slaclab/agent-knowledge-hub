@@ -50,7 +50,8 @@
 | [046](todo/046-marketplace-git-subdir-sources.md) | marketplace.json plugin sources: `git-subdir` with the skill's path and pinned commit | ⬜ Open |
 | [047](todo/047-marketplace-route-reachable.md) | marketplace.json route that Claude Code can reach | ⬜ Open |
 | [048](todo/048-install-from-files-route.md) | Install internal skills through the files route, confined to the skill folder | ⬜ Open |
-| [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ⬜ Open |
+| [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ✅ Complete |
 | [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | 🏁 Implementation Done |
 | [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client leaves MCP servers to the user and refuses agents it cannot vet | 🏁 Implementation Done |
 | [052](todo/052-prod-cli-route-reaches-backend.md) | Production `/cli` requests reach the backend | ✅ Complete |
+| [053](todo/053-sec-skill-install-sha-checkout-verification.md) | **SEC HIGH** — Verify post-checkout HEAD against the pinned SHA in skill install | ✅ Complete |

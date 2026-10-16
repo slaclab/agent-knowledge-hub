@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.20.2 — 2026-10-16
+
+### Security: the backend no longer logs the internal API secret
+
+- **Auth warning** — when a request carried the correct `X-Internal-Secret` with an empty `X-Forwarded-User`, the backend logged every `X-` header with its value, the secret included. It now logs the header names only. A deployment whose logs are collected outside the pod should rotate `INTERNAL_API_SECRET` if such a line was ever written.
+- **0.20.1** — built and pushed with the old log line, and never deployed. Do not deploy it.
+
+### Security: local submissions refuse unsafe file names (#049)
+
+- **`POST /api/skills`** — a `local` submission returns 422 when a `snapshotted_files` name is absolute, starts with a drive letter, contains a backslash or a control character, or has an empty, `.` or `..` segment. The message names the file and the rule. GitHub submissions are unaffected. No stored skill on dev or prod is `local`.
+
+### Security: a pinned install fetches exactly the pinned commit (#053)
+
+- **`/agent-knowledge-hub install`** — for a pinned skill, the client fetches only the pinned commit, by its ID, checks it out detached, and stops unless `HEAD` is that commit. A branch named like the pinned commit, which a repository owner can create, no longer changes what is installed. A pin behind the default branch's tip, which `git clone --depth 1` could not reach, now installs.
+- **No `git`** — a pinned skill is no longer installed through the GitHub Contents API, which dropped the pin; the client says that `git` is needed.
+- **Client 2.2.0** — an existing plugin install keeps the earlier client until you run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
+
+### Fix: the submit form shows why the catalog refused a skill
+
+- **Validation messages** — a 422 from `POST /api/skills` now shows its messages, such as the allowed characters of `skill_path`, instead of the raw `detail` list.
+
 ## 0.20.0 — 2026-10-16
 
 ### Security: both containers run as an unprivileged user with a read-only root filesystem (#033)

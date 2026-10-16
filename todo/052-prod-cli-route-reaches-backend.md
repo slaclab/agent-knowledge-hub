@@ -1,11 +1,11 @@
 # TODO #052 — Production `/cli` Requests Reach the Backend
 
 > **Priority:** 🟠 P1 — High
-> **Status:** ⬜ Open
+> **Status:** ✅ Complete
 > **Branch:** —
 > **PR:** —
 > **Created:** 2026-10-15
-> **Shipped:** —
+> **Shipped:** 2026-10-16
 
 ---
 
@@ -61,8 +61,17 @@ As of 2026-10-15:
 
 ## Acceptance criteria
 
-- [ ] AC-1: With a valid token, `sh skill/hub-request.sh GET /cli/api/skills/summary` exits 0 and prints JSON.
-- [ ] AC-2: The backend log shows that request, from the gateway, not from the frontend pod.
+- [x] AC-1: With a valid token, `sh skill/hub-request.sh GET /cli/api/skills/summary` exits 0 and prints JSON. On 2026-10-16 at 07:37 UTC it exited 0 with `agent-knowledge-hub: HTTP 200` and a 23,552-byte JSON list of skills.
+- [x] AC-2: The backend log shows that request, from the gateway, not from the frontend pod. The backend log holds `GET /api/skills/summary HTTP/1.1" 200 OK` from `192.168.112.40`, not from the frontend pod `192.168.198.98`.
+
+---
+
+## Resolution
+
+The route was fixed from `ai-playground-deploy` on 2026-10-16; the cause is not recorded in this repository. Read afterwards from vcluster `sage`, namespace `prod`, read-only:
+
+- `agent-knowledge-hub-api` is at generation 2. It sends PathPrefix `/cli` to `agent-knowledge-hub-backend:8000` with the same `URLRewrite`, and it no longer has the Exact `/marketplace.json` `RequestRedirect` rule. A request for `/marketplace.json` now reaches the frontend, where `redirects()` in `frontend/next.config.mjs` answers it (#047).
+- Both hub routes carry the annotation `auth.sdf.slac.stanford.edu/required: "true"` and the `approved` label, and still have no `parentRefs` or `status` in the vcluster.
 
 ---
 

@@ -20,7 +20,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: backend
-          image: slaclab/agent-knowledge-hub-backend:0.19.1
+          image: slaclab/agent-knowledge-hub-backend:0.20.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

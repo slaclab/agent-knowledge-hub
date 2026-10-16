@@ -79,8 +79,8 @@ For each listed file, run these two commands over the clone's copy of it, with `
 ```sh
 LC_ALL=C awk '
 # akh-agent-keys: prints each frontmatter line that is not one of the six allowed keys
-NR == 1 { if ($0 != "---") { print "no frontmatter"; exit } next }
-$0 == "---" { closed = 1; exit }
+NR == 1 { if ($(0) != "---") { print "no frontmatter"; exit } next }
+$(0) == "---" { closed = 1; exit }
 /^[ \t]*$/ { next }
 !seen { seen = 1; if (/^ /) { print; next } }
 /^ / || /^- / { next }
@@ -93,9 +93,9 @@ END { if (!closed) print "no closing ---" }
 ```sh
 LC_ALL=C awk '
 # akh-agent-name: prints the name on the frontmatter name: line; exits 1 unless there is exactly one, of only A-Z, a-z, 0-9, - and _
-NR == 1 { if ($0 != "---") exit 1; next }
-$0 == "---" { closed = 1; exit }
-/^name:/ { n++; v = substr($0, 6); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
+NR == 1 { if ($(0) != "---") exit 1; next }
+$(0) == "---" { closed = 1; exit }
+/^name:/ { n++; v = substr($(0), 6); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
   q = substr(v, 1, 1)
   if (length(v) >= 2 && (q == "\"" || q == sq) && substr(v, length(v), 1) == q) v = substr(v, 2, length(v) - 2)
   name = v }
@@ -108,9 +108,9 @@ Then list the agents the user already has:
 ```sh
 find ~/.claude/agents/ -type f -name '*.md' -exec env LC_ALL=C awk '
 # akh-user-agent-names: prints the path and name of each agent file under ~/.claude/agents/
-FNR == 1 { infm = ($0 == "---"); next }
-infm && $0 == "---" { nextfile }
-infm && /^name:/ { v = substr($0, 6); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
+FNR == 1 { infm = ($(0) == "---"); next }
+infm && $(0) == "---" { nextfile }
+infm && /^name:/ { v = substr($(0), 6); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
   q = substr(v, 1, 1)
   if (length(v) >= 2 && (q == "\"" || q == sq) && substr(v, length(v), 1) == q) v = substr(v, 2, length(v) - 2)
   print FILENAME "\t" v; nextfile }

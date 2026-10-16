@@ -230,6 +230,12 @@ class TestSkillMd:
         assert prose, "FR-1 (f) must be stated in SKILL.md"
         assert all("exactly as printed" in l for l in prose), prose
 
+    def test_no_positional_argument_placeholder(self):  # FR-2
+        # Claude Code replaces $0, $1, ... in a skill's text with the skill's arguments before
+        # the model reads it, so an awk $0 reaches the model as "install". awk's $(0) is the
+        # same field and is left alone (Claude Code 2.1.281, 2026-10-16).
+        assert not re.findall(r"\$[0-9]", skill_text())
+
     def test_clone_directory_is_made_by_mktemp(self):  # FR-3
         install = skill_text().split("### Install", 1)[1].split("\n### ", 1)[0]
         assert "mktemp -d" in install

@@ -6,7 +6,7 @@
 
 `/agent-knowledge-hub install` now leaves a skill's MCP servers to you and writes only agents whose settings it can check.
 
-- **MCP servers** — the install adds no server. It prints each server's configuration, with warnings, and the command that adds it. Run that command yourself, or ask Claude to add the server by name; Claude then runs the printed command exactly as printed. A server the client cannot show safely, for example one whose command starts with `~`, is listed with its reason and gets no command.
+- **MCP servers** — the install adds no server. It prints each server's configuration, with warnings, and the command that adds it. Run that command yourself, or ask Claude to add the server by name; Claude then runs the printed command exactly as printed. A server the client cannot show safely, for example one whose command starts with `~`, is listed with its reason and gets no command. The client writes and shows each configuration with `python3`; without it, no server gets a command.
 - **Agents** — the install writes an agent only when its frontmatter declares no key outside `name`, `description`, `tools`, `disallowedTools`, `model` and `color`, and its name is not a built-in agent's or another agent's in `~/.claude/agents/`. A refused agent is linked in the closing message instead.
 - **Your own files** — an agent or command file you already have is left unchanged. `install` of a skill already installed writes nothing and says to run `update`. `install` writes nothing when `~/.claude/skills/<slug>/` exists without the client's install manifest.
 - **Skill folder** — the install never copies a skill's `.claude-plugin/`, `.installed-manifest.json` or `.akh-mcp/`, and leaves out every symbolic link.

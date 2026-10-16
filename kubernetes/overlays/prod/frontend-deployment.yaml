@@ -20,7 +20,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: frontend
-          image: slaclab/agent-knowledge-hub-frontend:0.20.2@sha256:2b77610765c46ec1aec51f0cc48e6fc0bd4623b30232e462b4db735e05e64360
+          image: slaclab/agent-knowledge-hub-frontend:0.21.0@sha256:46d011acef8c967782722cf6481a7bc5dd4fe2231d094421dab6c8e1fa08104c
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

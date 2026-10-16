@@ -126,11 +126,11 @@ def get_current_user(request: Request) -> User:
                 request.state.user = user
                 return user
             else:
+                # Header names only: the values include X-Internal-Secret itself.
                 logger.warning(
                     "AUTH path2 secret matched but X-Forwarded-User is empty — "
-                    "frontend did not inject the user header. Received headers: %s",
-                    {k: v for k, v in request.headers.items()
-                     if k.lower().startswith("x-")},
+                    "frontend did not inject the user header. Received X- headers: %s",
+                    sorted(k.lower() for k in request.headers.keys() if k.lower().startswith("x-")),
                 )
     else:
         logger.debug("AUTH path2 disabled: internal_api_secret not configured")

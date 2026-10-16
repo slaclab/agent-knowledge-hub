@@ -407,6 +407,30 @@ class TestGetCurrentUser:
             user = get_current_user(req)
             assert user.user_id == "eve"
 
+    def test_secret_without_user_never_logs_header_values(self, caplog):
+        """The empty-user warning names the X- headers it received but never logs a value."""
+        import logging
+        import app.config as cfg
+        get_current_user = self._auth()
+        secret = "s3cr3t-value-that-must-not-be-logged"
+        caplog.set_level(logging.DEBUG, logger="app.auth")
+        with patch.object(cfg.settings, "internal_api_secret", secret), \
+             patch.object(cfg.settings, "admin_users", ""), \
+             _mock_jwks_unreachable():
+            req = make_request([
+                (b"x-internal-secret", secret.encode()),
+                (b"x-forwarded-user", b""),
+                (b"x-request-id", b"req-123"),
+            ])
+            with pytest.raises(HTTPException) as exc:
+                get_current_user(req)
+            assert exc.value.status_code == 401
+        assert all(secret not in r.getMessage() for r in caplog.records)
+        warning = [r.getMessage() for r in caplog.records if "X-Forwarded-User is empty" in r.getMessage()]
+        assert len(warning) == 1
+        assert "x-internal-secret" in warning[0] and "x-request-id" in warning[0]
+        assert "req-123" not in warning[0]
+
     def test_wrong_secret_raises_401(self):
         import app.config as cfg
         get_current_user = self._auth()

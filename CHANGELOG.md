@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Behaviour change: install no longer adds MCP servers, and refuses agents it cannot vet (#051)
+
+`/agent-knowledge-hub install` now leaves a skill's MCP servers to you and writes only agents whose settings it can check.
+
+- **MCP servers** — the install adds no server. It prints each server's configuration, with warnings, and the command that adds it. Run that command yourself, or ask Claude to add the server by name; Claude then runs the printed command exactly as printed. A server the client cannot show safely, for example one whose command starts with `~`, is listed with its reason and gets no command.
+- **Agents** — the install writes an agent only when its frontmatter declares no key outside `name`, `description`, `tools`, `disallowedTools`, `model` and `color`, and its name is not a built-in agent's or another agent's in `~/.claude/agents/`. A refused agent is linked in the closing message instead.
+- **Your own files** — an agent or command file you already have is left unchanged. `install` of a skill already installed writes nothing and says to run `update`. `install` writes nothing when `~/.claude/skills/<slug>/` exists without the client's install manifest.
+- **Skill folder** — the install never copies a skill's `.claude-plugin/`, `.installed-manifest.json` or `.akh-mcp/`, and leaves out every symbolic link.
+- **Servers an earlier client added** — the earlier client added servers at local scope, for the directory the install ran in or the git repository that holds it, so `claude mcp list` run from that directory shows them. `remove` leaves such a server and prints `claude mcp remove --scope local <name>` to run from there. The first `update` does the same, even for a server the new version still lists.
+- **Updating an existing install** — a plugin install keeps the earlier client, which still adds servers without asking, until you run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
+
+**New docs:** `docs/adr/adr-u43-client-prints-mcp-servers.md`.
+
 ### Client sign-in: one script sends the S3DF token (#050)
 
 Every catalog command in `/agent-knowledge-hub`, Search and Install included, now sends your S3DF sign-in. The client makes each catalog request through `skill/hub-request.sh`, a script that ships with it, reads the token, and sends it only to `https://agent-knowledge-hub.slac.stanford.edu`.

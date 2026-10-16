@@ -74,6 +74,77 @@ export default function CreateASkillPage() {
             <li>Other users can rate and label your skill</li>
           </ul>
         </div>
+
+        <div className="rounded-lg border p-5 space-y-3 text-sm">
+          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+            Agents and MCP servers
+          </h3>
+          <p className="text-muted-foreground">
+            <code className="bg-muted rounded px-1 font-mono text-xs">/agent-knowledge-hub install</code>{" "}
+            writes your skill&apos;s agents only within these rules, and never adds its MCP servers:
+            it shows each server&apos;s configuration and the command that adds it, and the user
+            decides.
+          </p>
+          <ul className="list-disc list-inside text-muted-foreground space-y-1">
+            <li>
+              <code className="bg-muted rounded px-1 font-mono text-xs">agents</code> in{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">plugin.json</code> lists paths to
+              agent files, or to folders whose <code className="bg-muted rounded px-1 font-mono text-xs">.md</code>{" "}
+              files are the agents.
+            </li>
+            <li>
+              An agent&apos;s frontmatter declares only{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">name</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">description</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">tools</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">disallowedTools</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">model</code> and{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">color</code>. An agent with any
+              other key, such as <code className="bg-muted rounded px-1 font-mono text-xs">hooks</code>, is
+              not installed.
+            </li>
+            <li>
+              An agent&apos;s <code className="bg-muted rounded px-1 font-mono text-xs">name</code> sits on
+              the <code className="bg-muted rounded px-1 font-mono text-xs">name:</code> line itself and holds
+              only ASCII letters, digits, <code className="bg-muted rounded px-1 font-mono text-xs">-</code> and{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">_</code>. Ignoring case, it is none of
+              the built-in agent names <code className="bg-muted rounded px-1 font-mono text-xs">Explore</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">Plan</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">general-purpose</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">claude</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">statusline-setup</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">claude-code-guide</code> and{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">fork</code>.
+            </li>
+            <li>
+              An <code className="bg-muted rounded px-1 font-mono text-xs">mcp-servers</code> entry gets a
+              command only when its <code className="bg-muted rounded px-1 font-mono text-xs">name</code>{" "}
+              matches <code className="bg-muted rounded px-1 font-mono text-xs">^[A-Za-z0-9][A-Za-z0-9_-]*$</code>{" "}
+              and no other entry of the skill uses it, its{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">transport</code> is{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">stdio</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">http</code> or{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">sse</code>, its{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">args</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">env</code> and{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">headers</code> values are text, and its
+              configuration is at most 4,096 bytes as JSON.
+            </li>
+            <li>
+              Name a script in the installed folder as{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">${"{HOME}"}/.claude/skills/&lt;slug&gt;/…</code>,
+              never <code className="bg-muted rounded px-1 font-mono text-xs">~/…</code> or{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">$HOME/…</code>.
+            </li>
+            <li>
+              The install leaves out every symbolic link, whether a listed agent or command file or an
+              entry in the skill folder, and never copies the skill folder&apos;s{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">.claude-plugin/</code>,{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">.installed-manifest.json</code> or{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">.akh-mcp/</code>.
+            </li>
+          </ul>
+        </div>
       </section>
 
       <hr className="border-border" />

@@ -78,7 +78,7 @@ export default function WhyAgentKnowledgeHubPage() {
             {
               title: "In-agent installation",
               description:
-                "Install skills directly from a Claude Code session with /agent-knowledge-hub install <slug>. Files land in the right place, MCP servers are registered — no git clone, no copying files by hand.",
+                "Install skills directly from a Claude Code session with /agent-knowledge-hub install <slug>. Files land in the right place — no git clone, no copying files by hand. For a skill that brings MCP servers, the client shows each server's configuration and the command that adds it, and leaves adding it to you.",
             },
           ].map(({ title, description }) => (
             <div key={title} className="rounded-lg border p-4 space-y-1">

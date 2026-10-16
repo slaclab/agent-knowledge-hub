@@ -37,7 +37,7 @@ Ask your AI assistant what you need, in plain English, and it finds and installs
 /agent-knowledge-hub find me something for analysing NeXus files
 ```
 
-No configuration. No manual file copying.
+No configuration. No manual file copying. A skill that brings an MCP server is the one exception: the client does not add the server, and prints the command that adds it for you to run.
 
 Register the SLAC marketplace once to get started:
 

@@ -77,6 +77,32 @@ export default function TroubleshootingPage() {
               <code className="bg-muted rounded px-1 font-mono text-xs">plugin.json</code> file.
               You may need to restart your Claude Code session for the new skill to be recognised.
             </p>
+            <p>
+              An install can also stop with nothing installed. Its closing message gives the reason
+              and the next step: run{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">/agent-knowledge-hub update &lt;slug&gt;</code>{" "}
+              for a skill that is already installed, move the existing folder elsewhere, or tell the
+              skill&apos;s submitter.
+            </p>
+          </div>
+        </details>
+
+        <details className="rounded-lg border p-4 open:pb-4">
+          <summary className="font-medium cursor-pointer text-sm">
+            A skill&apos;s MCP tools or agent are missing after install
+          </summary>
+          <div className="mt-3 text-sm text-muted-foreground space-y-2">
+            <p>
+              The install does not add MCP servers. Read the install&apos;s closing message and add
+              each server with its printed command. To print the commands again, run{" "}
+              <code className="bg-muted rounded px-1 font-mono text-xs">/agent-knowledge-hub update &lt;slug&gt;</code>.
+            </p>
+            <p>
+              A server the message lists as having no command gets none until the skill&apos;s
+              submitter changes its entry. Tell the submitter, or flag the skill on its catalog page.
+              An agent that was not installed has its own line in the message, with the step that
+              applies to it.
+            </p>
           </div>
         </details>
 

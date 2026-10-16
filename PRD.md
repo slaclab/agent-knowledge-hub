@@ -23,7 +23,7 @@
 - Billing or monetization
 - Mobile-native apps
 - **OpenCode support** — v1 targets Claude Code plugins/skills only. OpenCode custom agent install support is planned for v2. The data model and API are designed to accommodate OpenCode with minimal backend changes (see Section 15).
-- **MCP server catalog** — MCP servers are infrastructure, centrally controlled at `mcp.sdf.slac.stanford.edu` (SLAC Agent Gateway) with auth/authz managed by the platform team. Users never configure MCP directly; skills consume gateway knowledge transparently. Skills that depend on gateway knowledge show a "Uses SLAC Agent Gateway" badge on their detail page — no further MCP surface in the catalog UI.
+- **MCP server catalog** — MCP servers are infrastructure, centrally controlled at `mcp.sdf.slac.stanford.edu` (SLAC Agent Gateway) with auth/authz managed by the platform team. A skill's MCP servers are not added by the install: the user adds each one with the command the `/agent-knowledge-hub` client prints. Skills consume gateway knowledge transparently. Skills that depend on gateway knowledge show a "Uses SLAC Agent Gateway" badge on their detail page — no further MCP surface in the catalog UI.
 
 **Constraints:**
 - Auth via SLAC VouchProxy / JWT (no separate user account system)
@@ -861,7 +861,7 @@ The `/agent-knowledge-hub` installer clones the repo into `~/.claude/skills/<slu
 
 ### Skill file structure (what gets installed)
 
-The catalog entry's `repo_url` points to a GitHub repo containing a Claude Code plugin (a `plugin.json` manifest plus one or more `SKILL.md` files). The install step clones it to `~/.claude/skills/<slug>/`. No execution happens at install time — Claude Code picks it up on next invocation.
+The catalog entry's `repo_url` points to a GitHub repo containing a Claude Code plugin (a `plugin.json` manifest plus one or more `SKILL.md` files). The install step clones it to `~/.claude/skills/<slug>/`. No execution happens at install time — Claude Code picks it up on next invocation. The install copies the skill folder without its `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` entries and without symbolic links. It writes an agent only when the agent's frontmatter declares no key outside `name`, `description`, `tools`, `disallowedTools`, `model` and `color`, and it adds no MCP server (TODO #051).
 
 The `/agent-knowledge-hub` skill validates that the repo contains a recognisable plugin structure before installing and warns the user if it does not.
 
@@ -882,9 +882,9 @@ This avoids building a vector index in v2 while still providing semantic matchin
 |---|---|
 | `/agent-knowledge-hub list` | Show all installed skills (from `~/.claude/skills/`) |
 | `/agent-knowledge-hub search <query>` | Search without installing — show top matches |
-| `/agent-knowledge-hub install <slug>` | Direct install by slug (no LLM step) |
+| `/agent-knowledge-hub install <slug>` | Direct install by slug (no LLM step). Writes nothing, and says to run `update`, when the skill is already installed; writes nothing when `~/.claude/skills/<slug>/` exists without the client's install manifest |
 | `/agent-knowledge-hub update <slug>` | Re-pull latest from the skill's repo |
-| `/agent-knowledge-hub remove <slug>` | Delete from skills directory |
+| `/agent-knowledge-hub remove <slug>` | Delete from skills directory, together with the command and agent files the install wrote; print, without running, the command that removes each MCP server the skill brings |
 | `/agent-knowledge-hub submit` | Guided submission flow — walks user through creating/selecting a GitHub repo, scaffolding skill structure, and registering in the catalog via the API. No browser required. |
 | `/agent-knowledge-hub rate <slug> <1-5>` | Submit a rating directly from the agent session |
 

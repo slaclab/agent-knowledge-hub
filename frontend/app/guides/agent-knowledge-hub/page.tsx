@@ -79,6 +79,21 @@ export default function AgentKnowledgeHubGuidePage() {
             malicious <code className="bg-muted rounded px-1 font-mono text-xs">skill_path</code> will
             be rejected and no files will be written.
           </p>
+          <p className="text-sm text-muted-foreground">
+            The install does not add a skill&apos;s MCP servers. It shows each server&apos;s
+            configuration and the command that adds it, and leaves adding it to you. Until you add
+            them, the skill works only in part. Add a server by running its printed command in a
+            terminal or after typing <code className="bg-muted rounded px-1 font-mono text-xs">!</code> in Claude Code, or ask Claude to add it by name.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            An agent is not installed when it declares a setting outside{" "}
+            <code className="bg-muted rounded px-1 font-mono text-xs">name</code>, <code className="bg-muted rounded px-1 font-mono text-xs">description</code>,{" "}
+            <code className="bg-muted rounded px-1 font-mono text-xs">tools</code>, <code className="bg-muted rounded px-1 font-mono text-xs">disallowedTools</code>,{" "}
+            <code className="bg-muted rounded px-1 font-mono text-xs">model</code> and <code className="bg-muted rounded px-1 font-mono text-xs">color</code>, or when its name is
+            that of a built-in agent or of another agent in{" "}
+            <code className="bg-muted rounded px-1 font-mono text-xs">~/.claude/agents/</code>. The closing message links it instead. An agent,
+            command or skill folder you already have is left unchanged.
+          </p>
         </div>
 
         {/* List / update / remove */}
@@ -89,6 +104,12 @@ export default function AgentKnowledgeHubGuidePage() {
 /${PLUGIN_SLUG} update k8s-troubleshooting   # pull latest version
 /${PLUGIN_SLUG} remove k8s-troubleshooting   # uninstall`}
           </pre>
+          <p className="text-sm text-muted-foreground">
+            <code className="bg-muted rounded px-1 font-mono text-xs">remove</code> leaves any MCP server you added and prints the command
+            that removes it. <code className="bg-muted rounded px-1 font-mono text-xs">install</code> of a skill that is already installed
+            writes nothing and says to run <code className="bg-muted rounded px-1 font-mono text-xs">update</code>, which is the command
+            that replaces an installed skill.
+          </p>
         </div>
 
         {/* Rate */}

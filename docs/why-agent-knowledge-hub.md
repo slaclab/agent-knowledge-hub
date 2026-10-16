@@ -134,8 +134,10 @@ Skills in the catalog can be installed directly from inside a Claude Code sessio
 ```
 
 The installer reads `plugin.json` and places skill files in `~/.claude/skills/`, commands
-in `~/.claude/commands/`, and registers any MCP servers — in one step, without leaving the
-terminal. No manual `git clone`, no copying files by hand.
+in `~/.claude/commands/`, and agents in `~/.claude/agents/` — in one step, without leaving the
+terminal. No manual `git clone`, no copying files by hand. The installer does not add a skill's
+MCP servers: it shows each server's configuration and the command that adds it, and leaves adding
+it to the user.
 
 ---
 

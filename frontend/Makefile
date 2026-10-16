@@ -4,7 +4,7 @@ NEXT         := $(NODE_MODULES)/.bin/next
 REGISTRY     ?= docker.io/slaclab
 IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-frontend
 TAG          ?= dev
-CONTAINER_RT ?= sudo podman
+CONTAINER_RT ?= podman
 
 .PHONY: dev build start lint clean docker-build docker-push
 

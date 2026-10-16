@@ -7,7 +7,7 @@ PYTEST   := $(VENV)/bin/pytest
 REGISTRY     ?= docker.io/slaclab
 IMAGE        ?= $(REGISTRY)/agent-knowledge-hub-backend
 TAG          ?= dev
-CONTAINER_RT ?= sudo podman
+CONTAINER_RT ?= podman
 
 .PHONY: dev test run clean docker-build docker-push
 

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND, backendHeaders } from "../../../_internal";
 
-type Ctx = { params: { slug: string } };
+type Ctx = { params: Promise<{ slug: string }> };
 
-export async function GET(request: NextRequest, { params }: Ctx) {
+export async function GET(request: NextRequest, props: Ctx) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}/labels`, {
     headers: backendHeaders(request),
   });
@@ -11,7 +12,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function POST(request: NextRequest, { params }: Ctx) {
+export async function POST(request: NextRequest, props: Ctx) {
+  const params = await props.params;
   const body = await request.text();
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}/labels`, {
     method: "POST",

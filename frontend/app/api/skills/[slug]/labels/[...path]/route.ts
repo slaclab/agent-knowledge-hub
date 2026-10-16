@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND, backendHeaders } from "../../../../_internal";
 
-type Ctx = { params: { slug: string; path: string[] } };
+type Ctx = { params: Promise<{ slug: string; path: string[] }> };
 
-export async function GET(request: NextRequest, { params }: Ctx) {
+export async function GET(request: NextRequest, props: Ctx) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}/labels/${params.path.join("/")}`, {
     headers: backendHeaders(request),
   });
@@ -11,7 +12,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function DELETE(request: NextRequest, { params }: Ctx) {
+export async function DELETE(request: NextRequest, props: Ctx) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}/labels/${params.path.join("/")}`, {
     method: "DELETE",
     headers: backendHeaders(request),

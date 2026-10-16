@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { BACKEND, backendHeaders } from "../../_internal";
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}`, {
     headers: backendHeaders(request),
   });
@@ -10,7 +11,8 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const body = await request.text();
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}`, {
     method: "PATCH",
@@ -21,7 +23,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { slug: 
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}`, {
     method: "DELETE",
     headers: backendHeaders(request),

@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-export default function MeRedirectPage() {
-  const h = headers();
+export default async function MeRedirectPage() {
+  const h = await headers();
   const viewer =
     h.get(process.env.AUTH_USER_HEADER ?? "x-auth-request-user") ||
     h.get("x-vouch-idp-claims-name") ||

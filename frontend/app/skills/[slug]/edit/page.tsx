@@ -4,10 +4,11 @@ import { EditForm } from "@/components/edit-form";
 import { AuthGuard } from "@/components/auth-guard";
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export default async function EditPage({ params }: PageProps) {
+export default async function EditPage(props: PageProps) {
+  const params = await props.params;
   const { skill, deactivated } = await getSkill(params.slug, true);
 
   if (!skill || deactivated) return notFound();

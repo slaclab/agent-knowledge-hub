@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Security: dependency upgrades
+
+- **Next.js 15.5.28 and React 19** — the frontend moves from Next.js 14.2.35 to 15.5.28, which fixes the 23 Next.js advisories that apply to 14.2.35, among them two critical ones for unauthenticated remote code execution (GHSA-2xp9-vwfh-vxw4, GHSA-p293-qw3h-jr36). Pages and route handlers now await `params`, `searchParams`, `cookies()` and `headers()`, as Next.js 15 requires.
+- **PostCSS 8.5.30** — an npm override also replaces the copy that Next.js bundles.
+- **Other frontend packages** — `vitest`, `undici`, `dompurify`, `js-yaml`, `nanoid`, `browserslist` and the other transitive packages with a patched release are updated in `package-lock.json`.
+- **Backend minimum versions** — `PyJWT[crypto]>=2.15.0` and `python-multipart>=0.0.31`, and for tests `anyio>=4.14.2` and `pytest>=9.0.3`, so that no install can pick a version with a known advisory. The 0.19.0 backend image already had patched versions.
+- **Still open** — 9 advisories in build-time packages: Tailwind CSS 3's `braces`, `micromatch`, `chokidar`, `postcss-selector-parser` and `postcss-nested`, and `eslint-config-next`'s `fast-glob`, which pins `micromatch` and `braces`. `braces` has no patched release. None of these packages is in the runtime image.
+
 ## 0.19.0 — 2026-10-16
 
 ### Behaviour change: install no longer adds MCP servers, and refuses agents it cannot vet (#051)

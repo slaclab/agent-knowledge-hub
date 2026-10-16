@@ -4,12 +4,13 @@ import { getUserProfile } from "@/lib/api";
 import { UserActivityTabs } from "@/components/user-activity-tabs";
 
 interface PageProps {
-  params: { user_id: string };
+  params: Promise<{ user_id: string }>;
 }
 
-export default async function UserProfilePage({ params }: PageProps) {
+export default async function UserProfilePage(props: PageProps) {
+  const params = await props.params;
   const { user_id } = params;
-  const h = headers();
+  const h = await headers();
   const viewer =
     h.get(process.env.AUTH_USER_HEADER ?? "x-auth-request-user") ||
     h.get("x-vouch-idp-claims-name") ||

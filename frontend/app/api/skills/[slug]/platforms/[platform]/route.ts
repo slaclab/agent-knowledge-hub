@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND, backendHeaders } from "../../../../_internal";
 
-type Ctx = { params: { slug: string; platform: string } };
+type Ctx = { params: Promise<{ slug: string; platform: string }> };
 
-export async function DELETE(request: NextRequest, { params }: Ctx) {
+export async function DELETE(request: NextRequest, props: Ctx) {
+  const params = await props.params;
   const res = await fetch(`${BACKEND}/api/skills/${params.slug}/platforms/${encodeURIComponent(params.platform)}`, {
     method: "DELETE",
     headers: backendHeaders(request),

@@ -19,11 +19,12 @@ import { DeleteSkillButton } from "@/components/delete-skill-button";
 import { PinSkillButton } from "@/components/pin-skill-button";
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export default async function SkillDetailPage({ params }: PageProps) {
-  const h = headers();
+export default async function SkillDetailPage(props: PageProps) {
+  const params = await props.params;
+  const h = await headers();
   const viewer =
     h.get(process.env.AUTH_USER_HEADER ?? "x-auth-request-user") ||
     h.get("x-vouch-idp-claims-name") ||

@@ -4,7 +4,7 @@ import type { SortOption, VisibilityType } from "@/types/skill";
 import { Suspense } from "react";
 
 interface PageProps {
-  searchParams: {
+  searchParams: Promise<{
     q?: string;
     labels?: string;
     sort?: string;
@@ -13,10 +13,11 @@ interface PageProps {
     visibility?: string;
     cursor?: string;
     platforms?: string;
-  };
+  }>;
 }
 
-export default async function SkillsPage({ searchParams }: PageProps) {
+export default async function SkillsPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const q = searchParams.q ?? "";
   const labels = searchParams.labels ? searchParams.labels.split(",").filter(Boolean) : [];
   const platforms = searchParams.platforms ? searchParams.platforms.split(",").filter(Boolean) : [];

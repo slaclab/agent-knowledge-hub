@@ -1,7 +1,7 @@
 # 006 — Skillsets: Curated Skill Collections
 
-**Status:** 🏁 Implementation Done (Slice 1 released in 0.19.0; Slice 4 merged to `main` on 2026-10-16; Slice 2+3 built and checked locally on 2026-10-16, not released)
-**Branch:** `feat/skillsets-backend` (Slice 1) and `feat/006-slice4` (Slice 4), both merged; `feat/006-slice23` (Slice 2+3)
+**Status:** ✅ Complete — Slice 1 in 0.19.0; Slice 4 (client 2.3.0) on `main` 2026-10-16; Slice 2+3 in 0.21.0, deployed to dev and prod 2026-10-16
+**Branch:** `feat/skillsets-backend` (Slice 1), `feat/006-slice4` (Slice 4) and `feat/006-slice23` (Slice 2+3), all merged
 **PR:** —
 
 ---
@@ -1389,6 +1389,8 @@ The checks ran in headless Chromium, through Playwright 1.49.1 in the `mcr.micro
 The same run checked the rest of the owner view. Edit details saved a new description. Delete skillset returned to `/skillsets`. An admin got the picker, the move controls and Delete, but no **Add new skill →**, because auto-add on submit is owner-only. Carol got no owner controls. The create form suggested `alice-picks` from the name "Alice Picks", showed "Slug already taken. Try: alice-picks-2" on submit, and created the skillset after one click on the suggestion.
 
 The pages count with singular and plural words, "Part of 1 skillset" and "Part of 2 skillsets", where the requirements write "skillset(s)".
+
+After the 0.21.0 deploy, read-only checks passed on dev and prod: `/skillsets`, `/skillsets/create` and `/skills` returned 200 with the Skillsets link in the nav, the frontend's `/api/skillsets` and `/api/skills/summary?q=` handlers returned the backend's JSON, and on prod the client's `GET /cli/api/skillsets/<slug>` reached the backend. Neither environment held a skillset, and the checks wrote nothing.
 
 ### AKH skill narrative tests (manual)
 

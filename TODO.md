@@ -7,7 +7,7 @@
 | [003](todo/003-label-ux.md) | Label UX: community tagging, filter, admin rename/merge/delete | ✅ Complete |
 | [004](todo/004-multi-source-scanner-abstraction.md) | Multi-source scanner abstraction: local directories, GitLab, and beyond | ✅ Complete |
 | [005](todo/005-skill-ratings.md) | Skill ratings: interactive 1–5 star rating with avg display | ✅ Complete |
-| [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | 🏁 Implementation Done |
+| [006](todo/006-skillsets.md) | Skillsets: curated skill collections per facility/group with reverse links | ✅ Complete |
 | [007](todo/007-agent-knowledge-hub-skill.md) | `/agent-knowledge-hub` agent-native discovery, install, and submit skill | ✅ Complete |
 | [008](todo/008-auth-header-hardening.md) | Auth header hardening: prevent identity spoofing via ingress/cluster/proxy | ✅ Complete |
 | [009](todo/009-duplicate-skill-detection.md) | Duplicate & similar skill detection: near-duplicate warnings in discovery and submit flows | ⬜ Open |

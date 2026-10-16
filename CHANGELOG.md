@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Skillsets: pages for browsing and curating (#006, frontend)
+
+- **`/skillsets`** — lists every skillset with its description, skill count and curator, with a **Skillsets** link in the top bar. Signed-in users get **+ Create Skillset**, which suggests a slug from the name and offers a free one when the slug is taken.
+- **Skillset page** — shows the skills in their stored order, marks deactivated ones, warns above the list when any member needs SLAC GitHub access, and gives the `/agent-knowledge-hub install skillset <slug>` command with a copy button. The owner and admins can rename, re-describe or delete the skillset.
+- **Curating** — the owner adds skills with a search that matches part of a word, so "depl" finds "deploy", removes them, and moves them up or down. A move made from a page that another tab has since changed is not saved; the page reloads the list and says so. **Add new skill →** opens the submit form, which adds the new skill to the skillset and returns to it.
+- **Skill pages** — a skill's page lists the skillsets that hold it, and a skill card says how many. A user who owns skillsets gets an **Add to skillset** menu on every skill page. The skill's submitter can remove it from any skillset, after a confirmation, because only the curator can add it back.
+
 ### Skillsets: `install skillset` (#006, client)
 
 - **`/agent-knowledge-hub install skillset <slug>`** — installs every skill in a skillset, in the order its curator chose. Before it installs anything it fetches every member, asks whether to replace a skill folder it did not install, then lists the skills it will install, with each repository and `MCP server, not added` or `scripts` where they apply, and asks once. An installed member is skipped and a failed one is reported while the rest install; the run ends with a summary line, one line per failure, and the server blocks of every member, grouped by member.

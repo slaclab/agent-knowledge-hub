@@ -10,6 +10,8 @@ See what the community rates highly, filter by topic, read a description, and de
 
 Browse all community labels at [/labels](https://agent-knowledge-hub.slac.stanford.edu/labels), or click any label chip on a skill card to filter the catalog to that topic. On a skill's detail page, authenticated users can add free-form labels using an inline typeahead combobox.
 
+[Skillsets](https://agent-knowledge-hub.slac.stanford.edu/skillsets) are named, ordered bundles of skills, such as a starter set for a facility. Any signed-in user can create one, add catalog skills to it from the skillset page's search or from a skill's own page with **Add to skillset**, and move skills up and down to set the order they are listed and installed in. A skill's page shows which skillsets hold it, and the person who submitted a skill can remove it from any skillset, including one someone else curates.
+
 Skills in private SLAC GitHub repos are fully supported. Skills that require SLAC GitHub access are shown with a **SLAC Members Only** badge so you know upfront — and a link explaining how to get access.
 
 ## Share what you've built

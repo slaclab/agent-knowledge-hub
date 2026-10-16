@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Security: catalog entries carry only shell-safe `repo_url` and `skill_path` values (#045)
+
+The `/agent-knowledge-hub` client passes each skill's `repo_url` and `skill_path` to `git clone` and `cp` on the installing user's machine, so the catalog now refuses values that could carry shell syntax.
+
+- **`repo_url`** — `POST /api/skills` returns 422 unless a GitHub submission's `repo_url` is `https://github.com/<owner>/<repo>`, with an owner of letters, digits and `-` (up to 39 characters) and a repository of letters, digits, `.`, `_` and `-` (up to 100). `forked_from_url` uses the same rule.
+- **`skill_path`** — every submission, GitHub or local, returns 422 unless `skill_path` holds only letters, digits, `.`, `_`, `-` and `/`. The `..` and 500-character checks stay.
+- **Audit log** — the `[CREATE]` line writes `repo_url` and `skill_path` with `%r`, so a newline in either value cannot start a forged log line.
+- **Stored entries** — no stored skill on dev or prod fails the new checks.
+
 ## 0.19.1 — 2026-10-16
 
 ### Security: dependency upgrades

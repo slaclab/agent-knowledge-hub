@@ -2,8 +2,8 @@
 
 > **Priority:** 🟠 P1 — High
 > **Severity:** HIGH
-> **Status:** 📋 Preparing
-> **Branch:** —
+> **Status:** 🏁 Implementation Done (not yet deployed)
+> **Branch:** `fix/045-allowlist`
 > **PR:** —
 > **Created:** 2026-10-14
 > **Shipped:** —
@@ -154,11 +154,11 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 
 ## Implementation Checklist
 
-- [ ] Step 1 — `_GITHUB_URL_RE` tightened
-- [ ] Step 2 — `skill_path` allow-list added
-- [ ] Step 3 — `[CREATE]` line uses `%r`
-- [ ] Step 4 — tests written and passing
-- [ ] Step 5 — stored-failing counts recorded for dev and prod
+- [x] Step 1 — `_GITHUB_URL_RE` tightened
+- [x] Step 2 — `skill_path` allow-list added
+- [x] Step 3 — `[CREATE]` line uses `%r`
+- [x] Step 4 — tests written and passing
+- [x] Step 5 — stored-failing counts recorded for dev and prod
 - [ ] Deployed to production before #006 Slice 4 merges
 
 ---
@@ -172,11 +172,21 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 
 ---
 
+### Deviation: `skill_path` is also checked in the request body
+**Encountered:** 2026-10-16
+**Root cause:** FR-2 places the allow-list in `Skill.validate_skill_path`, which runs only when `create()` builds the `Skill` document. That happens after the GitHub fetch and scan, and a `ValueError` there reaches the generic exception handler instead of becoming a 422.
+**Solution:** `normalize_skill_path()` in `backend/app/models/skill.py` holds the check, and both `Skill.validate_skill_path` and a new `SkillCreate.validate_skill_path` call it. A bad `skill_path` is now a 422 before any GitHub call, for GitHub and local submissions alike.
+
+### Detail: full-string matches
+**Encountered:** 2026-10-16
+**Root cause:** Python's `$` also matches before a final newline, so `re.match(r"^/[A-Za-z0-9._/-]*$", "/a/b\n")` succeeds.
+**Solution:** both patterns are applied with `fullmatch`. `forked_from_url` goes through `_normalize_github_url`, which returns an unmatched value unstripped, so it uses `fullmatch` too.
+
 ## Open Questions
 
-1. **Should `forked_from_url` get the tightened pattern too?** — Recommendation: yes. It shares `_GITHUB_URL_RE` today, and a fork URL is also served to clients.
-2. **Should create reject a repository that GitHub cannot fetch?** — Recommendation: no. FR-1 and FR-2 close the injection path, and rejecting on fetch failure would block submissions during a GitHub outage or rate limit.
-3. **What happens to stored entries that fail the new checks?** — Recommendation: report them under FR-4 and let an admin deactivate each one through #012. Decide after the counts are known.
+1. **Should `forked_from_url` get the tightened pattern too?** — Recommendation: yes. It shares `_GITHUB_URL_RE` today, and a fork URL is also served to clients. *Decided 2026-10-16: yes, by the shared pattern.*
+2. **Should create reject a repository that GitHub cannot fetch?** — Recommendation: no. *Decided 2026-10-16: no.* FR-1 and FR-2 close the injection path, and rejecting on fetch failure would block submissions during a GitHub outage or rate limit.
+3. **What happens to stored entries that fail the new checks?** — Recommendation: report them under FR-4 and let an admin deactivate each one through #012. Decide after the counts are known. *Moot 2026-10-16: none fail (Measured facts › stored-failing).*
 
 ---
 
@@ -192,11 +202,11 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 
 ## Definition of Done
 
-- [ ] Every FR and NFR row has a passing verifier
-- [ ] Every input in What fails today returns its desired behaviour
-- [ ] Measured facts › stored-failing has dev and prod counts
+- [x] Every FR and NFR row has a passing verifier
+- [x] Every input in What fails today returns its desired behaviour
+- [x] Measured facts › stored-failing has dev and prod counts
 - [ ] Deployed to production before #006 Slice 4 merges
-- [ ] CHANGELOG entry added under `## Unreleased`
+- [x] CHANGELOG entry added under `## Unreleased`
 - [ ] Shipped release written into the Status line
 
 ---
@@ -207,7 +217,7 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 |---|---|---|---|
 | current-validation | `SkillCreate` accepted every `repo_url` input in What fails today, including the 5000-character name. `Skill.validate_skill_path` accepted every `skill_path` input listed there. | `SkillCreate(repo_url=...)` and `Skill.validate_skill_path(...)` called with `PYTHONPATH=backend` in a venv built from `backend/requirements.txt` | 2026-10-14 |
 | stored-sample | All 13 active dev skills without an MCP server have a `repo_url` and `skill_path` that pass FR-1 and FR-2. Deactivated skills and skills with an MCP server were not checked. | Read-only `find` on `skills` in the dev backend pod, from the #006 install-loop spike | 2026-10-14 |
-| stored-failing | Not measured. The dev cluster rejected `kubectl exec` with `No valid id-token, and cannot refresh without refresh-token`. | FR-4 query | — |
+| stored-failing | No stored skill fails FR-1, FR-2 or the tightened `forked_from_url` check: dev checked 13 skills with `source_type` other than `local`, active and deactivated, and prod checked 39. | Read-only `find` with a projection of `slug`, `repo_url`, `skill_path`, `forked_from_url` and `status`, run with `kubectl exec` in each backend pod; it prints only slugs and the failing field | 2026-10-16 |
 
 ---
 

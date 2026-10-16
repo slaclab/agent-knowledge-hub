@@ -53,3 +53,4 @@
 | [049](todo/049-sec-local-file-name-validation.md) | **SEC LOW** — Refuse absolute and `..` file names in local skill submissions | ⬜ Open |
 | [050](todo/050-client-token-helper.md) | Client token helper: S3DF token from the real home, kept out of process arguments, sent only to the catalog | 🏁 Implementation Done |
 | [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client leaves MCP servers to the user and refuses agents it cannot vet | 🏁 Implementation Done |
+| [052](todo/052-prod-cli-route-reaches-backend.md) | Production `/cli` requests reach the backend | ⬜ Open |

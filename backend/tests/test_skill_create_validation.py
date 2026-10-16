@@ -238,3 +238,63 @@ class TestCreateLogLine:  # FR-3
         assert "\n" not in lines[0]
         assert "'https://github.com/a/b\\nINFO forged line'" in lines[0]
         assert "'/x\\ny'" in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# #049 — file names in local submissions
+# ---------------------------------------------------------------------------
+
+REJECTED_LOCAL_NAMES = [
+    "/etc/profile",          # absolute
+    "../x",                  # parent segment
+    "a/../../x",
+    "..",
+    "./SKILL.md",            # current-directory segment
+    "a//b",                  # empty segment
+    "a/",                    # trailing slash: empty last segment
+    "",                      # empty name
+    "a\\b",                  # backslash, a separator on Windows
+    "C:/x",                  # drive letter
+    "c:x",
+    "a\x00b",                # NUL
+    "a\nb",                  # control character
+]
+
+ACCEPTED_LOCAL_NAMES = ["SKILL.md", "scripts/run.sh", "a..b.md", ".hidden/config", "dir with space/file.md"]
+
+
+def _local(**files) -> dict:
+    return {"repo_url": "local://some/dir", "source_type": "local", "skill_path": "/", "snapshotted_files": files}
+
+
+class TestLocalFileNames:  # #049 FR-1
+    @pytest.mark.parametrize("name", REJECTED_LOCAL_NAMES, ids=repr)
+    def test_rejected(self, name):
+        with pytest.raises(ValidationError) as exc:
+            SkillCreate(**_local(**{"SKILL.md": "---\nname: x\n---\n", name: "x"}))
+        assert "snapshotted_files" in str(exc.value)
+
+    @pytest.mark.parametrize("name", ACCEPTED_LOCAL_NAMES)
+    def test_accepted(self, name):
+        body = SkillCreate(**_local(**{name: "x"}))
+        assert name in body.snapshotted_files
+
+    def test_github_submission_unaffected(self):  # AC-3
+        body = SkillCreate(repo_url="https://github.com/a/b", snapshotted_files={"../x": "ignored"})
+        assert body.source_type == "github"
+
+
+class TestLocalFileNamesEndpoint:  # #049 AC-1, AC-2
+    @pytest.mark.parametrize("name", ["/etc/profile", "../x", "a/../../x", ".."])
+    async def test_unsafe_name_is_422(self, client, name):
+        resp = await client.post("/api/skills", headers=_auth(),
+                                 json=_local(**{"SKILL.md": "---\nname: x\n---\n", name: "x"}))
+        assert resp.status_code == 422
+        assert await Skill.find_all().count() == 0
+
+    async def test_safe_names_are_201(self, client):
+        files = {"SKILL.md": "---\nname: local-skill\ndescription: x\n---\nBody\n", "scripts/run.sh": "echo", "a..b.md": "x"}
+        resp = await client.post("/api/skills", headers=_auth(), json=_local(**files))
+        assert resp.status_code == 201, resp.text
+        (stored,) = await Skill.find_all().to_list()
+        assert {e.path for e in stored.file_manifest} == set(files)

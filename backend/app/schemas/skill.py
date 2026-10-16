@@ -13,6 +13,27 @@ from app.services.scanner import FileManifestEntry
 # Owner and repository segments use GitHub's own name rules and length limits. The install loop
 # passes repo_url to `git clone` on the user's machine (#045); #006 FR-7 › Argument rule checks
 # the same set client-side.
+# A file name in a local submission is written beneath the skill folder by #048's install route,
+# so it must stay inside that folder on every client (#049): no absolute path or drive letter, no
+# empty, `.` or `..` segment, no backslash, and no control character.
+_LOCAL_NAME_SEGMENT_FORBIDDEN = {"", ".", ".."}
+_DRIVE_RE = re.compile(r"[A-Za-z]:")
+
+
+def _local_name_problem(name: str) -> Optional[str]:
+    if name.startswith("/"):
+        return "is an absolute path"
+    if _DRIVE_RE.match(name):
+        return "starts with a drive letter"
+    if "\\" in name:
+        return "contains a backslash"
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in name):
+        return "contains a control character"
+    if any(seg in _LOCAL_NAME_SEGMENT_FORBIDDEN for seg in name.split("/")):
+        return "has an empty, '.' or '..' segment"
+    return None
+
+
 _GITHUB_URL_RE = re.compile(r"https://github\.com/[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}")
 
 
@@ -54,6 +75,15 @@ class SkillCreate(BaseModel):
     @classmethod
     def validate_skill_path(cls, v: str) -> str:
         return normalize_skill_path(v)
+
+    @model_validator(mode="after")
+    def validate_local_file_names(self) -> "SkillCreate":
+        if self.source_type == "local":
+            for name in self.snapshotted_files:
+                problem = _local_name_problem(name)
+                if problem:
+                    raise ValueError(f"snapshotted_files name {name!r} {problem}")
+        return self
 
     @model_validator(mode="after")
     def validate_repo_url(self) -> "SkillCreate":

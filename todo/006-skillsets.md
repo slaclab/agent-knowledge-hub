@@ -1,7 +1,7 @@
 # 006 — Skillsets: Curated Skill Collections
 
-**Status:** 🔄 In Progress (Slice 1 implemented on its branch, not merged)
-**Branch:** `feat/skillsets-backend`
+**Status:** 🔄 In Progress (Slice 1 released in 0.19.0; Slice 4 merged to `main` on 2026-10-16; Slice 2+3 not started)
+**Branch:** `feat/skillsets-backend` (Slice 1) and `feat/006-slice4` (Slice 4), both merged
 **PR:** —
 
 ---
@@ -495,7 +495,7 @@ Choice: Auto-derive slug from name (vs. user-chosen slug only)
 - [ ] Frontend: "Add new skill →" button on skillset detail page (owner-only) links to `/skills/submit?skillset=<slug>`; submit form shows "Will be added to skillset: <name>" notice when `skillset` param is present and submitter owns it; after submission redirects to skillset detail page
 - [x] Backend: `SkillCreate.skillset_slug` adds new skill to owned skillset post-creation; silently ignored if skillset not found or not owned
 - [x] Backend: each of the seven actions in NFR-5 writes NFR-5's log line, including a submitter's removal from another user's skillset and the cascade (Slice 1)
-- [ ] AKH skill: `install skillset <slug>` installs members in stored order and follows FR-7's confirm rule, skip rule, failure rule, argument rule, auth rule, and summary line
+- [x] AKH skill: `install skillset <slug>` installs members in stored order and follows FR-7's confirm rule, skip rule, failure rule, argument rule, auth rule, and summary line (Test Plan › AKH skill narrative tests › Results, 2026-10-16)
 - [x] Security: every row of ADR-U19 › Permission rules has an allow test and a deny test
 - [x] No N+1 queries on list views (batch hydration verified)
 - [ ] CHANGELOG entry under `## Unreleased`: a feature headline plus bullets, each added in the slice that makes it true. Slice 1: the skillset endpoints, including `PUT /api/skillsets/{slug}/order` and the `created_by` filter on `GET /api/skillsets`; `skillset_count` and `skillsets` on skill responses; removal from every skillset when a skill is deleted; the rule that a skill's submitter can remove the skill from any skillset; and the per-user rate limits on creating a skillset and adding a member (the Slice 1 bullet and the API contract give the numbers). Slice 2+3: the skillset pages, the search picker (which matches part of a word), the "Add to skillset" menu, the submitter's Remove control, and reordering. Slice 4: `install skillset <slug>` with FR-7's confirm prompt and its skip, failure, and summary behaviour; plain `install` now refusing a `repo_url` or `skill_path` that fails FR-7's argument rule; Search and Install now sending the bearer token under FR-7's auth rule; and a note telling existing users how to pick up the updated `/agent-knowledge-hub` skill
@@ -1389,6 +1389,35 @@ Each test runs under a temporary HOME. A test that needs a catalog entry no real
 - **Unknown slug:** → `✗ Skillset not found.`
 - **No token:** `~/.s3df-access-token` absent or refused → the helper's sign-in case stops the command with #050's sign-in lines; nothing is installed
 - **Hostile repo_url and skill_path:** one member whose `repo_url` is `https://github.com/a/b$(touch /tmp/akh-pwned)` and another whose `skill_path` is `/skills/$(touch /tmp/akh-pwned-path)`, both stored in the local backend's database → both are missing from the confirm prompt's list, and each is reported as a path-guard abort under FR-7's argument rule; neither `/tmp/akh-pwned` nor `/tmp/akh-pwned-path` exists afterwards, and the other members install
+
+#### Results, 2026-10-16
+
+The tests ran against the client at commit `32f7f85`, in Claude Code 2.1.281 with `claude-opus-5-5`, through `claude -p` turns resumed with `--resume`. Each test used a throwaway HOME. The catalog was a fake HTTP server on 127.0.0.1 serving fixture entries, in place of a local backend, so no hostile entry was written to any database. The client's `hub-request.sh` copy pointed at that server and read a fake token. Git `insteadOf` redirects sent each `https://github.com/akh-fixture/<name>` URL to a local fixture repository. The main skillset, `akh-set`, held nine members in this order: `s-plain` (pinned behind the branch tip), `s-mcp` (a stdio server named `akh-shared`), `s-missing` (`skill_path` `/skills/nope`), `s-hostile-repo`, `s-hostile-path`, `s-gone` (410, superseded by `s-plain`), `s-installed` (manifest present), `s-partial` (a directory holding only `NOTES.md`), and `s-mcp2` (a second `akh-shared` server and an agent that declares `hooks`).
+
+| Test | Result |
+|---|---|
+| Happy path | Pass. No separate two-member run was made. The `akh-set` run printed `[i/9] Installing <slug>... ✓` for its four installs and ended with the summary line. |
+| Token handling | Pass. Every catalog request in the 16 transcripts ran `hub-request.sh`, and the fake server logged a bearer token on every GET the client sent. The token's value appears in no transcript, and no command ran `curl`, `claude mcp add`, or `git` with an `Authorization` header. |
+| Confirm prompt | Pass. `akh-set` listed 5 of 9 members with "MCP server, not added" on `s-mcp` and `s-mcp2`, or 4 of 9 when the `s-partial` replace was declined. Answering N printed `Nothing installed.` with no summary line, and only a Claude Code cache file changed under the HOME. |
+| Nothing to confirm | Pass. A two-member skillset with both members installed asked no question, printed two skip lines, and ended with `Done: 0 installed, 2 skipped, 0 failed (2 members).` |
+| Fetch fails before the prompt | Pass. `s-gone` was missing from the list and failed with "deactivated, superseded by s-plain". |
+| Skip already-installed | Pass. `[7/9] Skipping s-installed (already installed)`, counted as skipped. |
+| Partial install | Pass. The replace question came before the list in both branches. Yes replaced the directory. No printed `[1/2] Skipping s-partial (kept your existing directory)`, left `NOTES.md` byte-identical, and asked nothing after the confirm prompt. |
+| Failed member recap | Pass. `Done: 4 installed, 1 skipped, 4 failed (9 members).` was followed by four `✗` lines, each with a reason and a next step, and by the re-run hint. |
+| Failed member (AC-14) | Pass. `s-missing`, the third member, failed because `/skills/nope` is not in the repository, and the members after it installed. |
+| No GitHub access | Pass, with a caveat. The internal member's redirect pointed at a repository that does not exist, so the fetch failed as a real access refusal would, but no credential helper was present to prompt. The fetch command set `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0`. The failure line named `gh auth login` and https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access, and the next member installed. |
+| Empty skillset | Pass. `⚠ Skillset 'akh-empty' contains no skills.` |
+| Unknown slug | Pass. `✗ Skillset not found.` after the helper's HTTP 404. |
+| No token | Pass. The helper's exit 3 stopped the command with #050's sign-in lines, before any member was fetched. |
+| Hostile repo_url and skill_path | Pass. `akh-member-check` refused both entries, which were left out of the list and reported as path-guard aborts. No `akh-pwned` marker file exists afterwards, and the other members installed. |
+
+Other behaviour seen in the `akh-set` run:
+
+- `s-plain` was installed at its pinned commit, not at the branch tip.
+- `s-mcp2`'s agent was not installed, because it declares `hooks`, and its block said so.
+- The two `akh-shared` servers were printed under their skills' headings. The second block said that only one of them can be added under that name. Nothing was added to `.claude.json`.
+
+A session limit interrupted the first confirm turn after the copies were made. The turn resumed with `continue` and finished from where it stopped.
 
 ### Coverage targets
 

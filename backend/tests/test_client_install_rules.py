@@ -536,3 +536,120 @@ class TestPinnedFetch:
                        "served commit <actual> where the catalog pins <sha>",
                        "is not a commit ID"):
             assert phrase in install, phrase
+
+
+# ---------------------------------------------------------------------------
+# #006 Slice 4 — catalog values checked before any command uses them, and install skillset
+# ---------------------------------------------------------------------------
+
+def run_python_command(marker: str, tmp_path: Path, payload, name: str):
+    import json
+    d = tmp_path / "dir"
+    d.mkdir(exist_ok=True)
+    (d / name).write_text(payload if isinstance(payload, str) else json.dumps(payload))
+    bindir = tmp_path / "pybin"
+    bindir.mkdir(exist_ok=True)
+    if not (bindir / "python3").exists():
+        (bindir / "python3").symlink_to(_pythons()[0])
+    cmd = command(marker).replace("<dir>", str(d))
+    result = subprocess.run(["/bin/sh", "-c", cmd], env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+                            cwd=tmp_path, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip().splitlines()
+
+
+GOOD_ENTRY = {"slug": "x", "repo_url": "https://github.com/slaclab/lcls-tools", "skill_path": "/skills/x",
+              "pinned_commit_sha": "a" * 40, "visibility": "internal", "has_mcp_server": True, "has_scripts": False}
+
+
+class TestMemberCheck:  # #006 FR-7 › Argument rule
+    def test_good_entry_prints_its_values(self, tmp_path):
+        assert run_python_command("akh-member-check", tmp_path, GOOD_ENTRY, "skill.json") == [
+            "akh-member: ok repo_url=https://github.com/slaclab/lcls-tools skill_path=/skills/x pin=" + "a" * 40
+            + " visibility=internal mcp=yes scripts=no"]
+
+    def test_unpinned_entry(self, tmp_path):
+        entry = {**GOOD_ENTRY, "pinned_commit_sha": None, "skill_path": "/", "visibility": "public", "has_mcp_server": False}
+        (line,) = run_python_command("akh-member-check", tmp_path, entry, "skill.json")
+        assert line.endswith("skill_path=/ pin=none visibility=public mcp=no scripts=no")
+
+    @pytest.mark.parametrize("field,value,refused", [
+        ("repo_url", "https://github.com/a/b$(touch {marker})", "repo_url"),
+        ("repo_url", "https://github.com/a/b';touch {marker};'", "repo_url"),
+        ("repo_url", "local://dir", "repo_url"),
+        ("repo_url", None, "repo_url"),
+        ("skill_path", "/skills/$(touch {marker})", "skill_path"),
+        ("skill_path", "/a/../b", "skill_path"),
+        ("skill_path", "/a\nb", "skill_path"),
+        ("pinned_commit_sha", "main", "pinned_commit_sha"),
+        ("pinned_commit_sha", "A" * 40, "pinned_commit_sha"),
+    ])
+    def test_hostile_values_are_refused_and_never_run(self, tmp_path, field, value, refused):
+        marker = tmp_path / "akh-pwned"
+        entry = {**GOOD_ENTRY, field: value.format(marker=marker) if isinstance(value, str) else value}
+        assert run_python_command("akh-member-check", tmp_path, entry, "skill.json") == [f"akh-member: refused {refused}"]
+        assert not marker.exists()
+
+    def test_unreadable_entry(self, tmp_path):
+        assert run_python_command("akh-member-check", tmp_path, "<html>404</html>", "skill.json") == ["akh-member: unreadable"]
+
+
+class TestSkillsetMembers:  # #006 FR-7, ADR-U20
+    def test_members_in_stored_order(self, tmp_path):
+        payload = {"slug": "set", "version": 3, "skills": [{"slug": "b-skill"}, {"slug": "a-skill"}, {"slug": "c"}]}
+        assert run_python_command("akh-skillset-members", tmp_path, payload, "skillset.json") == [
+            "akh-skillset: 3 members", "1 b-skill", "2 a-skill", "3 c"]
+
+    def test_empty_skillset(self, tmp_path):
+        assert run_python_command("akh-skillset-members", tmp_path, {"skills": []}, "skillset.json") == ["akh-skillset: 0 members"]
+
+    def test_slug_that_is_not_a_catalog_slug_is_refused(self, tmp_path):
+        payload = {"skills": [{"slug": "ok"}, {"slug": "x;touch y"}, {"slug": "Upper"}, {}]}
+        assert run_python_command("akh-skillset-members", tmp_path, payload, "skillset.json") == [
+            "akh-skillset: 4 members", "1 ok", "2 refused", "3 refused", "4 refused"]
+
+    def test_unreadable_response(self, tmp_path):
+        assert run_python_command("akh-skillset-members", tmp_path, "not json", "skillset.json") == ["akh-skillset: unreadable"]
+
+
+INSTALL_SKILLSET_LINES = [
+    "Install these <N> of <M> skills from skillset <slug>? (y/N)",
+    "Nothing installed.",
+    "[<i>/<M>] Installing <member>... ✓",
+    "[<i>/<M>] Skipping <member> (already installed)",
+    "[<i>/<M>] Skipping <member> (kept your existing directory)",
+    "[<i>/<M>] ✗ <member>: <reason>",
+    "`~/.claude/skills/<member>/` exists but was not installed by /agent-knowledge-hub. Replace it? (y/N)",
+    "Done: <installed> installed, <skipped> skipped, <failed> failed (<M> members).",
+    "Run /agent-knowledge-hub install skillset <slug> again to retry the failed members; installed members are skipped.",
+    "⚠ Skillset '<slug>' contains no skills.",
+    "✗ Skillset not found.",
+    "MCP server, not added",
+    "<K> of the installed skills use MCP servers that were not added: <member> (<name>, <name>), <member> (<name>). Each of these skills works only in part until you add its servers.",
+    "── <member> ──",
+    "Another skill in this run also brings a server named \"<name>\"; only one of them can be added under that name.",
+    "https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access",
+]
+
+
+class TestInstallSkillsetSection:
+    def section(self) -> str:
+        return skill_text().split("### Install skillset", 1)[1].split("\n### ", 1)[0]
+
+    @pytest.mark.parametrize("line", INSTALL_SKILLSET_LINES)
+    def test_words(self, line):
+        assert line in skill_text()
+
+    def test_fetches_through_the_helper(self):
+        assert "sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skillsets/<slug> > '<dir>/skillset.json'" in self.section()
+
+    def test_every_clone_and_fetch_skips_credential_prompts(self):  # FR-7 › Failure rule
+        for block in (command("akh-pinned-fetch"),):
+            assert "export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0" in block
+        install = skill_text().split("### Install\n", 1)[1].split("\n### ", 1)[0]
+        assert "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0 git clone --depth 1 '<repo_url>' '<dir>/repo'" in install
+
+    def test_install_checks_the_entry_before_any_command(self):  # FR-7 › Argument rule, plain install too
+        install = skill_text().split("### Install\n", 1)[1].split("\n### ", 1)[0]
+        assert "sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'" in install
+        assert "akh-member-check" in install

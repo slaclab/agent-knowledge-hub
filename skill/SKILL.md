@@ -54,10 +54,12 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 ### Install
 `/agent-knowledge-hub install <slug>`
 
-1. Fetch `repo_url`, `skill_path`, and `pinned_commit_sha` with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug>`.
-2. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Get the skill's files into `<dir>/repo`, then read and copy them only from there, and never read, write or copy a symbolic link from it.
-   - **Pinned skill** (`pinned_commit_sha` is present): the value must be exactly 40 characters of `0-9` and `a-f`; otherwise stop with the bad-pin line. Run the `akh-pinned-fetch` command under Pinned fetch below. Its last line decides: `akh-pin: ok` goes on to step 3, and `akh-pin: fetch-failed` or `akh-pin: mismatch <actual>` deletes `<dir>` and stops with the matching line, with nothing written. Never get a pinned skill any other way: no `git clone`, no checkout of `FETCH_HEAD` or of a branch, and no GitHub Contents API. When `git` is unavailable, stop with the no-git line.
-   - **Unpinned skill**: run `git clone --depth 1 '<repo_url>' '<dir>/repo'`. Fall back to the GitHub Contents API if git is unavailable, writing into `<dir>/repo`.
+1. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Save the skill's catalog entry with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'`, then run the `akh-member-check` command under Argument check below. Go on only when it prints `akh-member: ok …`, and use the `repo_url`, `skill_path` and `pin` that line prints, never values read from the entry yourself. `akh-member: refused pinned_commit_sha` stops with the bad-pin line, any other `refused` or `unreadable` with the argument-rule line, and both stop before any other command runs.
+2. Get the skill's files into `<dir>/repo`, then read and copy them only from there, and never read, write or copy a symbolic link from it.
+   - **Pinned skill** (`pin` is not `none`): run the `akh-pinned-fetch` command under Pinned fetch below. Its last line decides: `akh-pin: ok` goes on to step 3, and `akh-pin: fetch-failed` or `akh-pin: mismatch <actual>` deletes `<dir>` and stops with the matching line, with nothing written. Never get a pinned skill any other way: no `git clone`, no checkout of `FETCH_HEAD` or of a branch, and no GitHub Contents API. When `git` is unavailable, stop with the no-git line.
+   - **Unpinned skill**: run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0 git clone --depth 1 '<repo_url>' '<dir>/repo'`. Fall back to the GitHub Contents API if git is unavailable, writing into `<dir>/repo`. If the clone fails, stop with the clone-error line.
+   - The three variables make git fail instead of waiting for a password when the repository cannot be read: git asks an askpass program before the terminal, and Git Credential Manager prompts in its own window. A credential a helper already stores still works.
+   - The skill folder is `<dir>/repo<skill_path>`. If it is not a directory, stop with the missing-path line.
 3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed.
 4. Check the skill folder, then install components, enforcing path-prefix security on every write:
    - **Folder checks, before anything is written.** If `~/.claude/skills/<slug>/` holds `.installed-manifest.json`, the skill is already installed: stop with the already-installed line. If it exists without that file, stop with the line for a folder /agent-knowledge-hub did not install. Write nothing in either case.
@@ -72,12 +74,42 @@ Then print the closing message.
 
 When this skill says to delete `~/.claude/skills/<slug>`, delete that path itself, never spelled with a trailing `/`. When it is a symbolic link, delete only the link: a recursive delete of a link spelled with a trailing `/` deletes the files of the folder it points to.
 
+#### Argument check
+
+The catalog entry's values end up in `git` and `cp` command lines, and any signed-in user can submit an entry, so they are checked before any command uses them. This command reads them from the saved file itself; never put a value from the entry into a command before this check has printed it. Replace `<dir>`; never change anything else.
+
+```sh
+python3 -I - '<dir>/skill.json' <<'EOF'
+# akh-member-check: check a catalog entry's values before any command uses them, and print them
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        e = json.load(f)
+    repo, path, pin = e.get("repo_url"), e.get("skill_path") or "/", e.get("pinned_commit_sha")
+except Exception:
+    print("akh-member: unreadable")
+    sys.exit(0)
+if not isinstance(repo, str) or not re.fullmatch(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+", repo):
+    print("akh-member: refused repo_url")
+elif not isinstance(path, str) or not re.fullmatch(r"/[A-Za-z0-9._/-]*", path) or ".." in path.split("/"):
+    print("akh-member: refused skill_path")
+elif pin is not None and not (isinstance(pin, str) and re.fullmatch(r"[0-9a-f]{40}", pin)):
+    print("akh-member: refused pinned_commit_sha")
+else:
+    yn = lambda k: "yes" if e.get(k) else "no"
+    vis = re.sub(r"[^a-z]", "", str(e.get("visibility") or "")) or "unknown"
+    print("akh-member: ok repo_url=%s skill_path=%s pin=%s visibility=%s mcp=%s scripts=%s"
+          % (repo, path, pin or "none", vis, yn("has_mcp_server"), yn("has_scripts")))
+EOF
+```
+
 #### Pinned fetch
 
 A clone checks out the repository's default branch, and `git checkout <pinned_commit_sha>` then switches to a branch of that name if one exists. A repository owner can create a branch named like the pinned commit and install anything through it (Plugin4Shell). This command fetches only the pinned commit, by its ID, checks it out detached, and confirms that `HEAD` is that commit. Replace `<dir>`, `<repo_url>` and `<pinned_commit_sha>`; never change anything else.
 
 ```sh
 # akh-pinned-fetch: fetch only the pinned commit into <dir>/repo, check it out detached, and confirm HEAD is that commit
+export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0
 git init -q '<dir>/repo' && git -C '<dir>/repo' remote add origin '<repo_url>' &&
   git -C '<dir>/repo' fetch -q --depth 1 origin '<pinned_commit_sha>' &&
   git -C '<dir>/repo' -c advice.detachedHead=false checkout -q --detach '<pinned_commit_sha>'
@@ -315,6 +347,9 @@ Not installed: the catalog's pinned commit for <slug> is not a commit ID, so not
 Not installed: the pinned commit <sha> of <slug> could not be fetched from <repo_url>, so nothing was written. The repository may no longer have it; tell the skill's submitter.   (akh-pin: fetch-failed)
 Not installed: <repo_url> served commit <actual> where the catalog pins <sha>, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (akh-pin: mismatch)
 Not installed: <slug> is pinned to a commit, and installing a pinned skill needs git, which this computer does not have. Install git and run the install again.   (the no-git line)
+Not installed: the catalog entry for <slug> has a <repo_url | skill_path> that this client does not pass to a command, so nothing was run. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the argument-rule line; `unreadable` gives the same line naming its catalog entry)
+Not installed: git could not get <repo_url>, so nothing was written. If it is a SLAC-internal repository, run gh auth login and see https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access.   (the clone-error line; the access sentence only when visibility is internal, and also after akh-pin: fetch-failed for an internal skill)
+Not installed: <skill_path> is not in <repo_url>, so nothing was written. Tell the skill's submitter, or flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the missing-path line)
 Left out: <path>, a symbolic link <listed as an agent | listed as a command | in the skill folder>, which /agent-knowledge-hub never reads or copies from a skill. If <slug> needs it, tell the skill's submitter.
 Not installed: <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. Tell the skill's submitter.   (the filesystem test, in install)
 Not updated: the new version of <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. The update had already removed the version you had; MCP servers you added for it are still set up, and claude mcp list shows them. Tell the skill's submitter.   (the filesystem test, in update)
@@ -336,6 +371,66 @@ The no-command reasons:
 - a shared name — "another MCP server in <slug> has the same name, or one that differs only in capital letters", printed once for each spelling of the name
 - a file that does not match — "the configuration file /agent-knowledge-hub wrote did not match the skill's entry"
 - a missing `python3` — "/agent-knowledge-hub writes a server's configuration with python3, which this computer does not have"
+
+---
+
+### Install skillset
+`/agent-knowledge-hub install skillset <slug>`
+
+Installs every skill of a curated skillset, in the order its curator chose. The member list is chosen by the skillset's owner, who can be any signed-in user, and it can change after the user last looked at the skillset page, so the list this command prints before it asks is the only point where the user sees what will be installed.
+
+1. Make a new directory with `mktemp -d`; `<dir>` below is the path it prints. Save the skillset with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skillsets/<slug> > '<dir>/skillset.json'`. An HTTP 404 prints `✗ Skillset not found.` and stops; the helper's sign-in cases stop the command under Error handling. Run the `akh-skillset-members` command below. `akh-skillset: 0 members` prints `⚠ Skillset '<slug>' contains no skills.` and stops. `<M>` is the member count, and each following line is a member's position `<i>` and slug `<member>`.
+2. Before installing anything, look at every member in order:
+   - `refused` instead of a slug: the member fails, as `member <i>`, with the reason "its slug is not a catalog slug".
+   - Save its entry with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<member> > '<dir>/<i>.json'`. HTTP 404 fails the member with "not in the catalog", and 410 with "deactivated", naming `superseded_by_slug` from the response when it has one. The helper's sign-in cases stop the whole command. Any other failure fails the member with the Error handling message.
+   - Run `akh-member-check` with `'<dir>/<i>.json'` in place of `'<dir>/skill.json'`. Anything but `akh-member: ok …` fails the member with the argument-rule reason; no command runs for it.
+   - If `~/.claude/skills/<member>/.installed-manifest.json` exists, the member is skipped as already installed. If `~/.claude/skills/<member>` exists without it, ask now: "`~/.claude/skills/<member>/` exists but was not installed by /agent-knowledge-hub. Replace it? (y/N)". Yes lists the member, and that answer is the user's consent to replace the folder. No skips it, keeping the folder.
+3. Print one line for each listed member: the member, its `repo_url`, and `MCP server, not added` when `mcp=yes` or `scripts` when `scripts=yes`. Then ask once: "Install these <N> of <M> skills from skillset <slug>? (y/N)". No prints `Nothing installed.` and stops with no other line. When `<N>` is 0 there is nothing to ask, so go straight to step 4.
+4. Go through the members in order, printing one progress line each:
+   - A skipped member prints its skip line, and a failed member from step 2 its failure line.
+   - A listed member prints its installing line and runs Install from step 2, with `<dir>/<i>` as its directory and the values its check printed. For a member whose folder the user agreed to replace, delete `~/.claude/skills/<member>` first, as Install says to delete it; its folder check then finds nothing to stop on. Every way Install stops fails only that member, with that stop line's reason, and the command goes on to the next member. Print `✓` at the end of the installing line when the member installed.
+5. Print the summary line. Below it, print one recap line for each failed member with its reason and next step, and when any member failed, the re-run line.
+6. Then print, inside one fenced code block, every member's closing-message lines except its success line, in the words under Install › Closing message. Start with the skillset lead-in when any member's server gets a block, then each member's lines under its `── <member> ──` line, in install order. A member with no such lines gets no `──` line. When a second or later block names a server an earlier member's block already named, add the shared-name line to that block.
+
+The command asks no other question, so a user who answers it can leave the run unattended. Running it again is safe: installed members are skipped.
+
+```sh
+python3 -I - '<dir>/skillset.json' <<'EOF'
+# akh-skillset-members: list a skillset's members in stored order, refusing any slug that is not a catalog slug
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        skills = json.load(f)["skills"]
+    assert isinstance(skills, list)
+except Exception:
+    print("akh-skillset: unreadable")
+    sys.exit(0)
+print("akh-skillset: %d members" % len(skills))
+for i, s in enumerate(skills, 1):
+    slug = s.get("slug") if isinstance(s, dict) else None
+    ok = isinstance(slug, str) and re.fullmatch(r"[a-z0-9-]{1,200}", slug)
+    print("%d %s" % (i, slug if ok else "refused"))
+EOF
+```
+
+`akh-skillset: unreadable` is reported as the helper's other-status case under Error handling.
+
+Lines, in these words:
+
+```
+[<i>/<M>] Installing <member>... ✓
+[<i>/<M>] Skipping <member> (already installed)
+[<i>/<M>] Skipping <member> (kept your existing directory)
+[<i>/<M>] ✗ <member>: <reason>
+Done: <installed> installed, <skipped> skipped, <failed> failed (<M> members).
+✗ <member>: <reason>. <next step>   (one recap line per failed member)
+Run /agent-knowledge-hub install skillset <slug> again to retry the failed members; installed members are skipped.
+<K> of the installed skills use MCP servers that were not added: <member> (<name>, <name>), <member> (<name>). Each of these skills works only in part until you add its servers.
+── <member> ──
+  Another skill in this run also brings a server named "<name>"; only one of them can be added under that name.
+```
+
+The skillset lead-in takes the place of the first line of Install's lead-in; its second line follows unchanged. A member whose clone or pinned fetch fails and whose `visibility` is `internal` names `gh auth login` and https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access in its reason, as the clone-error line does.
 
 ---
 
@@ -465,6 +560,10 @@ on the catalog's side: report it at https://agent-knowledge-hub.slac.stanford.ed
 - **Network error (exit 7, any other curl exit):** Show message and suggest retrying.
 - **Helper failure (exit 1):** Show `The hub client failed before sending a request: <last line of standard error>`, then the report line.
 - **Path traversal:** Abort install, warn user, write nothing.
+- **Argument rule:** a `repo_url`, `skill_path` or `pinned_commit_sha` that `akh-member-check` refuses stops the install with the argument-rule or bad-pin line before any command runs. Together with path traversal, this is a path-guard abort.
+- **Skill path missing from the clone:** the missing-path line.
+- **Clone failure:** the clone-error line, which for an internal repository points to `gh auth login` and the SLAC GitHub access guide.
+- **Inside `install skillset`:** every case in this section that stops an install fails only that member, with the case's reason, and the loop goes on to the next member. The sign-in cases stop the whole command.
 - **Agent, command, link or MCP server left out:** Not an error. The install goes on, and the closing message names each one with its reason, in the words under Install › Closing message.
 - **Install stopped by the folder checks or the filesystem test:** Print only the stop line under Install › Closing message.
 - **Manifest entry outside `~/.claude/agents/` and `~/.claude/commands/`:** Remove and update leave it in place and print the not-removed line.

@@ -306,6 +306,10 @@ REFUSED = [
     ("GET", "/cli/api/skills/a/b"),
     ("POST", "/cli/api/me/installs/a/b"),
     ("POST", "/cli/api/skills//rate"),
+    ("GET", "/cli/api/skillsets"),
+    ("GET", "/cli/api/skillsets/"),
+    ("GET", "/cli/api/skillsets/a/b"),
+    ("GET", "/cli/api/skillsets/a/skills/b"),
 ]
 
 ROUTES = [
@@ -314,6 +318,7 @@ ROUTES = [
     ("POST", "/cli/api/me/installs/x"),
     ("POST", "/cli/api/skills/x/rate"),
     ("POST", "/cli/api/skills"),
+    ("GET", "/cli/api/skillsets/x"),
 ]
 
 

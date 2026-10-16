@@ -70,6 +70,7 @@ case "$1 $2" in
     "POST /cli/api/me/installs/"*) slug=${2#/cli/api/me/installs/} ;;
     "POST /cli/api/skills/"*/rate) rest=${2#/cli/api/skills/}; slug=${rest%/rate} ;;
     "POST /cli/api/skills") ;;
+    "GET /cli/api/skillsets/"*) slug=${2#/cli/api/skillsets/} ;;
     *) refuse "$1 $2" ;;
 esac
 case ${slug-x} in

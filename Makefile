@@ -12,6 +12,7 @@ all: backend frontend dev-deploy
 containers: backend frontend
 
 backend:
+	$(MAKE) -C backend lock-check audit
 	$(MAKE) -C backend docker-push TAG=$(TAG)
 
 frontend:

@@ -1,3 +1,7 @@
+# Test and tooling dependencies. Runtime versions come from requirements.lock, so tests run
+# against the same packages as the image. After editing this file or requirements.txt, run
+# `make -C backend lock` with Python 3.12, the image's Python.
+-c requirements.lock
 -r requirements.txt
 pytest>=9.0.3
 pytest-asyncio>=0.23.0
@@ -5,3 +9,5 @@ anyio>=4.14.2
 mongomock-motor>=0.0.21
 respx>=0.21.0
 httpx>=0.27.0
+pip-tools>=7.4
+pip-audit>=2.7

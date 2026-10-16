@@ -1,7 +1,7 @@
 # TODO #050 — Client Token Helper: S3DF Token from the Real Home, Kept Out of Process Arguments, Sent Only to the Catalog
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🔄 In Progress
+> **Status:** 🏁 Implementation Done (merged to local main, not pushed)
 > **Branch:** `feat/client-token-helper`
 > **PR:** —
 > **Created:** 2026-10-14

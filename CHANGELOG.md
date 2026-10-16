@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.21.0 — 2026-10-16
 
 ### Skillsets: pages for browsing and curating (#006, frontend)
 

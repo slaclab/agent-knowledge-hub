@@ -1,6 +1,6 @@
 # 036 — Security: Add Python Lockfile for Reproducible Backend Builds
 
-**Status:** ⬜ Open
+**Status:** 🏁 Implementation Done (image build and deploy pending)
 **Severity:** HIGH
 **Source:** Security review 2026-06-09 (H7)
 
@@ -262,21 +262,43 @@ Safe to ship alone: yes (depends on Slice 1 and 2 being present for the gates to
 
 ## Phase 10 — Definition of Done
 
-- [ ] `backend/requirements.lock` committed with hashes for all runtime transitive deps
-- [ ] `backend/requirements-dev.lock` committed with hashes for all dev/test transitive deps
-- [ ] `backend/Dockerfile` updated to use `pip install --require-hashes -r requirements.lock`
-- [ ] `backend/requirements-dev.txt` adds `pip-tools>=7.4` and `pip-audit>=2.7`
-- [ ] `backend/Makefile` has `lock`, `lock-check`, and `audit` targets; `dev` target installs from `requirements-dev.lock`
-- [ ] Root `Makefile` `backend` target runs `lock-check` and `audit` before `docker-push`
+- [x] `backend/requirements.lock` committed with hashes for all runtime transitive deps
+- [x] `backend/requirements-dev.lock` committed with hashes for all dev/test transitive deps
+- [x] `backend/Dockerfile` updated to use `pip install --require-hashes -r requirements.lock`
+- [x] `backend/requirements-dev.txt` adds `pip-tools>=7.4` and `pip-audit>=2.7`
+- [x] `backend/Makefile` has `lock`, `lock-check`, and `audit` targets; `dev` target installs from `requirements-dev.lock`
+- [x] Root `Makefile` `backend` target runs `lock-check` and `audit` before `docker-push`
 - [ ] `make -C backend docker-build` succeeds from a clean checkout
-- [ ] `make -C backend lock-check` exits 0 on unmodified repo
-- [ ] `make -C backend lock-check` exits non-zero after manually editing `requirements.txt` without regenerating
-- [ ] `make -C backend audit` exits 0 (no CVEs in pinned set, or all findings acknowledged)
+- [x] `make -C backend lock-check` exits 0 on unmodified repo
+- [x] `make -C backend lock-check` exits non-zero after manually editing `requirements.txt` without regenerating
+- [x] `make -C backend audit` exits 0 (no CVEs in pinned set, or all findings acknowledged)
 - [ ] `make docker-build` from `backend/` verified with `podman run` smoke test (app starts, `/health` returns 200)
 - [ ] Deployed to dev overlay; no regressions in `make test`
 - [ ] PR diff shows lockfile added; reviewer has confirmed no unexpected package version changes
 
 ---
+
+## Problems & Solutions
+
+### Deviation: `lock-check` diffs a fresh compile instead of using `--dry-run`
+**Encountered:** 2026-10-16
+**Root cause:** ADR-036-2 relies on `pip-compile --dry-run` exiting non-zero when the lockfile is stale. With pip-tools 7.6.2 it exits 0: run against a copy of the lock with `requests>=2.0` added to `requirements.txt`, it printed the new result and returned 0.
+**Solution:** `lock-check` copies both requirements files and both lockfiles to a temporary directory, compiles there, and `diff`s each result against the committed lockfile. Copying the lockfiles first makes pip-compile keep their pins, so only an edited requirements file changes the result; compiling in the copy keeps the `# via -r requirements.txt` annotations identical. `CUSTOM_COMPILE_COMMAND` fixes the header to `make -C backend lock`.
+
+### Decision: one runtime version set for the image and the tests
+**Encountered:** 2026-10-16
+**Root cause:** compiling `requirements-dev.txt` on its own could resolve a shared package to a different version than `requirements.lock`, so tests would run against packages the image does not ship.
+**Solution:** `requirements-dev.txt` starts with `-c requirements.lock`, pip-tools' layered-requirements form. The lockfiles therefore use `--strip-extras`, because a pip constraint cannot carry extras. All 44 runtime pins are identical in both lockfiles.
+
+### Decision: lockfiles compiled with Python 3.12, and only wheels in the image
+**Encountered:** 2026-10-16
+**Root cause:** pip-compile resolves environment markers for the interpreter it runs on, and the image runs `python:3.12-slim`. pip also installs an sdist's build dependencies without hash checking.
+**Solution:** `lock` and `lock-check` stop unless the venv runs Python 3.12 (`check-python`). `PYTHON3` selects the interpreter that builds the venv, so a RHEL 8 build host, whose `python3` is 3.6, runs `make PYTHON3=python3.12 …`. The Dockerfile adds `--only-binary :all:`; a wheel-only `pip download` of all 44 runtime pins succeeded on 2026-10-16. `--allow-unsafe` puts `pip`, `setuptools` and `wheel` in the dev lock with hashes, so the dev venv no longer runs an unpinned `pip install --upgrade pip`.
+
+### Verification, 2026-10-16
+- `make -C backend lock-check` exited 0 twice on the committed lockfiles (AC-3), and 2 after `requests>=2.0` was added to `requirements.txt` (AC-2).
+- `make -C backend audit` exited 0 on `requirements.lock`, and 2 with `pyjwt==2.8.0` and its hashes swapped into it, reporting 18 vulnerabilities including PYSEC-2026-120 (AC-4).
+- `make -C backend dev` built `.venv` with `pip install --require-hashes -r requirements-dev.lock` (AC-6), and the suite passed in it: 1118 passed, 5 skipped.
 
 ## Original Implementation Plan (preserved)
 

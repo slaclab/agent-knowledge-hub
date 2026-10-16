@@ -37,7 +37,7 @@
 | [033](todo/033-sec-kubernetes-security-context.md) | **SEC HIGH** — Containers run as root; add Kubernetes securityContext + USER directive | ⬜ Open |
 | [034](todo/034-sec-image-digest-pinning.md) | **SEC HIGH** — Pin production images to digest, not mutable tags | ⬜ Open |
 | [035](todo/035-sec-security-headers.md) | **SEC HIGH** — Add HTTP security headers to Next.js (CSP, HSTS, X-Frame-Options) | ✅ Complete |
-| [036](todo/036-sec-backend-lockfile.md) | **SEC HIGH** — Add Python lockfile for reproducible backend builds | ⬜ Open |
+| [036](todo/036-sec-backend-lockfile.md) | **SEC HIGH** — Add Python lockfile for reproducible backend builds | 🏁 Implementation Done |
 | [037](todo/037-sec-cors-restrict-origins.md) | **SEC MED** — Restrict CORS origins (allow_origins=["*"] + credentials) | ✅ Complete |
 | [038](todo/038-sec-internal-secret-min-length.md) | **SEC MED** — Enforce minimum length on internal_api_secret | ✅ Complete |
 | [039](todo/039-sec-rate-limit-skill-creation.md) | **SEC MED** — Rate limit skill creation endpoint (POST /api/skills) | ✅ Complete |

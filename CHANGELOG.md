@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 — 2026-10-16
 
 ### Behaviour change: install no longer adds MCP servers, and refuses agents it cannot vet (#051)
 

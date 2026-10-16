@@ -251,3 +251,195 @@ class TestSkillMd:
         for key in ALLOWED_KEYS:
             assert f"`{key}`" in create
         assert "${HOME}/.claude/skills/<slug>/" in create
+
+
+# ---------------------------------------------------------------------------
+# MCP server configuration file (FR-1 (b) and (c), AC-2, AC-9)
+# ---------------------------------------------------------------------------
+
+def _pythons() -> list[str]:
+    found = []
+    for candidate in (shutil.which("python3"), "/usr/bin/python3", "/usr/bin/python3.6"):
+        if candidate and Path(candidate).exists() and str(Path(candidate).resolve()) not in found:
+            found.append(str(Path(candidate).resolve()))
+    return found
+
+
+each_python = pytest.mark.parametrize("python", _pythons())
+
+SERVERS = [
+    {"name": "akh-stdio", "transport": "stdio", "command": "/bin/true", "env": {"T": "${AKH_TEST_SECRET}"}},
+    {"name": "akh-http", "transport": "http", "url": "https://gіthub.invalid/mcp",
+     "headers": {"X": "a\nb c", "Y": "\U0001F600"}},
+    {"name": "akh-notransport", "command": "/bin/true", "args": ["--x", "${HOME}/.claude/skills/s/run.sh"]},
+    {"name": "akh-tilde", "transport": "stdio", "command": "~/.claude/skills/s/s.sh"},
+    {"name": "akh-dollar-arg", "transport": "stdio", "command": "/bin/true", "args": ["--a=$HOME/x"]},
+    {"name": "akh-eq-tilde", "transport": "stdio", "command": "/bin/true", "args": ["--a=~/x"]},
+    {"name": "akh-long", "transport": "stdio", "command": "/bin/true", "args": ["x" * 5000]},
+    {"name": "-sproject", "transport": "stdio", "command": "/bin/true"},
+    {"name": "akh-bad-env", "transport": "stdio", "command": "/bin/true", "env": {"A": {"description": "x"}}},
+    {"name": "akh-bad-args", "transport": "stdio", "command": "/bin/true", "args": "--x"},
+    {"name": "akh-bad-headers", "transport": "sse", "url": "https://h.invalid/", "headers": {"A": 1}},
+    {"name": "akh-no-command", "transport": "stdio"},
+    {"name": "akh-no-url", "transport": "http"},
+    {"name": "akh-ws", "transport": "ws", "url": "wss://h.invalid/"},
+    {"name": "akh-dup", "transport": "stdio", "command": "/bin/true", "args": ["1"]},
+    {"name": "AKH-DUP", "transport": "stdio", "command": "/bin/true", "args": ["2"]},
+    {"name": "akh-sso", "transport": "http", "url": "https://akh-sso.invalid/mcp", "auth": {"type": "slac-sso"}},
+    {"name": "akh-extra", "transport": "stdio", "command": "/bin/true", "description": "left out"},
+]
+
+
+def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None) -> tuple[subprocess.CompletedProcess, Path]:
+    import json
+
+    plugin = tmp_path / "plugin.json"
+    plugin.write_text(json.dumps({"name": "s", "mcp-servers": SERVERS if servers is None else servers},
+                                 ensure_ascii=False), encoding="utf-8")
+    bindir = tmp_path / "pybin"
+    bindir.mkdir(exist_ok=True)
+    if not (bindir / "python3").exists():
+        (bindir / "python3").symlink_to(python)
+    cmd = command("akh-mcp-file").replace("<plugin.json>", str(plugin)).replace("<name>", name).replace("<slug>", "s")
+    env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    result = subprocess.run(["/bin/sh", "-c", cmd], env=env, capture_output=True, timeout=20)
+    return result, tmp_path / ".claude/skills/s/.akh-mcp" / f"{name}.json"
+
+
+def out_lines(result) -> list[str]:
+    return result.stdout.decode("ascii").splitlines()
+
+
+def reason_patterns() -> list[re.Pattern]:
+    """Each no-command reason in SKILL.md as a regex: `<a | b>` is one of its choices, `<x>` any text."""
+    section = skill_text().split("The no-command reasons:", 1)[1].split("\n---", 1)[0]
+    patterns = []
+    for line in section.splitlines():
+        found = re.search(r'— "(.*)"', line)
+        if not found:
+            continue
+        parts = re.split(r"<([^<>]*)>", found.group(1))
+        regex = "".join(re.escape(p) if i % 2 == 0 else
+                        ("(?:" + "|".join(re.escape(c) for c in p.split(" | ")) + ")" if " | " in p else ".+")
+                        for i, p in enumerate(parts))
+        patterns.append(re.compile(regex))
+    return patterns
+
+
+@each_python
+class TestMcpFileCommand:
+    def test_stdio_written_and_shown(self, python, tmp_path):
+        import json
+
+        result, target = run_mcp_file(python, tmp_path, "akh-stdio")
+        assert result.returncode == 0, result.stderr
+        assert out_lines(result) == ["  Runs: /bin/true", "  env T=${AKH_TEST_SECRET}", f"file: {target}"]
+        assert json.loads(target.read_bytes()) == {"type": "stdio", "command": "/bin/true", "args": [],
+                                                   "env": {"T": "${AKH_TEST_SECRET}"}}
+
+    def test_http_values_escaped_and_file_exact(self, python, tmp_path):  # AC-9
+        import json
+
+        result, target = run_mcp_file(python, tmp_path, "akh-http")
+        assert result.returncode == 0, result.stderr
+        assert out_lines(result)[:3] == ["  Connects to: https://g\\u0456thub.invalid/mcp",
+                                         "  header X: a\\u000Ab\\u2028c", "  header Y: \\u{1F600}"]
+        raw = target.read_bytes()
+        assert raw.isascii() and len(raw) <= 4096
+        assert json.loads(raw) == {"type": "http", "url": "https://gіthub.invalid/mcp",
+                                   "headers": {"X": "a\nb c", "Y": "\U0001F600"}}
+
+    def test_absent_transport_is_stdio_and_home_path_accepted(self, python, tmp_path):
+        import json
+
+        result, target = run_mcp_file(python, tmp_path, "akh-notransport")
+        assert result.returncode == 0, result.stderr
+        assert json.loads(target.read_bytes()) == {"type": "stdio", "command": "/bin/true",
+                                                   "args": ["--x", "${HOME}/.claude/skills/s/run.sh"]}
+
+    def test_other_fields_left_out(self, python, tmp_path):
+        import json
+
+        result, target = run_mcp_file(python, tmp_path, "akh-extra")
+        assert result.returncode == 0, result.stderr
+        assert json.loads(target.read_bytes()) == {"type": "stdio", "command": "/bin/true", "args": []}
+
+    @pytest.mark.parametrize("name, reason", [
+        ("akh-tilde", "its command ~/.claude/skills/s/s.sh starts with ~ or $, which Claude Code does not expand, so "
+                      "it would run whatever file has that name in the directory a session starts in; the submitter "
+                      "should write ${HOME} instead"),
+        ("akh-dollar-arg", "its argument --a=$HOME/x starts with ~ or $, which Claude Code does not expand, so it "
+                           "would run whatever file has that name in the directory a session starts in; the submitter "
+                           "should write ${HOME} instead"),
+        ("akh-eq-tilde", "its argument --a=~/x starts with ~ or $, which Claude Code does not expand, so it would "
+                         "run whatever file has that name in the directory a session starts in; the submitter should "
+                         "write ${HOME} instead"),
+        ("akh-long", "its configuration is too long to show in full"),
+        ("akh-bad-env", "its env is not in the form Claude Code accepts (each env or header value must be text)"),
+        ("akh-bad-args", "its args is not in the form Claude Code accepts (args must be a list of text values)"),
+        ("akh-bad-headers", "its headers is not in the form Claude Code accepts (each env or header value must be text)"),
+        ("akh-no-command", "it has no command, which a stdio server needs"),
+        ("akh-no-url", "it has no url, which a http or sse server needs"),
+        ("akh-ws", 'its transport "ws" is not stdio, http or sse'),
+    ])
+    def test_refusals_print_their_reason(self, python, tmp_path, name, reason):
+        result, target = run_mcp_file(python, tmp_path, name)
+        assert result.returncode == 1, result.stderr
+        assert out_lines(result) == [f"refused: {reason}"]
+        assert not target.exists()
+        assert any(p.fullmatch(reason) for p in reason_patterns()), reason
+
+    @pytest.mark.parametrize("name", ["-sproject", "akh-dup", "akh-missing", "../x"])
+    def test_name_it_should_not_be_given_fails(self, python, tmp_path, name):
+        result, target = run_mcp_file(python, tmp_path, name)
+        assert result.returncode == 2
+        assert result.stdout == b""
+        assert not (tmp_path / ".claude/skills/s/.akh-mcp").exists() or not any((tmp_path / ".claude/skills/s/.akh-mcp").iterdir())
+
+    def test_slac_sso_shown_not_written(self, python, tmp_path):
+        result, target = run_mcp_file(python, tmp_path, "akh-sso")
+        assert result.returncode == 3, result.stderr
+        assert out_lines(result) == ["  Connects to: https://akh-sso.invalid/mcp", "no file: slac-sso"]
+        assert not target.exists()
+
+    def test_existing_file_is_not_replaced(self, python, tmp_path):
+        target = tmp_path / ".claude/skills/s/.akh-mcp/akh-stdio.json"
+        target.parent.mkdir(parents=True)
+        target.write_text("{}")
+        result, _ = run_mcp_file(python, tmp_path, "akh-stdio")
+        assert result.returncode == 2
+        assert target.read_text() == "{}"
+
+    def test_unreadable_plugin_json_fails(self, python, tmp_path):
+        result, target = run_mcp_file(python, tmp_path, "akh-stdio", servers={"akh-stdio": {}})
+        assert result.returncode == 2
+        assert not target.exists()
+
+
+@each_python
+def test_mcp_file_ignores_modules_in_working_directory(python, tmp_path):
+    """`python3 -` would import a json.py from the directory the session runs in; -I prevents it."""
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "json.py").write_text("raise SystemExit(9)\n")
+    import json
+
+    plugin = tmp_path / "plugin.json"
+    plugin.write_text(json.dumps({"mcp-servers": SERVERS[:1]}))
+    bindir = tmp_path / "pybin"
+    bindir.mkdir()
+    (bindir / "python3").symlink_to(python)
+    cmd = command("akh-mcp-file").replace("<plugin.json>", str(plugin)).replace("<name>", "akh-stdio").replace("<slug>", "s")
+    result = subprocess.run(["/bin/sh", "-c", cmd], env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+                            cwd=work, capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+
+
+def test_mcp_file_without_python3_exits_127(tmp_path):  # § Server rules › Result
+    empty = tmp_path / "bin"
+    empty.mkdir()
+    cmd = command("akh-mcp-file").replace("<plugin.json>", "/nonexistent").replace("<name>", "akh-stdio").replace("<slug>", "s")
+    result = subprocess.run(["/bin/sh", "-c", cmd], env={"PATH": str(empty), "HOME": str(tmp_path)},
+                            capture_output=True, timeout=20)
+    assert result.returncode == 127
+    assert "writes a server's configuration with python3, which this computer does not have" in skill_text()

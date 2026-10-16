@@ -18,6 +18,7 @@ import type {
   PaginatedFlaggedSkills,
 } from "@/types/skill";
 import type { ProvenanceTree } from "@/types/provenance";
+import { errorMessage } from "./api-error";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
 // Client Components use server=false (default) to call Next.js proxy route handlers.
@@ -41,7 +42,7 @@ async function request<T>(
   if (res.status === 204) return { data: null, error: null, status: 204 };
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    const error = (json?.detail as string | undefined) ?? `HTTP ${res.status}`;
+    const error = errorMessage(json, res.status);
     return { data: null, error, status: res.status };
   }
   return { data: json as T, error: null, status: res.status };

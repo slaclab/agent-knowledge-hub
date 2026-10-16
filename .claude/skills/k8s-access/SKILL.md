@@ -39,7 +39,13 @@ be set explicitly from the shell so `ensure-context` passes.
 
 ### Applying to the cluster
 
-**Always use `make apply`, never `kubectl apply -k .` directly.**
+The deployed overlays live in `ai-playground-deploy`, not in this repository; this repository's
+`kubernetes/overlays/` are reference copies that nothing applies. A hub release applies only the
+hub's own kustomization, `overlays/<env>/agent-knowledge-hub/`, with `kubectl diff -k` and
+`kubectl apply -k` (deploy skill, Steps 4 and 5). The overlay-wide `make apply` below applies every
+app in the environment.
+
+**For an overlay-wide apply, use `make apply`, never `kubectl apply -k .` directly.**
 
 `make apply` runs `secrets` first (pulls from Vault into `etc/.secrets/`), then applies, then
 deletes the secrets files. Running `kubectl apply -k .` directly will fail because the
@@ -63,37 +69,16 @@ make test
 # or equivalently:
 (cd backend && make test)
 
-# Build images (requires sudo podman, run by user not Claude)
-make -C kubernetes/overlays/dev docker-build
-
-# Push images (requires registry auth, run by user not Claude)
-make -C kubernetes/overlays/dev docker-push
+# Build and push images: see the deploy skill, Step 2 (rootless podman on sdfiana008)
 ```
 
 ---
 
-## Image build and push — HUMAN ONLY
+## Image build, push and release
 
-**Claude must never run `docker-build` or `docker-push`.** These require:
-- `sudo podman` (privileged, interactive)
-- Registry credentials for `docker.io/slaclab`
-
-When a new image is needed, ask the user to run:
-```bash
-make -C kubernetes/overlays/dev docker-build
-make -C kubernetes/overlays/dev docker-push
-```
-
-The `TAG` is derived from `git describe --tags --exact-match` — so the git tag must exist on
-the HEAD commit before building. Claude's role: create and move the tag, bump image tags in
-deployment YAMLs, commit — then hand off to the user to build and push.
-
-### Release workflow
-1. Claude: `git tag vX.Y.Z` on the right commit
-2. Claude: `sed -i 's|:old|:new|g'` all six deployment YAMLs (dev/stage/prod × backend/frontend)
-3. Claude: commit the YAML changes, move the tag to the new commit with `git tag -f vX.Y.Z`
-4. User: `make -C kubernetes/overlays/dev docker-build && make -C kubernetes/overlays/dev docker-push`
-5. Claude: `KUBECONFIG=<path> make -C kubernetes/overlays/dev apply` + watch rollout
+Follow `.claude/skills/deploy/SKILL.md`. Images are built with rootless `podman` on `sdfiana008`,
+from a `git archive` export on `/lscratch`, and prod is pinned to image digests with
+`make pin-digests`. Claude may run the build; the Docker Hub login and `sudo` are never Claude's.
 
 ---
 
@@ -195,7 +180,7 @@ KUBECONFIG=<path> kubectl get secret agent-knowledge-hub-secrets -n dev -o jsonp
 
 ## What Claude must never do
 
-- `kubectl apply -k .` — always use `make apply`
-- `docker-build` / `docker-push` — user only
+- `kubectl apply -k .` on a whole overlay — use `make apply`; a hub release applies only `overlays/<env>/agent-knowledge-hub/`
+- `sudo podman`, `podman login`, or any handling of the Docker Hub credential
 - `vault kv put` with partial fields — use `vault kv patch`
 - Run destructive kubectl commands (`delete`, `drain`, `cordon`) without explicit user confirmation

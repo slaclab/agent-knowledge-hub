@@ -1,12 +1,23 @@
 import { AuthGuard } from "@/components/auth-guard";
 import { SubmitForm } from "@/components/submit-form";
-import { getSettings } from "@/lib/api";
+import { getSettings, getSkillset } from "@/lib/api";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubmitPage() {
-  const siteSettings = await getSettings(true);
+interface PageProps {
+  searchParams: Promise<{ skillset?: string | string[] }>;
+}
+
+export default async function SubmitPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  // ?skillset=<slug> from a skillset page's "Add new skill →" (FR-2a). The form decides whether
+  // the viewer owns it; the backend checks again and ignores the slug otherwise (FR-2b).
+  const skillsetSlug = typeof searchParams.skillset === "string" ? searchParams.skillset : null;
+  const [siteSettings, skillset] = await Promise.all([
+    getSettings(true),
+    skillsetSlug ? getSkillset(skillsetSlug, true).catch(() => null) : null,
+  ]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -27,7 +38,10 @@ export default async function SubmitPage() {
           </div>
         }
       >
-        <SubmitForm accessInstructionsUrl={siteSettings.github_access_instructions_url} />
+        <SubmitForm
+          accessInstructionsUrl={siteSettings.github_access_instructions_url}
+          skillset={skillset ? { slug: skillset.slug, name: skillset.name, created_by: skillset.created_by } : null}
+        />
       </AuthGuard>
     </div>
   );

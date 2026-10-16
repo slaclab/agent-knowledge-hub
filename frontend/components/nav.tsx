@@ -49,6 +49,12 @@ export function Nav() {
 
         <nav className="ml-auto flex items-center gap-3">
           <Link
+            href="/skillsets"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Skillsets
+          </Link>
+          <Link
             href="/guides"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >

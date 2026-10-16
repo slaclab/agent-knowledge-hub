@@ -17,6 +17,8 @@ import Link from "next/link";
 import { GitFork, Lock } from "lucide-react";
 import { DeleteSkillButton } from "@/components/delete-skill-button";
 import { PinSkillButton } from "@/components/pin-skill-button";
+import { AddToSkillsetMenu } from "@/components/add-to-skillset-menu";
+import { SkillSkillsetsSection } from "@/components/skill-skillsets-section";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -121,6 +123,7 @@ export default async function SkillDetailPage(props: PageProps) {
           {isAdmin && (
             <AdminDeactivateButton slug={skill.slug} />
           )}
+          <AddToSkillsetMenu skillSlug={skill.slug} memberOf={skill.skillsets ?? []} />
           <Link
             href={`/skills/${skill.slug}/edit`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
@@ -282,6 +285,16 @@ export default async function SkillDetailPage(props: PageProps) {
             <h3 className="text-sm font-semibold">Labels</h3>
             <LabelSection slug={skill.slug} initialLabels={skill.labels ?? []} />
           </div>
+
+          {/* Skillsets that hold this skill (#006 FR-10) */}
+          {(skill.skillsets?.length ?? 0) > 0 && (
+            <SkillSkillsetsSection
+              skillSlug={skill.slug}
+              skillName={skill.name}
+              submitterId={skill.submitter_id}
+              skillsets={skill.skillsets ?? []}
+            />
+          )}
 
           {/* Provenance tree (#014) */}
           {provenanceData && !provenanceData.empty && (

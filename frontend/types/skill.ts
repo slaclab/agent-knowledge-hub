@@ -1,3 +1,5 @@
+import type { SkillsetRef } from "./skillset";
+
 export type EntryType = "skill" | "marketplace_ref";
 export type SkillStatus = "active" | "deactivated";
 export type VisibilityType = "public" | "internal" | "private";
@@ -58,6 +60,9 @@ export interface Skill {
   labels: LabelOut[];
   my_rating: number | null;
   my_flag: FlagOut | null;
+  skillset_count: number;
+  // Only GET /api/skills/{slug} returns the skillsets; list items carry the count alone.
+  skillsets?: SkillsetRef[];
 }
 
 export type FlagReason = "broken" | "stale" | "superseded" | "inappropriate" | "other";
@@ -141,6 +146,8 @@ export interface SkillCreate {
   keywords?: string[];  // deprecated: converted to labels on create
   version?: string;
   license?: string;
+  // Added to this skillset after creation when the submitter owns it (FR-2b).
+  skillset_slug?: string;
 }
 
 export interface SkillUpdate {

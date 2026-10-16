@@ -75,6 +75,11 @@ export function SkillCard({ skill, accessInstructionsUrl = "/guides/slac-github-
       {skill.description && (
         <p className="mt-1 text-sm text-muted-foreground line-clamp-3">{skill.description}</p>
       )}
+      {skill.skillset_count > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          in {skill.skillset_count} skillset{skill.skillset_count !== 1 ? "s" : ""}
+        </p>
+      )}
       {skill.forked_from_url && (
         <p className="mt-1 text-xs text-muted-foreground">
           Fork of{" "}

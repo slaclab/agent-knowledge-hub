@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { getGithubScan, getGithubDiscover, createSkill, addLabel } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { SkillScanSnapshot, DiscoverResult, LabelOut, FileManifestEntry } from "@/types/skill";
 import { PLATFORM_SUGGESTIONS } from "@/lib/utils";
 import { AlertTriangle, AlertCircle, Loader2, ChevronDown, ChevronRight, File, Folder } from "lucide-react";
@@ -39,9 +41,15 @@ interface SkillDraft {
 
 export function SubmitForm({
   accessInstructionsUrl = "/guides/slac-github-access",
+  skillset = null,
 }: {
   accessInstructionsUrl?: string;
+  skillset?: { slug: string; name: string; created_by: string } | null;
 }) {
+  const router = useRouter();
+  const { user } = useAuth();
+  // Only the skillset's owner gets the auto-add (ADR-U19); for anyone else the parameter is ignored.
+  const targetSkillset = skillset && user?.user_id === skillset.created_by ? skillset : null;
   const [url, setUrl] = useState("");
   const [scanState, setScanState] = useState<ScanState>({ status: "idle" });
   const [discoverState, setDiscoverState] = useState<DiscoverState>({ status: "idle" });
@@ -170,6 +178,7 @@ export function SubmitForm({
     setDrafts((prev) => prev.map((d) => ({ ...d, result: undefined })));
     const visiblePaths = new Set(visibleDrafts.map((d) => d.snapshot.ref.path));
     const selected = drafts.filter((d) => d.selected && visiblePaths.has(d.snapshot.ref.path));
+    let failed = 0;
     for (const draft of selected) {
       const snap = draft.snapshot;
       const { data, error } = await createSkill({
@@ -181,7 +190,9 @@ export function SubmitForm({
         keywords: draft.labels.length ? draft.labels : [],
         version: draft.version || undefined,
         license: draft.license || undefined,
+        skillset_slug: targetSkillset?.slug,
       });
+      if (!data?.slug) failed += 1;
       if (data?.slug && draft.labels.length > 0) {
         await Promise.all(draft.labels.map((l) => addLabel(data.slug, l)));
       }
@@ -189,6 +200,11 @@ export function SubmitForm({
       setDrafts((prev) =>
         prev.map((d) => (d.snapshot.ref.path === snap.ref.path ? { ...d, result } : d))
       );
+    }
+    // Back to the skillset when every skill landed in it (FR-2a); otherwise stay to show the errors.
+    if (targetSkillset && selected.length > 0 && failed === 0) {
+      router.push(`/skillsets/${targetSkillset.slug}`);
+      return;
     }
     setSubmitting(false);
   };
@@ -317,6 +333,12 @@ export function SubmitForm({
               );
             })}
           </div>
+
+          {targetSkillset && (
+            <p className="text-xs text-muted-foreground">
+              Will be added to skillset: <span className="font-medium">{targetSkillset.name}</span>
+            </p>
+          )}
 
           <button
             type="submit"

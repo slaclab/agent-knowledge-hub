@@ -18,6 +18,7 @@ import type {
   PaginatedFlaggedSkills,
 } from "@/types/skill";
 import type { ProvenanceTree } from "@/types/provenance";
+import type { PaginatedSkillsets, SkillSummary, SkillsetOut } from "@/types/skillset";
 import { errorMessage } from "./api-error";
 
 // Server Components call with server=true to hit FastAPI directly (BACKEND_URL).
@@ -357,5 +358,105 @@ export async function reactivateSkill(
     `/admin/skills/${encodeURIComponent(slug)}/reactivate`,
     { method: "POST", body: JSON.stringify({ reason: reason ?? null }) },
   );
+  return data;
+}
+
+// Skillsets (#006). Membership and order calls return the HTTP status, 0 when no response came,
+// so the caller can pick the FR-2g message.
+
+export async function listSkillsets(
+  params: { page?: number; page_size?: number; created_by?: string; server?: boolean } = {},
+): Promise<PaginatedSkillsets | null> {
+  const { server, ...rest } = params;
+  const qs = new URLSearchParams();
+  if (rest.page) qs.set("page", String(rest.page));
+  if (rest.page_size) qs.set("page_size", String(rest.page_size));
+  if (rest.created_by) qs.set("created_by", rest.created_by);
+  const { data } = await request<PaginatedSkillsets>(apiBase(server), `/skillsets?${qs}`);
+  return data;
+}
+
+export async function getSkillset(slug: string, server = false): Promise<SkillsetOut | null> {
+  const { data } = await request<SkillsetOut>(apiBase(server), `/skillsets/${encodeURIComponent(slug)}`);
+  return data;
+}
+
+export async function createSkillset(body: {
+  name: string;
+  slug?: string;
+  description: string;
+}): Promise<{ data: SkillsetOut | null; error: string | null; suggestedSlug: string | null }> {
+  // Not request(): a 409 carries suggested_slug next to detail, and request() keeps only detail.
+  const res = await fetch(`${CLIENT_BASE}/skillsets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const json = await res.json().catch(() => null);
+  if (res.ok) return { data: json as SkillsetOut, error: null, suggestedSlug: null };
+  const suggested = (json as { suggested_slug?: unknown } | null)?.suggested_slug;
+  return {
+    data: null,
+    error: errorMessage(json, res.status),
+    suggestedSlug: res.status === 409 && typeof suggested === "string" ? suggested : null,
+  };
+}
+
+export async function updateSkillset(
+  slug: string,
+  body: { name?: string; description?: string },
+): Promise<{ data: SkillsetOut | null; error: string | null }> {
+  const r = await request<SkillsetOut>(CLIENT_BASE, `/skillsets/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return { data: r.data, error: r.error };
+}
+
+export async function deleteSkillset(slug: string): Promise<{ error: string | null }> {
+  const r = await request<null>(CLIENT_BASE, `/skillsets/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  return { error: r.error };
+}
+
+async function memberRequest(slug: string, skillSlug: string, method: "PUT" | "DELETE"): Promise<number> {
+  try {
+    const path = `/skillsets/${encodeURIComponent(slug)}/skills/${encodeURIComponent(skillSlug)}`;
+    return (await request<null>(CLIENT_BASE, path, { method })).status;
+  } catch {
+    return 0;
+  }
+}
+
+export async function addSkillsetMember(slug: string, skillSlug: string): Promise<number> {
+  return memberRequest(slug, skillSlug, "PUT");
+}
+
+export async function removeSkillsetMember(slug: string, skillSlug: string): Promise<number> {
+  return memberRequest(slug, skillSlug, "DELETE");
+}
+
+export async function reorderSkillset(
+  slug: string,
+  skillSlugs: string[],
+  version: number,
+): Promise<{ data: SkillsetOut | null; status: number }> {
+  try {
+    const r = await request<SkillsetOut>(CLIENT_BASE, `/skillsets/${encodeURIComponent(slug)}/order`, {
+      method: "PUT",
+      body: JSON.stringify({ skill_slugs: skillSlugs, version }),
+    });
+    return { data: r.data, status: r.status };
+  } catch {
+    return { data: null, status: 0 };
+  }
+}
+
+/** Active skills whose name or description contains `q`, for the FR-2c picker; null when the
+ * search failed. The backend matches substrings, so "depl" finds "deploy". */
+export async function searchSkillSummaries(q: string, signal: AbortSignal): Promise<SkillSummary[] | null> {
+  const { data } = await request<SkillSummary[]>(CLIENT_BASE, `/skills/summary?${new URLSearchParams({ q })}`, {
+    signal,
+  });
   return data;
 }

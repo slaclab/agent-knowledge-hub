@@ -1,6 +1,6 @@
 # 036 — Security: Add Python Lockfile for Reproducible Backend Builds
 
-**Status:** 🏁 Implementation Done (image build and deploy pending)
+**Status:** ✅ Complete — shipped in 0.20.0, deployed to dev and prod 2026-10-16
 **Severity:** HIGH
 **Source:** Security review 2026-06-09 (H7)
 
@@ -268,13 +268,13 @@ Safe to ship alone: yes (depends on Slice 1 and 2 being present for the gates to
 - [x] `backend/requirements-dev.txt` adds `pip-tools>=7.4` and `pip-audit>=2.7`
 - [x] `backend/Makefile` has `lock`, `lock-check`, and `audit` targets; `dev` target installs from `requirements-dev.lock`
 - [x] Root `Makefile` `backend` target runs `lock-check` and `audit` before `docker-push`
-- [ ] `make -C backend docker-build` succeeds from a clean checkout
+- [x] `make -C backend docker-build` succeeds from a clean checkout
 - [x] `make -C backend lock-check` exits 0 on unmodified repo
 - [x] `make -C backend lock-check` exits non-zero after manually editing `requirements.txt` without regenerating
 - [x] `make -C backend audit` exits 0 (no CVEs in pinned set, or all findings acknowledged)
-- [ ] `make docker-build` from `backend/` verified with `podman run` smoke test (app starts, `/health` returns 200)
-- [ ] Deployed to dev overlay; no regressions in `make test`
-- [ ] PR diff shows lockfile added; reviewer has confirmed no unexpected package version changes
+- [x] `make docker-build` from `backend/` verified with `podman run` smoke test (app starts, `/health` returns 200)
+- [x] Deployed to dev overlay; no regressions in `make test`
+- [ ] PR diff shows lockfile added; reviewer has confirmed no unexpected package version changes *(left for a human reviewer: there is no PR. Against the 0.19.1 image, the lock moves `fastapi` from 0.143.2 to 0.143.3.)*
 
 ---
 
@@ -299,6 +299,7 @@ Safe to ship alone: yes (depends on Slice 1 and 2 being present for the gates to
 - `make -C backend lock-check` exited 0 twice on the committed lockfiles (AC-3), and 2 after `requests>=2.0` was added to `requirements.txt` (AC-2).
 - `make -C backend audit` exited 0 on `requirements.lock`, and 2 with `pyjwt==2.8.0` and its hashes swapped into it, reporting 18 vulnerabilities including PYSEC-2026-120 (AC-4).
 - `make -C backend dev` built `.venv` with `pip install --require-hashes -r requirements-dev.lock` (AC-6), and the suite passed in it: 1118 passed, 5 skipped.
+- The 0.20.0 image was built on `sdfiana008` from a `git archive` export, a clean checkout: `make PYTHON3=python3.12 containers` ran `lock-check` and `audit` ("No known vulnerabilities found") before the backend build, and the build ran `pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements.lock` (AC-1, AC-5). The image served `/health` 200 under podman, and then on dev and prod.
 
 ## Original Implementation Plan (preserved)
 

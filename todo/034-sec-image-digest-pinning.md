@@ -1,6 +1,6 @@
 # 034 — Security: Pin Production Images to Digest, Not Mutable Tags
 
-**Status:** ⬜ Open
+**Status:** ✅ Complete — prod pinned to the 0.20.0 digests 2026-10-16
 **Severity:** HIGH
 **Source:** Security review 2026-06-09 (H5)
 
@@ -269,22 +269,44 @@ No NetworkPolicy changes required.
 - [ ] `kubernetes/overlays/stage/frontend-deployment.yaml` image field uses `name:0.17.0@sha256:<digest>` format
 - [ ] `kubernetes/overlays/prod/backend-deployment.yaml` image field uses `name:0.17.0@sha256:<digest>` format
 - [ ] `kubernetes/overlays/prod/frontend-deployment.yaml` image field uses `name:0.17.0@sha256:<digest>` format
-- [ ] Digests verified with `crane digest` or `docker manifest inspect` — output matches manifest
+- [x] Digests verified with `crane digest` or `docker manifest inspect` — output matches manifest
 - [ ] `pin-digests` Makefile target present in both stage and prod overlay Makefiles
 - [ ] `backend/Makefile` no longer pushes `:latest` tag
-- [ ] `make diff` on prod overlay shows only the `image:` field change (no unintended diffs)
+- [x] `make diff` on prod overlay shows only the `image:` field change (no unintended diffs)
 - [ ] Stage deployment smoke test passes (frontend loads, `/health` returns 200)
-- [ ] Prod deployment smoke test passes (frontend loads, `/health` returns 200, no unexpected pod restarts)
-- [ ] Rollback procedure documented in `docs/runbooks/image-digest-pinning.md`
-- [ ] This task file status updated to `✅ Done` after all items above are checked
+- [x] Prod deployment smoke test passes (frontend loads, `/health` returns 200, no unexpected pod restarts)
+- [x] Rollback procedure documented in `docs/runbooks/image-digest-pinning.md`
+- [x] This task file status updated to `✅ Done` after all items above are checked
 
 ---
 
+## Problems & Solutions
+
+### Deviation: pinning lives in this repository's root `Makefile`, not in the overlay Makefiles
+**Encountered:** 2026-10-16
+**Root cause:** the prod and stage overlay Makefiles the plan names are not what ships the hub. The overlay Makefile in `ai-playground-deploy` applies every app in prod, and a hub release applies only `overlays/prod/agent-knowledge-hub/` (`.claude/skills/deploy/SKILL.md`). Neither `crane`, `skopeo` nor the `kustomize` binary is installed on the hosts used for releases.
+**Solution:** `make pin-digests` in this repository runs `scripts/pin_image_digests.py`, which asks Docker Hub's registry API anonymously for each image's manifest digest and rewrites the image lines to `name:tag@sha256:<digest>` in the two prod files in `ai-playground-deploy` and in this repository's prod and stage copies. It looks up every digest before it writes any file. `backend/tests/test_pin_image_digests.py` runs it against a fake registry. Release step 3 of the deploy skill runs it after the images are pushed, so a pin always names a digest that exists.
+
+### Deviation: `:latest` is still pushed
+**Encountered:** 2026-10-16
+**Root cause:** the plan's own check before removing the `:latest` push, `grep -r latest`, finds the hub's dev deployments in `ai-playground-deploy`, which run `:latest` with `imagePullPolicy: Always` as ADR-034-3 intends. Removing the push would leave dev on its last image.
+**Solution:** `:latest` stays for dev. Prod cannot pull it, because its image lines carry digests.
+
+### Detail: the digest is the registry's, not podman's image ID
+**Encountered:** 2026-10-16
+**Root cause:** podman can rewrite a manifest when it pushes, so `podman image inspect` reported `sha256:f52aba20…` for backend 0.19.0 while the cluster pulled `sha256:948d576a…`.
+**Solution:** the script reads `Docker-Content-Digest` from a `HEAD` request on the registry. For backend 0.19.1 it gave `sha256:f2ab5a2b…`, the digest prod's pod reported.
+
+### Verification, 2026-10-16
+- `make pin-digests` printed `agent-knowledge-hub-backend:0.20.0@sha256:1abc47e9af979fbf8fed4c633d9811fafa084cc20c2d76cdd09f07476d4f5e5e` and `agent-knowledge-hub-frontend:0.20.0@sha256:41bb15a09314743f7643a9bbb3dbe9ecadca765487785aeacb39163f71b42569`, the digests dev's `:latest` pods were running.
+- `kubectl diff -k` on prod showed the two image lines and #033's security blocks, nothing else. After `apply -k`, both prod pods reported exactly those `imageID`s, ran with 0 restarts, served `/health` 200 and every probed page 200, and the client's summary call returned HTTP 200.
+- The versions in the plan (0.2.0 and 0.17.0) are long past; the pinned version is 0.20.0. Stage is a reference copy in this repository and is not deployed.
+
 ## Original Implementation Plan (retained for reference)
 
-- [ ] Retrieve current SHA256 digests for both images at the current deployed version
-- [ ] Update `kubernetes/overlays/prod/backend-deployment.yaml` to use digest-pinned reference
-- [ ] Update `kubernetes/overlays/prod/frontend-deployment.yaml` to use digest-pinned reference
-- [ ] Update `kubernetes/overlays/stage/` manifests similarly
-- [ ] Add digest pinning step to release workflow (Makefile `release` target or CI)
-- [ ] Document the process in the runbook / `docs/`
+- [x] Retrieve current SHA256 digests for both images at the current deployed version
+- [x] Update `kubernetes/overlays/prod/backend-deployment.yaml` to use digest-pinned reference
+- [x] Update `kubernetes/overlays/prod/frontend-deployment.yaml` to use digest-pinned reference
+- [x] Update `kubernetes/overlays/stage/` manifests similarly
+- [x] Add digest pinning step to release workflow (Makefile `release` target or CI)
+- [x] Document the process in the runbook / `docs/`

@@ -2,11 +2,11 @@
 
 > **Priority:** 🟠 P1 — High
 > **Severity:** HIGH
-> **Status:** 🏁 Implementation Done (not yet deployed)
+> **Status:** ✅ Complete — shipped in 0.20.0
 > **Branch:** `fix/045-allowlist`
 > **PR:** —
 > **Created:** 2026-10-14
-> **Shipped:** —
+> **Shipped:** 2026-10-16, 0.20.0, dev and prod
 
 ---
 
@@ -159,7 +159,7 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 - [x] Step 3 — `[CREATE]` line uses `%r`
 - [x] Step 4 — tests written and passing
 - [x] Step 5 — stored-failing counts recorded for dev and prod
-- [ ] Deployed to production before #006 Slice 4 merges
+- [x] Deployed to production before #006 Slice 4 merges
 
 ---
 
@@ -205,9 +205,9 @@ Run the FR-4 query on dev and prod with `kubectl exec` into the backend pod and 
 - [x] Every FR and NFR row has a passing verifier
 - [x] Every input in What fails today returns its desired behaviour
 - [x] Measured facts › stored-failing has dev and prod counts
-- [ ] Deployed to production before #006 Slice 4 merges
+- [x] Deployed to production before #006 Slice 4 merges
 - [x] CHANGELOG entry added under `## Unreleased`
-- [ ] Shipped release written into the Status line
+- [x] Shipped release written into the Status line
 
 ---
 

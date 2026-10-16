@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.20.0 — 2026-10-16
+
+### Security: both containers run as an unprivileged user with a read-only root filesystem (#033)
+
+- **Images** — the backend runs as `appuser` and the frontend as `node`, both UID 1000. The frontend's code stays owned by root, so the server cannot change it.
+- **Kubernetes** — the hub's dev and prod deployments set `runAsNonRoot`, UID and GID 1000, `allowPrivilegeEscalation: false` and `readOnlyRootFilesystem: true`, and drop every capability. `/tmp` in both containers and the frontend's `/app/.next/cache` are `emptyDir` volumes.
+
+### Security: production runs images by digest (#034)
+
+- **Pinned image lines** — prod's deployments name each image as `tag@sha256:<digest>`, so a re-pushed tag cannot change what a restarted pod runs. Dev keeps `:latest`.
+- **`make pin-digests`** — looks up the registry digests of a release tag and writes them into the prod manifests. `docs/runbooks/image-digest-pinning.md` covers checking a running pod and rolling back.
 
 ### Security: the backend image installs only hash-pinned packages (#036)
 

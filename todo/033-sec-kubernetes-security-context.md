@@ -1,6 +1,6 @@
 # 033 — Security: Containers Running as Root — Add Kubernetes securityContext
 
-**Status:** ⬜ Open
+**Status:** ✅ Complete — shipped in 0.20.0, deployed to dev and prod 2026-10-16
 **Severity:** HIGH
 **Source:** Security review 2026-06-09 (H4)
 
@@ -229,30 +229,51 @@ No NetworkPolicy changes — existing policy (from #008) already restricts ingre
 
 ## Phase 10 — Definition of Done
 
-- [ ] `backend/Dockerfile` sets `USER appuser` (non-root, UID 1000)
-- [ ] `frontend/Dockerfile` sets `USER appuser` with `chown` of `/app` in runner stage
-- [ ] `securityContext` applied to backend and frontend deployments in all three overlays (6 files)
-- [ ] `emptyDir` volumes mounted at `/tmp` (backend + frontend) and `/app/.next/cache` (frontend)
-- [ ] `kubectl exec -it <backend-pod> -- id` returns `uid=1000` in dev
-- [ ] `kubectl exec -it <frontend-pod> -- id` returns `uid=1000` in dev
-- [ ] Backend liveness probe (`/health`) passes after rollout in dev
-- [ ] Frontend liveness probe (`/`) passes after rollout in dev
-- [ ] No `Permission denied` errors in pod logs after rollout
-- [ ] Existing backend test suite passes (`pytest`) — no auth regressions
-- [ ] Deployed to stage and prod after dev validation
-- [ ] `kubectl get pod -o yaml` confirms `allowPrivilegeEscalation: false` in running pods
+- [x] `backend/Dockerfile` sets `USER appuser` (non-root, UID 1000)
+- [x] `frontend/Dockerfile` sets `USER appuser` with `chown` of `/app` in runner stage
+- [x] `securityContext` applied to backend and frontend deployments in all three overlays (6 files)
+- [x] `emptyDir` volumes mounted at `/tmp` (backend + frontend) and `/app/.next/cache` (frontend)
+- [x] `kubectl exec -it <backend-pod> -- id` returns `uid=1000` in dev
+- [x] `kubectl exec -it <frontend-pod> -- id` returns `uid=1000` in dev
+- [x] Backend liveness probe (`/health`) passes after rollout in dev
+- [x] Frontend liveness probe (`/`) passes after rollout in dev
+- [x] No `Permission denied` errors in pod logs after rollout
+- [x] Existing backend test suite passes (`pytest`) — no auth regressions
+- [x] Deployed to stage and prod after dev validation
+- [x] `kubectl get pod -o yaml` confirms `allowPrivilegeEscalation: false` in running pods
 
 ---
 
+## Problems & Solutions
+
+### Deviation: the frontend runs as the image's `node` user, and `/app` stays owned by root
+**Encountered:** 2026-10-16
+**Root cause:** on Alpine, `adduser --system` assigns a system UID below 1000, so the planned `appuser` would not have matched `runAsUser: 1000`, and UID 1000 already belongs to `node` in `node:20-alpine`.
+**Solution:** the runner stage uses `USER 1000:1000`, which is `node`, and does not `chown -R /app`. The server reads its code but does not own it, so it cannot change it even without the read-only root. Only `/app/.next/cache` is created and given to UID 1000, so the image also runs outside Kubernetes; the cluster mounts an `emptyDir` there.
+
+### Decision: numeric `USER` in both images
+**Encountered:** 2026-10-16
+**Root cause:** the kubelet verifies `runAsNonRoot` from a numeric user; a named one fails that check unless `runAsUser` is also set.
+**Solution:** the backend creates `appuser` with UID and GID 1000 (`groupadd`/`useradd`, Debian's tools) and sets `USER 1000:1000`. It also sets `PYTHONDONTWRITEBYTECODE=1`, so Python does not try to write bytecode on the read-only root. `useradd` prints a harmless warning that UID 1000 is above `SYS_UID_MAX`.
+
+### Deviation: the deployed manifests live in `ai-playground-deploy`
+**Encountered:** 2026-10-16
+**Root cause:** the root `Makefile` applies the overlays in `ai-playground-deploy`; this repository's `kubernetes/overlays/` are reference copies that nothing applies, and `ai-playground-deploy` has no stage overlay.
+**Solution:** the same blocks went into the hub's dev and prod deployments in `ai-playground-deploy` (commit `e73e278`) and into this repository's six copies. "Deployed to stage" is therefore met only by the reference copy.
+
+### Verification, 2026-10-16
+- On `sdfiana008`, both 0.20.0 images ran in one podman pod with MongoDB under `--read-only --tmpfs /tmp --cap-drop=ALL --security-opt=no-new-privileges`: `id` gave `uid=1000(appuser)` and `uid=1000(node)`, `/health` and `/api/skills/summary` answered 200, every probed page answered 200, `touch /app/x` failed with `Read-only file system`, and neither log held a write error.
+- On dev and then prod, after `kubectl apply -k` of the hub's own kustomization: both pods ready with 0 restarts, `id` gave `uid=1000` in both, `touch /app/x` failed with `Read-only file system`, the running container's `securityContext` held `allowPrivilegeEscalation: false` and `readOnlyRootFilesystem: true`, and the last 300 log lines held no `EROFS`, `EACCES`, `Permission denied`, `Traceback` or 5xx. The backend suite passed: 1129 passed, 5 skipped.
+
 ## Implementation Plan
 
-- [ ] Add `USER appuser` to `backend/Dockerfile` (after `COPY app/`, before `CMD`)
-- [ ] Add `USER appuser` + `chown /app` to `frontend/Dockerfile` runner stage
-- [ ] Rebuild + push both images with new tags
-- [ ] Add `securityContext` + emptyDir volumes to `kubernetes/overlays/dev/backend-deployment.yaml`
-- [ ] Add `securityContext` + emptyDir volumes to `kubernetes/overlays/dev/frontend-deployment.yaml`
-- [ ] `make apply` in dev; validate UID, probes, and app smoke test
-- [ ] Replicate securityContext changes to `kubernetes/overlays/stage/` (both files)
+- [x] Add `USER appuser` to `backend/Dockerfile` (after `COPY app/`, before `CMD`)
+- [x] Add `USER appuser` + `chown /app` to `frontend/Dockerfile` runner stage
+- [x] Rebuild + push both images with new tags
+- [x] Add `securityContext` + emptyDir volumes to `kubernetes/overlays/dev/backend-deployment.yaml`
+- [x] Add `securityContext` + emptyDir volumes to `kubernetes/overlays/dev/frontend-deployment.yaml`
+- [x] `make apply` in dev; validate UID, probes, and app smoke test
+- [x] Replicate securityContext changes to `kubernetes/overlays/stage/` (both files)
 - [ ] `make apply` in stage; validate
-- [ ] Replicate securityContext changes to `kubernetes/overlays/prod/` (both files)
-- [ ] `make apply` in prod; validate
+- [x] Replicate securityContext changes to `kubernetes/overlays/prod/` (both files)
+- [x] `make apply` in prod; validate

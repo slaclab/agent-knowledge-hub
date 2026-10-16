@@ -6,11 +6,14 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
-from app.models.skill import EntryType, SkillStatus, VisibilityEnum
+from app.models.skill import EntryType, SkillStatus, VisibilityEnum, normalize_skill_path
 from app.services.scanner import FileManifestEntry
 
 
-_GITHUB_URL_RE = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
+# Owner and repository segments use GitHub's own name rules and length limits. The install loop
+# passes repo_url to `git clone` on the user's machine (#045); #006 FR-7 › Argument rule checks
+# the same set client-side.
+_GITHUB_URL_RE = re.compile(r"https://github\.com/[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}")
 
 
 class LabelOut(BaseModel):
@@ -47,13 +50,18 @@ class SkillCreate(BaseModel):
     # Add the new skill to this skillset when the submitter owns it; ignored otherwise.
     skillset_slug: Optional[str] = None
 
+    @field_validator("skill_path")
+    @classmethod
+    def validate_skill_path(cls, v: str) -> str:
+        return normalize_skill_path(v)
+
     @model_validator(mode="after")
     def validate_repo_url(self) -> "SkillCreate":
         if self.source_type != "local":
-            if not _GITHUB_URL_RE.match(self.repo_url.strip()):
+            if not _GITHUB_URL_RE.fullmatch(self.repo_url.strip()):
                 raise ValueError(
-                    "repo_url must be a valid GitHub URL "
-                    "(e.g. https://github.com/owner/repo)"
+                    "repo_url must be https://github.com/<owner>/<repo>: the owner may contain "
+                    "letters, digits and '-', and the repository letters, digits, '.', '_' and '-'"
                 )
             self.repo_url = self.repo_url.strip()
         return self
@@ -77,7 +85,7 @@ class SkillUpdate(BaseModel):
             return v
         from app.services.github import _normalize_github_url
         normalized = _normalize_github_url(v)
-        if normalized and not _GITHUB_URL_RE.match(normalized):
+        if normalized and not _GITHUB_URL_RE.fullmatch(normalized):
             raise ValueError("forked_from_url must be a https://github.com/<owner>/<repo> URL")
         return normalized
 

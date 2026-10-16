@@ -380,7 +380,7 @@ class SkillRepository:
     async def create(self, data: SkillCreate, submitter_id: str) -> Skill:
         skill_path = data.skill_path or "/"
 
-        logger.info("[CREATE] submitter=%s source_type=%s repo_url=%s skill_path=%s",
+        logger.info("[CREATE] submitter=%s source_type=%s repo_url=%r skill_path=%r",
                     submitter_id, data.source_type, data.repo_url, skill_path)
 
         # Validate skill_path (also enforced by model validator on save)

@@ -13,6 +13,24 @@ _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 from app.services.scanner import FileManifestEntry  # noqa: E402 — scanner is a leaf module
 
+# The install loop passes skill_path to `cp` on the user's machine (#045), so only characters
+# that need no quoting are accepted. #006 FR-7 › Argument rule checks the same set client-side.
+_SKILL_PATH_RE = re.compile(r"/[A-Za-z0-9._/-]*")
+
+
+def normalize_skill_path(v: str) -> str:
+    """Add the leading slash, then reject `..` components, over-long values, and other characters."""
+    if not v.startswith("/"):
+        v = "/" + v
+    parts = v.strip("/").split("/") if v.strip("/") else []
+    if any(p == ".." for p in parts):
+        raise ValueError("skill_path must not contain '..' components")
+    if len(v) > 500:
+        raise ValueError("skill_path must be <= 500 characters")
+    if not _SKILL_PATH_RE.fullmatch(v):
+        raise ValueError("skill_path may contain only letters, digits, '.', '_', '-' and '/'")
+    return v
+
 
 class EntryType(str, enum.Enum):
     skill = "skill"
@@ -60,14 +78,7 @@ class Skill(Document):
     @field_validator("skill_path")
     @classmethod
     def validate_skill_path(cls, v: str) -> str:
-        if not v.startswith("/"):
-            v = "/" + v
-        parts = v.strip("/").split("/") if v.strip("/") else []
-        if any(p == ".." for p in parts):
-            raise ValueError("skill_path must not contain '..' components")
-        if len(v) > 500:
-            raise ValueError("skill_path must be <= 500 characters")
-        return v
+        return normalize_skill_path(v)
 
     # plugin.json metadata
     agent_count: int = 0

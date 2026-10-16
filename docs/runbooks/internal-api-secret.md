@@ -1,115 +1,95 @@
 # Runbook: Rotating `INTERNAL_API_SECRET`
 
-The `INTERNAL_API_SECRET` is a shared secret that lets the backend verify requests came from the
-Next.js proxy rather than a spoofed source. It must be stored in Vault and never committed to git.
+`INTERNAL_API_SECRET` is the shared secret the Next.js frontend sends to the backend in `X-Internal-Secret`, so that the backend accepts the `X-Forwarded-User` header it sends alongside. Anyone who holds it can act as any user, admins included, on a request that reaches the backend. It lives in Vault and never in git.
 
----
+Last rotated 2026-10-16, in dev (Vault version 2) and prod (version 3), after the backend was found logging it (fixed in 0.20.2). Before that date dev and prod held the same value; each now has its own.
 
-## 1. Generate a new secret
+## How the secret reaches the pods
 
-```bash
-openssl rand -hex 32
-# Example output: a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
-```
+| Environment | Vault key (KV v2 mount `secret`) | Property |
+|---|---|---|
+| prod | `scs/sage/agent-knowledge-hub/app` | `INTERNAL_API_SECRET` |
+| dev | `scs/sage-dev/agent-knowledge-hub/app` | `INTERNAL_API_SECRET` |
 
----
+The `agent-knowledge-hub-secrets` ExternalSecret in `ai-playground-deploy/kubernetes/overlays/<env>/agent-knowledge-hub/` copies it into the Secret of the same name, refreshing hourly. The backend reads that Secret through `envFrom` and the frontend through `secretKeyRef`. Both deployments carry `reloader.stakater.com/auto: "true"`, so Reloader restarts them when the Secret changes. Nothing else reads the secret.
 
-## 2. Store in Vault
+The same Vault key holds `Client_ID`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` and `GITHUB_TOKEN`. **Never use `vault kv put` on it**: `put` replaces every field, and the GitHub App credentials would be lost. Use `vault kv patch`.
 
-Replace `<env>` with `dev`, `stage`, or `prod`:
+## Rotate
 
-```bash
-vault kv put secret/tid/agent-knowledge-hub-<env>/app INTERNAL_API_SECRET=<new-value>
-```
+Run from a shell that is signed in to Vault (`vault login` writes `~/.vault-token`) and to the sage cluster. In a Cogito session, `$HOME` is a per-host directory without the token, so prefix each `vault` command with `HOME=<your real home>`.
 
-For the dev overlay, the Vault path is `secret/tid/agent-knowledge-hub-dev/app`.
-For stage and prod, the Vault path is `secret/tid/agent-knowledge-hub-stage` /
-`secret/tid/agent-knowledge-hub-prod` (see `SECRET_PATH` in each overlay's `Makefile`).
+1. Write a new value straight from the generator into Vault. It goes through stdin, so it never appears in a command line or in the terminal. `-method=rw` reads and rewrites the key, keeping the other fields; it needs only the `read` and `update` capabilities, where the default method also needs `patch`.
 
----
+   ```bash
+   export VAULT_ADDR=https://vault.slac.stanford.edu
+   python3 -c 'import secrets, sys; sys.stdout.write(secrets.token_hex(32))' \
+     | vault kv patch -method=rw -mount=secret scs/sage/agent-knowledge-hub/app INTERNAL_API_SECRET=-
+   ```
 
-## 3. Deploy backend first
+   Generate a separate value for each environment.
 
-Pull the new secret from Vault and deploy the backend. The backend's `@field_validator`
-strips trailing whitespace (including newlines from Vault file injection) automatically.
+2. Have ESO copy it now instead of within the hour:
 
-```bash
-# From the overlay directory (e.g. kubernetes/overlays/dev/)
-make secrets
-kubectl apply -k .
-kubectl rollout status deployment/agent-knowledge-hub-backend -n <namespace>
-```
+   ```bash
+   KUBECONFIG=~/.kube/config.sage kubectl -n prod annotate externalsecret agent-knowledge-hub-secrets \
+     force-sync="$(date +%s)" --overwrite
+   ```
 
-Deploy backend first so the new secret is active before the frontend starts sending it.
-Old frontend pods send the old secret; the backend still rejects them on the Next.js proxy path —
-auth falls back to the expand-phase `X-Forwarded-User` fallback during the window.
+   On 2026-10-16 the Secret changed about 5 seconds later in both environments.
 
----
+3. Reloader restarts both deployments. Wait for them:
 
-## 4. Deploy frontend
+   ```bash
+   KUBECONFIG=~/.kube/config.sage kubectl -n prod rollout status deployment/agent-knowledge-hub-backend
+   KUBECONFIG=~/.kube/config.sage kubectl -n prod rollout status deployment/agent-knowledge-hub-frontend
+   ```
 
-After backend rollout is complete:
+   Each deployment runs one pod, and they restart independently, so for up to a minute one pod can hold the old value and signed-in requests can fail with 401.
 
-```bash
-kubectl rollout status deployment/agent-knowledge-hub-backend -n <namespace>
-# Once Ready, deploy frontend:
-kubectl apply -k .
-kubectl rollout status deployment/agent-knowledge-hub-frontend -n <namespace>
-```
+## Verify
 
----
-
-## 5. Verify all 8 auth routes
-
-After both rollouts complete, verify the authenticated flow works end-to-end:
-
-| Route | Method | Expected |
-|-------|--------|----------|
-| `/api/me` | GET | 200 with user info |
-| `/api/skills` | GET | 200 with skill list |
-| `/api/skills` | POST | 200/201 (as authenticated user) |
-| `/api/skills/[slug]` | GET | 200 |
-| `/api/skills/[slug]` | PATCH/DELETE | 200/204 |
-| `/api/skills/[slug]/rate` | POST `{"value":3}` | 200 with avg_rating, rating_count, my_rating |
-| `/api/skills/[slug]/refetch` | POST | 200 |
-| `/api/skills/[slug]/revisions` | GET | 200 |
-| `/api/skills/[slug]/revisions/[n]` | GET | 200 |
-| `/api/github-scan` | GET | 200/4xx (auth works, response depends on URL) |
-| **Path 3 (Bearer JWT)** | `Authorization: Bearer $(cat ~/.s3df-access-token)` | 200 for any write route |
-
----
-
-## 6. Rollback if frontend fails mid-rotation
-
-If the frontend deployment fails after the backend has already started using the new secret:
+Compare fingerprints, never values. Each command below prints the first 12 characters of the SHA-256 of the secret, and all four must match:
 
 ```bash
-# Rollback frontend to previous revision
-kubectl rollout undo deployment/agent-knowledge-hub-frontend -n <namespace>
-kubectl rollout status deployment/agent-knowledge-hub-frontend -n <namespace>
+fp() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:12])'; }
+vault kv get -mount=secret -field=INTERNAL_API_SECRET scs/sage/agent-knowledge-hub/app | fp
+kubectl -n prod get secret agent-knowledge-hub-secrets -o jsonpath='{.data.INTERNAL_API_SECRET}' | base64 -d | fp
+kubectl -n prod exec deploy/agent-knowledge-hub-backend -- sh -c 'printf %s "$INTERNAL_API_SECRET"' | fp
+kubectl -n prod exec deploy/agent-knowledge-hub-frontend -- sh -c 'printf %s "$INTERNAL_API_SECRET"' | fp
 ```
 
-Auth continues to function via the `X-Forwarded-User` fallback (expand phase) while the
-old frontend is running. The new secret in Vault is still valid — retry the frontend deploy
-once the underlying issue is resolved.
-
-If both backend and frontend need to be rolled back:
+Then check that the frontend's secret is accepted, from inside the frontend pod; this prints `200`:
 
 ```bash
-kubectl rollout undo deployment/agent-knowledge-hub-backend -n <namespace>
-kubectl rollout undo deployment/agent-knowledge-hub-frontend -n <namespace>
-# Then restore the old secret in Vault
-vault kv put secret/tid/agent-knowledge-hub-<env>/app INTERNAL_API_SECRET=<old-value>
+kubectl -n prod exec deploy/agent-knowledge-hub-frontend -- node -e '
+fetch(process.env.BACKEND_URL + "/api/me", {headers: {"X-Internal-Secret": process.env.INTERNAL_API_SECRET, "X-Forwarded-User": "smoke"}})
+  .then(r => console.log(r.status))'
 ```
 
----
+The retired value, read from the previous Vault version and passed on stdin, must get `401`:
 
-## 7. Troubleshooting
+```bash
+vault kv get -mount=secret -version=<previous> -field=INTERNAL_API_SECRET scs/sage/agent-knowledge-hub/app \
+  | kubectl -n prod exec -i deploy/agent-knowledge-hub-backend -- python -c '
+import sys, urllib.request, urllib.error
+req = urllib.request.Request("http://127.0.0.1:8000/api/me", headers={"X-Internal-Secret": sys.stdin.read().strip(), "X-Forwarded-User": "smoke"})
+try: print(urllib.request.urlopen(req, timeout=10).status)
+except urllib.error.HTTPError as e: print(e.code)'
+```
+
+Finally load a signed-in page in a browser.
+
+## Roll back
+
+`vault kv rollback -mount=secret -version=<previous> scs/sage/agent-knowledge-hub/app` restores the previous value as a new version. Then repeat steps 2 and 3. Rolling back a leaked value defeats the rotation, so do it only to recover from a broken rotation, and rotate again afterwards.
+
+## Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| All API routes return 401 after deploy | Backend loaded new secret, frontend still sending old one | Check frontend rollout is complete; rollback frontend if stuck |
-| Silent 401s on one pod, not others | Trailing newline in Vault-injected secret on one replica | `@field_validator` should strip it; check `kubectl logs` for `INTERNAL_API_SECRET` length warnings |
-| `kubectl rollout status` hangs | Readiness probe failing due to 401 on health endpoint | Health endpoint (`/health`) is exempt from auth — check if NetworkPolicy is blocking probe traffic |
-| Auth works via browser but not via direct `/api/` path | Fix 1 (ingress header stripping) is deferred — this is expected | See ADR-P05 for accepted residual risk |
-| `INTERNAL_API_SECRET` not found in Vault | Wrong path or missing `put` step | Re-run step 2; verify with `vault kv get secret/tid/agent-knowledge-hub-<env>/app` |
+|---|---|---|
+| `permission denied` from `vault` in a Cogito session | `$HOME` points at the per-host directory, which has no `.vault-token` | Prefix the command with `HOME=<your real home>`; re-run `vault login` only if `vault token lookup` then says the token expired |
+| The Secret keeps the old fingerprint | ESO has not synced | `kubectl describe externalsecret agent-knowledge-hub-secrets` and read its events and `status.conditions` |
+| The pods keep the old fingerprint after the Secret changed | Reloader did not restart them | `kubectl rollout restart deployment agent-knowledge-hub-backend agent-knowledge-hub-frontend` |
+| Every signed-in request returns 401 | The two pods hold different values | Compare the pod fingerprints; restart the pod that holds the old one |
+| The backend refuses to start: `INTERNAL_API_SECRET must be at least 32 characters` | A short value was written | Rotate again with the generator above, which writes 64 hex characters |

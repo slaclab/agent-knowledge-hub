@@ -84,27 +84,14 @@ from a `git archive` export on `/lscratch`, and prod is pinned to image digests 
 
 ## Vault secrets
 
-Vault path for app secrets (dev): `secret/tid/agent-knowledge-hub-dev/app`
+The hub's credentials are delivered by External Secrets Operator from Vault keys
+`scs/sage/agent-knowledge-hub/{app,mongo}` (prod) and `scs/sage-dev/agent-knowledge-hub/{app,mongo}`
+(dev), on the KV v2 mount `secret`; `ai-playground-deploy`'s ExternalSecret manifests are the record.
+Rotating `INTERNAL_API_SECRET` is `docs/runbooks/internal-api-secret.md`.
 
-Fields: `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `INTERNAL_API_SECRET`
-
-**Critical:** use `vault kv patch` to add or update a single field without wiping others.
-`vault kv put` replaces the entire secret — all other fields are lost.
-
-```bash
-# CORRECT — add/update one field
-vault kv patch secret/tid/agent-knowledge-hub-dev/app INTERNAL_API_SECRET=$(openssl rand -hex 32)
-
-# WRONG — deletes GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY
-vault kv put secret/tid/agent-knowledge-hub-dev/app INTERNAL_API_SECRET=...
-```
-
-To recover from an accidental `vault kv put`:
-```bash
-vault kv metadata get secret/tid/agent-knowledge-hub-dev/app   # list versions
-vault kv get -version=N secret/tid/agent-knowledge-hub-dev/app # read old version
-vault kv put secret/tid/agent-knowledge-hub-dev/app FIELD1=... FIELD2=... FIELD3=...
-```
+**Critical:** use `vault kv patch -method=rw` to change one field. `vault kv put` replaces the
+whole key, and the other fields (the GitHub App credentials) are lost. Never put a secret value in a
+command's arguments: pass it on stdin with `FIELD=-`.
 
 ---
 

@@ -443,3 +443,96 @@ def test_mcp_file_without_python3_exits_127(tmp_path):  # § Server rules › Re
                             capture_output=True, timeout=20)
     assert result.returncode == 127
     assert "writes a server's configuration with python3, which this computer does not have" in skill_text()
+
+
+# ---------------------------------------------------------------------------
+# #053 — a pinned install fetches exactly the pinned commit and checks HEAD
+# ---------------------------------------------------------------------------
+
+GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@invalid",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@invalid"}
+
+
+def _git(*args, cwd=None, home=None):
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(home or cwd), **GIT_ENV}
+    return subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def remote(tmp_path):
+    """A bare repository like GitHub: main is A then B, and a commit can be fetched by its ID.
+
+    It also has commit C, the attacker's, on a branch whose name is A's commit ID.
+    """
+    src = tmp_path / "src"
+    _git("init", "-q", "-b", "main", str(src), home=tmp_path)
+    (src / "SKILL.md").write_text("reviewed\n")
+    _git("add", "-A", cwd=src, home=tmp_path)
+    _git("commit", "-q", "-m", "A", cwd=src, home=tmp_path)
+    a = _git("rev-parse", "HEAD", cwd=src, home=tmp_path)
+    (src / "SKILL.md").write_text("tip\n")
+    _git("commit", "-q", "-am", "B", cwd=src, home=tmp_path)
+    _git("checkout", "-q", "--orphan", "evil", cwd=src, home=tmp_path)
+    (src / "SKILL.md").write_text("attacker\n")
+    _git("add", "-A", cwd=src, home=tmp_path)
+    _git("commit", "-q", "-m", "C", cwd=src, home=tmp_path)
+    _git("branch", "-q", "-m", "evil", a, cwd=src, home=tmp_path)
+    bare = tmp_path / "remote.git"
+    _git("clone", "-q", "--bare", str(src), str(bare), home=tmp_path)
+    _git("config", "uploadpack.allowReachableSHA1InWant", "true", cwd=bare, home=tmp_path)
+    return {"url": f"file://{bare}", "bare": bare, "A": a}
+
+
+def pinned_fetch(tmp_path, url, sha, path=None):
+    d = tmp_path / "d"
+    d.mkdir(exist_ok=True)
+    cmd = (command("akh-pinned-fetch").replace("<dir>", str(d)).replace("<repo_url>", url)
+           .replace("<pinned_commit_sha>", sha))
+    env = {"PATH": path or "/usr/bin:/bin", "HOME": str(tmp_path), **GIT_ENV}
+    result = subprocess.run(["/bin/sh", "-c", cmd], env=env, capture_output=True, text=True, timeout=60)
+    return result, d / "repo"
+
+
+class TestPinnedFetch:
+    def test_pin_behind_the_tip_is_installed(self, tmp_path, remote):  # FR-4
+        result, repo = pinned_fetch(tmp_path, remote["url"], remote["A"])
+        assert result.stdout.splitlines()[-1] == "akh-pin: ok", result.stderr
+        assert (repo / "SKILL.md").read_text() == "reviewed\n"
+
+    def test_branch_named_like_the_pin_is_not_installed(self, tmp_path, remote):  # FR-1, the attack
+        _git("symbolic-ref", "HEAD", f"refs/heads/{remote['A']}", cwd=remote["bare"], home=tmp_path)
+        old = tmp_path / "old"
+        _git("clone", "-q", remote["url"], str(old), home=tmp_path)
+        _git("checkout", "-q", remote["A"], cwd=old, home=tmp_path)
+        assert (old / "SKILL.md").read_text() == "attacker\n", "the attack no longer reproduces with this git"
+
+        result, repo = pinned_fetch(tmp_path, remote["url"], remote["A"])
+        assert result.stdout.splitlines()[-1] == "akh-pin: ok", result.stderr
+        assert (repo / "SKILL.md").read_text() == "reviewed\n"
+
+    def test_pin_the_remote_does_not_have_fails(self, tmp_path, remote):  # FR-2
+        missing = "0" * 40
+        _git("branch", "-q", missing, "main", cwd=remote["bare"], home=tmp_path)
+        result, repo = pinned_fetch(tmp_path, remote["url"], missing)
+        assert result.stdout.splitlines()[-1] == "akh-pin: fetch-failed"
+        assert not (repo / "SKILL.md").exists()
+
+    def test_head_other_than_the_pin_is_reported(self, tmp_path, remote):  # FR-1, FR-2
+        fake = tmp_path / "fakebin"
+        fake.mkdir()
+        (fake / "git").write_text(
+            '#!/bin/sh\nfor a; do last=$a; done\n'
+            'if test "$last" = HEAD; then echo ' + "f" * 40 + '; exit 0; fi\nexec /usr/bin/git "$@"\n')
+        (fake / "git").chmod(0o755)
+        result, _ = pinned_fetch(tmp_path, remote["url"], remote["A"], path=f"{fake}:/usr/bin:/bin")
+        assert result.stdout.splitlines()[-1] == "akh-pin: mismatch " + "f" * 40
+
+    def test_install_step_forbids_other_routes_for_a_pinned_skill(self):  # FR-4, FR-5
+        install = skill_text().split("### Install", 1)[1].split("\n### ", 1)[0]
+        assert "git clone --depth 1 '<repo_url>'" in install
+        for phrase in ("Never get a pinned skill any other way", "`FETCH_HEAD`", "GitHub Contents API",
+                       "installing a pinned skill needs git, which this computer does not have",
+                       "could not be fetched from <repo_url>",
+                       "served commit <actual> where the catalog pins <sha>",
+                       "is not a commit ID"):
+            assert phrase in install, phrase

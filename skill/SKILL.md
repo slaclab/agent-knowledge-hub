@@ -55,7 +55,9 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 `/agent-knowledge-hub install <slug>`
 
 1. Fetch `repo_url`, `skill_path`, and `pinned_commit_sha` with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug>`.
-2. Make a new directory for the clone with `d=$(mktemp -d)`, never a fixed path or a directory that already exists, and clone into it (`git clone --depth 1 <repo_url> "$d/repo"`, or check out the pinned SHA if present). Fall back to the GitHub Contents API if git is unavailable, writing into the same directory. Read and copy the skill's files only from that directory. Never read, write or copy a symbolic link from it.
+2. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Get the skill's files into `<dir>/repo`, then read and copy them only from there, and never read, write or copy a symbolic link from it.
+   - **Pinned skill** (`pinned_commit_sha` is present): the value must be exactly 40 characters of `0-9` and `a-f`; otherwise stop with the bad-pin line. Run the `akh-pinned-fetch` command under Pinned fetch below. Its last line decides: `akh-pin: ok` goes on to step 3, and `akh-pin: fetch-failed` or `akh-pin: mismatch <actual>` deletes `<dir>` and stops with the matching line, with nothing written. Never get a pinned skill any other way: no `git clone`, no checkout of `FETCH_HEAD` or of a branch, and no GitHub Contents API. When `git` is unavailable, stop with the no-git line.
+   - **Unpinned skill**: run `git clone --depth 1 '<repo_url>' '<dir>/repo'`. Fall back to the GitHub Contents API if git is unavailable, writing into `<dir>/repo`.
 3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed.
 4. Check the skill folder, then install components, enforcing path-prefix security on every write:
    - **Folder checks, before anything is written.** If `~/.claude/skills/<slug>/` holds `.installed-manifest.json`, the skill is already installed: stop with the already-installed line. If it exists without that file, stop with the line for a folder /agent-knowledge-hub did not install. Write nothing in either case.
@@ -69,6 +71,24 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 Then print the closing message.
 
 When this skill says to delete `~/.claude/skills/<slug>`, delete that path itself, never spelled with a trailing `/`. When it is a symbolic link, delete only the link: a recursive delete of a link spelled with a trailing `/` deletes the files of the folder it points to.
+
+#### Pinned fetch
+
+A clone checks out the repository's default branch, and `git checkout <pinned_commit_sha>` then switches to a branch of that name if one exists. A repository owner can create a branch named like the pinned commit and install anything through it (Plugin4Shell). This command fetches only the pinned commit, by its ID, checks it out detached, and confirms that `HEAD` is that commit. Replace `<dir>`, `<repo_url>` and `<pinned_commit_sha>`; never change anything else.
+
+```sh
+# akh-pinned-fetch: fetch only the pinned commit into <dir>/repo, check it out detached, and confirm HEAD is that commit
+git init -q '<dir>/repo' && git -C '<dir>/repo' remote add origin '<repo_url>' &&
+  git -C '<dir>/repo' fetch -q --depth 1 origin '<pinned_commit_sha>' &&
+  git -C '<dir>/repo' -c advice.detachedHead=false checkout -q --detach '<pinned_commit_sha>'
+if test "$?" -ne 0; then
+  echo "akh-pin: fetch-failed"
+elif test "$(git -C '<dir>/repo' rev-parse HEAD)" = '<pinned_commit_sha>'; then
+  echo "akh-pin: ok"
+else
+  echo "akh-pin: mismatch $(git -C '<dir>/repo' rev-parse HEAD)"
+fi
+```
 
 #### Agent rules
 
@@ -245,7 +265,7 @@ Print, in this order, inside one fenced code block:
 4. For `update`, the lines of its remove step.
 5. The lead-in, then the blocks.
 
-An install that stops under the folder checks or the filesystem test prints its stop line in place of every other line. Use the words below exactly; `<…>` is filled in, and a condition in parentheses at the end of a line says when to print it and is never printed itself. Write every character of a value from the skill's files that is outside U+0020 to U+007E as `\uXXXX` (`\u{XXXXX}` above U+FFFF), so a value cannot add lines or hide a look-alike letter.
+An install that stops under the folder checks, the filesystem test or the pinned fetch prints its stop line in place of every other line. Use the words below exactly; `<…>` is filled in, and a condition in parentheses at the end of a line says when to print it and is never printed itself. Write every character of a value from the skill's files that is outside U+0020 to U+007E as `\uXXXX` (`\u{XXXXX}` above U+FFFF), so a value cannot add lines or hide a look-alike letter.
 
 Lead-in, printed once before the first block, and not at all when no server gets a block. `<N>` and the names count the servers that get a block:
 
@@ -291,6 +311,10 @@ Left out of ~/.claude/skills/<slug>/: <.claude-plugin/ | .installed-manifest.jso
 Command <file> not installed: ~/.claude/commands/<file> already exists and is not a file /agent-knowledge-hub installed for <slug>, so it was left unchanged. To use this skill's command instead, compare yours with <address>, move yours elsewhere, and run /agent-knowledge-hub update <slug>.
 Not installed: ~/.claude/skills/<slug>/ already exists and has no record of an install by /agent-knowledge-hub, so nothing was written. Move it elsewhere and run the install again.
 Not installed: <slug> is already installed, so nothing was written. To replace it with the current version, run /agent-knowledge-hub update <slug>.
+Not installed: the catalog's pinned commit for <slug> is not a commit ID, so nothing was fetched. Report it at https://agent-knowledge-hub.slac.stanford.edu.   (the bad-pin line)
+Not installed: the pinned commit <sha> of <slug> could not be fetched from <repo_url>, so nothing was written. The repository may no longer have it; tell the skill's submitter.   (akh-pin: fetch-failed)
+Not installed: <repo_url> served commit <actual> where the catalog pins <sha>, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (akh-pin: mismatch)
+Not installed: <slug> is pinned to a commit, and installing a pinned skill needs git, which this computer does not have. Install git and run the install again.   (the no-git line)
 Left out: <path>, a symbolic link <listed as an agent | listed as a command | in the skill folder>, which /agent-knowledge-hub never reads or copies from a skill. If <slug> needs it, tell the skill's submitter.
 Not installed: <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. Tell the skill's submitter.   (the filesystem test, in install)
 Not updated: the new version of <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. The update had already removed the version you had; MCP servers you added for it are still set up, and claude mcp list shows them. Tell the skill's submitter.   (the filesystem test, in update)

@@ -150,5 +150,5 @@ branch (ADR-U44 › Consequences).
   matched; a path part may not start with `-` or `.`.
 - **Low, documented:** the workspace folder itself may be group-writable (ADR-U44 › Consequences).
 
-458 + 34 = 492 client tests pass after this round; dropping each new link check, the remove rule
-or the write-only mode change fails a test.
+The two client test files pass, 479 tests, after this round; dropping each new link check, the
+remove rule or the write-only mode change fails a test.

@@ -1,7 +1,7 @@
 # TODO #057 — The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`, reviews pending
+> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; code and security reviews done and their findings fixed
 > **Branch:** `feat/057-client-workspace-install`
 > **PR:** —
 > **Created:** 2026-10-16
@@ -78,10 +78,52 @@ the client text and its fixed commands: `akh-workspace-base`, `akh-workspace-mod
 - [x] Workspace installs and the exact install, test-first (`adc76ea`); four mutations of the new
   commands each failed their test
 - [x] Client 2.4.0, `CHANGELOG.md`, `README.md`, ADR-U44
-- [ ] Code review and security review of the branch's diff, and their findings fixed
+- [x] Code review and security review of the branch's diff, and their findings fixed (§ Problems & Solutions)
 - [ ] Merged to `main` and pushed, so that Cogito's lock can name the commit
 
 ## Test results
 
-`backend/tests/test_client_install_rules.py` and `backend/tests/test_hub_request_helper.py`: 421
-passed on 2026-10-16, against 360 before the branch.
+`backend/tests/test_client_install_rules.py` and `backend/tests/test_hub_request_helper.py`: 458
+passed on 2026-10-16, after the review fixes, against 360 before the branch. Each security fix was
+broken in turn (the writable-folder refusal, the component check, the exclude file's no-follow open,
+the normalised server check, `akh-mcp-file`'s umask) and each break failed a test.
+
+## Problems & Solutions
+
+### Problem: the reviews of the first version, 2026-10-16
+**Encountered:** the code review and the security review of `6970624..de45bd7`
+**Root cause and solution, one per finding, each with a test that failed before its fix:**
+
+- **High, both reviews: file names from a skill reached a shell.** `akh-workspace-modes` took the
+  manifest's command and agent entries as a quoted placeholder, so a file named with a `'` and a
+  command substitution ran as the user (proven by both reviewers). The workspace commands now read
+  the manifest themselves and take no placeholder with skill text, and the new `akh-component-check`
+  refuses any command or agent path outside a safe character set before any command takes it, which
+  also closes the same exposure in the agent checks of user installs on `main`.
+- **Medium: the `--exact` list went through a here-document**, whose end marker a list line could
+  hold, running the lines after it (proven). The model now writes the list with its file-writing
+  tool, and runs `--exact` only for a list in the user's own message.
+- **Medium: a window in which other accounts could edit a workspace install** under umask 002
+  (proven for `.akh-mcp`). Composed writes start with `umask 022`, `akh-mcp-file` sets its own,
+  `akh-workspace-modes` uses file descriptors without following links and reports a link or another
+  account's file, after which the install is removed.
+- **Medium and low: `.claude` checks.** The base command now refuses the home folder as a workspace,
+  a `.claude/`, `skills/`, `commands/` or `agents/` that is a link, not a folder, or another
+  account's, and one other accounts can write, each with its own line, and has a `find` mode that
+  makes nothing for `list`, `update` and `remove`. It reports a `skills/` folder it made, since
+  Claude Code reads it only from the next session. The exclude file is opened without following a
+  link.
+- **Medium: the workspace "Changed" line printed `--scope user`**, which would remove the home
+  server. It has a workspace form.
+- **Medium: commands and agents showed as untracked.** The exclude command now writes a line for each
+  file the manifest lists, and removes them before `remove` deletes anything.
+- **Medium: `install --exact` step 5 could not run**: it pointed at Install step 1, which needs a
+  fresh directory. It now runs `akh-member-check` on the saved entry and Install from step 2.
+- **Low:** destructive steps in Update and Remove spell `<base>`, and Remove checks each target stays
+  under it; `akh-home-paths` matches `~`, `$HOME` and `${HOME}` spellings, not project paths, and
+  reads the command and agent files too; nested command folders are tidied; the blanket reading rule
+  names its exceptions; the server check normalises the path and covers `env` values; success lines
+  name the development catalog.
+
+**Kept, as a known cost:** an item confirmed with pin `none` installs its repository's current default
+branch (ADR-U44 › Consequences).

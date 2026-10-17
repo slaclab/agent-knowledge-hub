@@ -44,6 +44,18 @@ development servers use dex-dev tokens, which only the development catalog accep
   they are equal; for a skillset, its version, its member order and every member's entry. A changed
   item installs nothing and is reported. The command asks nothing. It saves each entry once and
   installs from that saved copy, so the entry compared is the entry installed.
+- **Checked component paths.** A fixed command lists the command and agent files `plugin.json`
+  names and refuses any path outside letters, digits, `.`, `_`, `-` and `/`, or with a `.` or `..`
+  part, before any command takes one. The same check closes that exposure for user installs, whose
+  agent checks took agent paths unchecked. The workspace commands take no placeholder that carries
+  text from a skill; they read the manifest themselves.
+- **No window for other accounts.** Commands the model composes to write under a workspace base start
+  with `umask 022`, `akh-mcp-file` sets its own umask, and the base command refuses a `.claude/`
+  folder that is a link, belongs to another account or that other accounts can write, and the home
+  folder as a workspace. The modes command opens every path without following links and reports a
+  link or another account's file, and the install is then removed.
+- **The list is never shell input.** The model writes the exact list with its file-writing tool, and
+  runs `install --exact` only for a list in the user's own message.
 - **`AKH_INSTANCE=dev`.** The helper sends to the development catalog with `.s3df-dev-access-token`
   when that variable is exactly `dev`, and otherwise to production with `.s3df-access-token`. Each
   origin is fixed in the helper and takes its own token file.
@@ -62,8 +74,13 @@ development servers use dex-dev tokens, which only the development catalog accep
 ## Consequences
 
 - A steered model that set `AKH_INSTANCE=dev`, against the rule that the helper runs with no
-  environment assignment, could make a production session read the development catalog, sending it
-  the development token only. It cannot send the production token anywhere new.
+  environment assignment, or any session environment that sets it, such as a workspace's
+  `.claude/settings.json`, makes a session read the development catalog, sending it the development
+  token only, and install that catalog's content. It cannot send the production token anywhere new.
+  Success lines name the development catalog when it is in use.
+- "Exactly what was confirmed" holds fully only for a pinned item. An item confirmed with pin `none`
+  installs whatever its repository's default branch holds at install time, as a plain install of an
+  unpinned skill does; a dialog that offers such items has to say so.
 - A skill whose text names `~/.claude/skills/<slug>/` works only in part from a workspace install;
   the closing message says which files name it.
 - A workspace install's files sit in the user's working tree. Anyone who can write that tree could

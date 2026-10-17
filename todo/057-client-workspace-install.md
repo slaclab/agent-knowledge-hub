@@ -1,7 +1,7 @@
 # TODO #057 — The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; code and security reviews done and their findings fixed
+> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; three review rounds done and their findings fixed
 > **Branch:** `feat/057-client-workspace-install`
 > **PR:** —
 > **Created:** 2026-10-16
@@ -152,3 +152,30 @@ branch (ADR-U44 › Consequences).
 
 The two client test files pass, 479 tests, after this round; dropping each new link check, the
 remove rule or the write-only mode change fails a test.
+
+### Problem: the third review, of the copy and remove commands, 2026-10-16
+**Encountered:** a focused review of `06490d4`
+**Root cause and solution, each with a test that failed before its fix:**
+
+- **Medium: `akh-remove` took any slug**, so `remove ..` emptied the base, all of `~/.claude` for a
+  home install, and `remove .` every skill (proven). Every fixed command that takes `<slug>` now
+  refuses one outside `[a-z0-9-]{1,200}`, and Remove refuses it before asking for confirmation.
+- **Medium: the plugin root was not anchored in the clone**, so a committed `.claude-plugin` link
+  took commands, agents and server definitions from outside the pinned commit (proven).
+  `akh-component-check` takes `<dir>` and refuses a root with a link on its path or outside the
+  clone.
+- **Medium: a failed copy left a half-written skill that loads**, and printed no line (proven for a
+  missing parent folder, a tree deeper than Python's recursion limit, and a read error).
+  `akh-copy-skill` makes the parent folder, walks without recursion, removes its partial copy on any
+  error and prints `failed`, which has a line; its `check` step runs in Install step 2, so Update
+  removes nothing for a skill path it would refuse.
+- **Low:** manifests are read without following a link, as a regular file of at most 1 MiB, and
+  type-checked, `akh-remove` keeping everything when it cannot read one (proven to read `/dev/zero`
+  and to drop components silently); `akh-remove` walks each entry by file descriptor without following
+  links, and the base command sets modes by file descriptor; the exclude file keeps its line endings
+  (proven to rewrite them); a skill path of `/` leaves the clone's `.git` out; the existing-folder line
+  has a label.
+
+The two client test files pass, 499 tests, after this round. Two mutations first survived because a
+second guard caught the test case; cases that reach each guard alone were added, and every guard of
+this round now fails a test when removed.

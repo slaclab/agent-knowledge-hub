@@ -1152,7 +1152,8 @@ def run_component_check(tmp_path: Path, plugin: dict, files=()):
         (root / f).parent.mkdir(parents=True, exist_ok=True)
         (root / f).write_text("x")
     (root / "plugin.json").write_text(_json.dumps(plugin))
-    return run_marked("akh-component-check", tmp_path, **{"plugin.json": str(root / "plugin.json")}).stdout.strip().splitlines()
+    return run_marked("akh-component-check", tmp_path, dir=str(tmp_path),
+                      **{"plugin.json": str(root / "plugin.json")}).stdout.strip().splitlines()
 
 
 class TestComponentCheck:
@@ -1188,11 +1189,32 @@ class TestComponentCheck:
         lines = run_component_check(tmp_path, {"agents": "agents"}, files=["agents/ok.md", "agents/b'd.md"])
         assert lines == ["akh-component: refused agent", "akh-component: ok agent agents/ok.md"]
 
+    def test_a_plugin_root_reached_through_a_link_is_refused(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "plugin.json").write_text(_json.dumps({"commands": ["evil.md"]}))
+        (outside / "evil.md").write_text("x")
+        (tmp_path / "repo").mkdir()
+        (tmp_path / "repo" / ".claude-plugin").symlink_to(outside)
+        out = run_marked("akh-component-check", tmp_path, dir=str(tmp_path),
+                         **{"plugin.json": str(tmp_path / "repo" / ".claude-plugin" / "plugin.json")})
+        assert out.stdout.strip() == "akh-component: refused root"
+
+    def test_a_plugin_root_linked_inside_the_clone_is_refused_too(self, tmp_path):
+        real = tmp_path / "repo" / "real"
+        real.mkdir(parents=True)
+        (real / "plugin.json").write_text(_json.dumps({"commands": ["a.md"]}))
+        (real / "a.md").write_text("x")
+        (tmp_path / "repo" / ".claude-plugin").symlink_to(real)
+        out = run_marked("akh-component-check", tmp_path, dir=str(tmp_path),
+                         **{"plugin.json": str(tmp_path / "repo" / ".claude-plugin" / "plugin.json")})
+        assert out.stdout.strip() == "akh-component: refused root"
+
     def test_unreadable_plugin_json(self, tmp_path):
         root = tmp_path / "repo"
         root.mkdir()
         (root / "plugin.json").write_text("{")
-        out = run_marked("akh-component-check", tmp_path, **{"plugin.json": str(root / "plugin.json")})
+        out = run_marked("akh-component-check", tmp_path, dir=str(tmp_path), **{"plugin.json": str(root / "plugin.json")})
         assert out.stdout.strip() == "akh-component: unreadable"
 
 
@@ -1228,7 +1250,7 @@ def run_copy(tmp_path: Path, skill_path: str, umask: int | None = None):
     target = tmp_path / "proj" / ".claude" / "skills" / "x"
     target.parent.mkdir(parents=True, exist_ok=True)
     return run_marked("akh-copy-skill", tmp_path, umask=umask, dir=str(tmp_path / "d"), skill_path=skill_path,
-                      target=str(target)), target
+                      target=str(target), step="copy"), target
 
 
 class TestCopySkill:
@@ -1278,6 +1300,57 @@ class TestCopySkill:
         result, target = run_copy(tmp_path, "/alias/x")
         assert result.stdout.strip() == "akh-copy: refused path"
         assert not target.exists()
+
+    def test_check_reports_without_writing(self, tmp_path):
+        self.make_repo(tmp_path)
+        target = tmp_path / "proj" / ".claude" / "skills" / "x"
+        r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                       target=str(target), step="check")
+        assert r.stdout.strip() == "akh-copy: ok" and not target.exists()
+
+    def test_a_missing_parent_folder_is_made(self, tmp_path):
+        self.make_repo(tmp_path)
+        target = tmp_path / "home" / ".claude" / "skills" / "x"
+        r = run_marked("akh-copy-skill", tmp_path, umask=0o002, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                       target=str(target), step="copy")
+        assert r.stdout.strip().splitlines()[-1] == "akh-copy: ok", r.stderr
+        assert mode(target.parent) == 0o755
+
+    def test_a_deep_tree_is_copied(self, tmp_path):
+        src = tmp_path / "d" / "repo" / "skills" / "x"
+        src.mkdir(parents=True)
+        deep = str(src)
+        for _ in range(1100):  # deeper than Python's recursion limit; makedirs would recurse per level
+            deep = _os.path.join(deep, "a")
+            _os.mkdir(deep)
+        with open(_os.path.join(deep, "f"), "w") as f:
+            f.write("x")
+        result, target = run_copy(tmp_path, "/skills/x")
+        assert result.stdout.strip() == "akh-copy: ok", result.stderr
+        copied = _os.path.join(str(target), *["a"] * 1100)
+        with open(_os.path.join(copied, "f")) as f:
+            assert f.read() == "x"
+        for top in (deep, copied):  # tmp_path's own cleanup would recurse too
+            _os.unlink(_os.path.join(top, "f"))
+            for _ in range(1100):
+                _os.rmdir(top)
+                top = _os.path.dirname(top)
+
+    def test_a_failed_copy_leaves_nothing(self, tmp_path):
+        src = self.make_repo(tmp_path)
+        (src / "zz-unreadable").write_text("x")
+        _os.chmod(src / "zz-unreadable", 0)
+        result, target = run_copy(tmp_path, "/skills/x")
+        assert result.stdout.strip() == "akh-copy: failed"
+        assert not target.exists()
+
+    def test_the_clone_s_own_git_folder_is_left_out(self, tmp_path):
+        repo = tmp_path / "d" / "repo"
+        (repo / ".git" / "objects").mkdir(parents=True)
+        (repo / "SKILL.md").write_text("x")
+        result, target = run_copy(tmp_path, "/")
+        assert result.stdout.strip() == "akh-copy: ok"
+        assert sorted(p.name for p in target.iterdir()) == ["SKILL.md"]
 
     def test_a_missing_skill_path(self, tmp_path):
         (tmp_path / "d" / "repo").mkdir(parents=True)
@@ -1351,3 +1424,69 @@ def test_fixed_commands_do_the_copy_and_the_deletes():
     assert "akh-copy-skill" in install
     assert "akh-remove" in update and "akh-remove" in remove
     assert "akh-workspace-exclude" in update
+
+
+
+class TestSlugsAndManifests:
+    @pytest.mark.parametrize("slug", ["..", ".", "a/b", "", "X"])
+    def test_remove_refuses_a_slug_that_is_not_a_catalog_slug(self, tmp_path, slug):
+        base = tmp_path / "proj" / ".claude"
+        installed(base)
+        (base / "settings.json").write_text("{}")
+        assert run_remove(tmp_path, base, slug) == ["akh-remove: refused slug"]
+        assert (base / "settings.json").exists() and (base / "skills" / "x").exists()
+
+    @pytest.mark.parametrize("marker", ["akh-workspace-modes", "akh-home-paths"])
+    def test_other_commands_refuse_such_a_slug(self, tmp_path, marker):
+        base = tmp_path / "proj" / ".claude"
+        installed(base)
+        out = run_marked(marker, tmp_path, base=str(base), slug="..").stdout.strip()
+        assert out == "akh-workspace: refused slug"
+
+    def test_exclude_refuses_such_a_slug(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        installed(repo / ".claude")
+        out = run_marked("akh-workspace-exclude", tmp_path, base=str(repo / ".claude"), slug="..", action="add")
+        assert out.stdout.strip() == "akh-workspace: refused slug"
+
+    @pytest.mark.parametrize("content", ['["commands/c.md"]', '{"commands": "ab"}', '{"agents": null}', "{"])
+    def test_remove_keeps_everything_for_a_manifest_it_cannot_read(self, tmp_path, content):
+        base = tmp_path / "proj" / ".claude"
+        installed(base, commands=["commands/c.md"])
+        (base / "skills" / "x" / ".installed-manifest.json").write_text(content)
+        assert run_remove(tmp_path, base) == ["akh-remove: unreadable"]
+        assert (base / "skills" / "x").exists() and (base / "commands" / "c.md").exists()
+
+    def test_a_manifest_that_is_a_link_is_not_read(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        installed(base, commands=["commands/c.md"])
+        m = base / "skills" / "x" / ".installed-manifest.json"
+        m.unlink()
+        m.symlink_to("/dev/zero")
+        assert run_remove(tmp_path, base) == ["akh-remove: unreadable"]
+        assert (base / "commands" / "c.md").exists()
+
+    def test_a_manifest_linked_to_a_readable_file_is_not_read(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        installed(base, commands=["commands/c.md"])
+        forged = tmp_path / "forged.json"
+        forged.write_text(_json.dumps({"commands": ["commands/c.md"], "agents": []}))
+        m = base / "skills" / "x" / ".installed-manifest.json"
+        m.unlink()
+        m.symlink_to(forged)
+        assert run_remove(tmp_path, base) == ["akh-remove: unreadable"]
+        assert (base / "commands" / "c.md").exists()
+
+    def test_an_exclude_file_keeps_its_line_endings(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        info = repo / ".git" / "info" / "exclude"
+        info.write_bytes(b"/a/\r\n/b\rc/\r\n")
+        base = repo / ".claude"
+        installed(base)
+        run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
+        assert info.read_bytes() == b"/a/\r\n/b\rc/\r\n"

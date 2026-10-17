@@ -98,7 +98,9 @@ for name in missing if make else []:
     if name in (".claude", ".claude/skills"):
         try:
             os.mkdir(os.path.join(ws, name), 0o700)
-            os.chmod(os.path.join(ws, name), 0o755)
+            fd = os.open(os.path.join(ws, name), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            os.fchmod(fd, 0o755)
+            os.close(fd)
         except OSError:
             say("refused folder")
         new = new or name == ".claude/skills"
@@ -119,17 +121,31 @@ In a workspace install, read every other `~/.claude/` in this file as `<base>/`,
 ```sh
 python3 -I - '<base>' '<slug>' <<'EOF'
 # akh-workspace-modes: clear group and other write, and nothing else, on what a workspace install wrote, and report a link or another account's file in it
-import json, os, stat, sys
+import json, os, re, stat, sys
 base, slug = sys.argv[1], sys.argv[2]
+if not re.fullmatch(r"[a-z0-9-]{1,200}", slug):
+    print("akh-workspace: refused slug")
+    sys.exit(0)
 uid = os.getuid()
 skill = os.path.join(base, "skills", slug)
-try:
-    with open(os.path.join(skill, ".installed-manifest.json"), encoding="utf-8") as f:
-        m = json.load(f)
-    written = {e for e in m.get("commands", []) + m.get("agents", [])
-               if isinstance(e, str) and e.split("/")[0] in ("commands", "agents") and ".." not in e.split("/")}
-except Exception:
-    written = set()
+def manifest():
+    """The manifest as a dict with list values, read without following a link, at most 1 MiB, or None."""
+    try:
+        with os.fdopen(os.open(os.path.join(base, "skills", slug, ".installed-manifest.json"),
+                               os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                return None
+            data = f.read((1 << 20) + 1)
+        m = json.loads(data) if len(data) <= 1 << 20 else None
+    except Exception:
+        return None
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+        return None
+    return m
+
+m = manifest() or {}
+written = {e for e in m.get("commands", []) + m.get("agents", [])
+           if isinstance(e, str) and e.split("/")[0] in ("commands", "agents") and ".." not in e.split("/")}
 
 def foreign(path):
     print("akh-workspace: foreign " + path)
@@ -181,8 +197,11 @@ EOF
 ```sh
 python3 -I - '<base>' '<slug>' '<action>' <<'EOF'
 # akh-workspace-exclude: add or remove the lines in the repository's info/exclude that keep a workspace install out of git
-import json, os, re, subprocess, sys
+import json, os, re, stat, subprocess, sys
 base, slug, action = sys.argv[1:4]
+if not re.fullmatch(r"[a-z0-9-]{1,200}", slug):
+    print("akh-workspace: refused slug")
+    sys.exit(0)
 ws = os.path.dirname(base)
 
 def git(*args):
@@ -201,13 +220,24 @@ top, path = git("rev-parse", "--show-toplevel"), git("rev-parse", "--git-path", 
 if not top or not path:
     stop("not in git")
 path = path if os.path.isabs(path) else os.path.join(ws, path)
-try:
-    with open(os.path.join(base, "skills", slug, ".installed-manifest.json"), encoding="utf-8") as f:
-        m = json.load(f)
-    extra = [e for e in m.get("commands", []) + m.get("agents", [])
-             if isinstance(e, str) and re.fullmatch(r"(commands|agents)(/[A-Za-z0-9._-]+)+", e) and ".." not in e.split("/")]
-except Exception:
-    extra = []
+def manifest():
+    """The manifest as a dict with list values, read without following a link, at most 1 MiB, or None."""
+    try:
+        with os.fdopen(os.open(os.path.join(base, "skills", slug, ".installed-manifest.json"),
+                               os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                return None
+            data = f.read((1 << 20) + 1)
+        m = json.loads(data) if len(data) <= 1 << 20 else None
+    except Exception:
+        return None
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+        return None
+    return m
+
+m = manifest() or {}
+extra = [e for e in m.get("commands", []) + m.get("agents", [])
+         if isinstance(e, str) and re.fullmatch(r"(commands|agents)(/[A-Za-z0-9._-]+)+", e) and ".." not in e.split("/")]
 wanted = []
 for i, part in enumerate(["skills/" + slug] + extra):
     rel = os.path.relpath(os.path.join(os.path.realpath(base), part), os.path.realpath(top))
@@ -215,7 +245,7 @@ for i, part in enumerate(["skills/" + slug] + extra):
         stop("not excluded")
     wanted.append("/" + rel + ("/" if i == 0 else ""))
 try:
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), encoding="utf-8", errors="surrogateescape") as f:
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), encoding="utf-8", errors="surrogateescape", newline="") as f:
         current = f.read()
 except FileNotFoundError:
     current = None
@@ -227,14 +257,14 @@ if action == "add":
     if new:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8", errors="surrogateescape") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
             f.write(("\n" if lines and lines[-1] != "" else "") + "\n".join(new) + "\n")
     for l in wanted:
         print("akh-workspace: excluded " + l)
 else:
     if any(l in lines for l in wanted):
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW), "w", encoding="utf-8",
-                       errors="surrogateescape") as f:
+                       errors="surrogateescape", newline="") as f:
             f.write("\n".join(l for l in lines if l not in wanted))
     for l in wanted:
         print("akh-workspace: unexcluded " + l)
@@ -244,20 +274,34 @@ EOF
 ```sh
 python3 -I - '<base>' '<slug>' <<'EOF'
 # akh-home-paths: list the files of a workspace install that name the skill's folder under the home .claude
-import json, os, re, sys
+import json, os, re, stat, sys
 base, slug = sys.argv[1], sys.argv[2]
+if not re.fullmatch(r"[a-z0-9-]{1,200}", slug):
+    print("akh-workspace: refused slug")
+    sys.exit(0)
 pattern = re.compile(r"(~|\"?\$HOME\"?|\"?\$\{HOME\}\"?)/+\.claude/+skills/+%s(?![A-Za-z0-9_-])" % re.escape(slug))
 skill = os.path.join(base, "skills", slug)
 files = []
 for root, dirs, names in os.walk(skill):
     files += [os.path.join(root, n) for n in sorted(names)]
-try:
-    with open(os.path.join(skill, ".installed-manifest.json"), encoding="utf-8") as f:
-        m = json.load(f)
-    files += [os.path.join(base, e) for e in m.get("commands", []) + m.get("agents", [])
-              if isinstance(e, str) and ".." not in e.split("/")]
-except Exception:
-    pass
+def manifest():
+    """The manifest as a dict with list values, read without following a link, at most 1 MiB, or None."""
+    try:
+        with os.fdopen(os.open(os.path.join(base, "skills", slug, ".installed-manifest.json"),
+                               os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                return None
+            data = f.read((1 << 20) + 1)
+        m = json.loads(data) if len(data) <= 1 << 20 else None
+    except Exception:
+        return None
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+        return None
+    return m
+
+m = manifest() or {}
+files += [os.path.join(base, e) for e in m.get("commands", []) + m.get("agents", [])
+          if isinstance(e, str) and ".." not in e.split("/")]
 for path in files:
     if os.path.islink(path) or not os.path.isfile(path):
         continue
@@ -302,11 +346,11 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
    - **Pinned skill** (`pin` is not `none`): run the `akh-pinned-fetch` command under Pinned fetch below. Its last line decides: `akh-pin: ok` goes on to step 3, and `akh-pin: fetch-failed` or `akh-pin: mismatch <actual>` deletes `<dir>` and stops with the matching line, with nothing written. Never get a pinned skill any other way: no `git clone`, no checkout of `FETCH_HEAD` or of a branch, and no GitHub Contents API. When `git` is unavailable, stop with the no-git line.
    - **Unpinned skill**: run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0 git clone --depth 1 '<repo_url>' '<dir>/repo'`. Fall back to the GitHub Contents API if git is unavailable, writing into `<dir>/repo`. If the clone fails, stop with the clone-error line.
    - The three variables make git fail instead of waiting for a password when the repository cannot be read: git asks an askpass program before the terminal, and Git Credential Manager prompts in its own window. A credential a helper already stores still works.
-   - The skill folder is `<dir>/repo<skill_path>`. If it is not a directory, stop with the missing-path line.
-3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed. Then run the `akh-component-check` command under Component check below, with `<plugin.json>` replaced by that file's path. In every later command, use only the command and agent paths it prints after `ok`; a refused one is left out, with the left-out-component line. `akh-component: unreadable` stops the install with the argument-rule line.
+   - The skill folder is `<dir>/repo<skill_path>`. Run `akh-copy-skill` with `<step>` replaced by `check` and its other placeholders as Install step 4 gives them: `akh-copy: missing` stops with the missing-path line, and `akh-copy: refused path` with the linked-path line, before anything is written or removed.
+3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed. Then run the `akh-component-check` command under Component check below, with `<dir>` replaced by the install's directory and `<plugin.json>` by that file's path. In every later command, use only the command and agent paths it prints after `ok`; a refused one is left out, with the left-out-component line. `akh-component: refused root` stops the install with the linked-path line, and `akh-component: unreadable` with the argument-rule line.
 4. Check the skill folder, then install components, enforcing path-prefix security on every write:
    - **Folder checks, before anything is written.** If `~/.claude/skills/<slug>/` holds `.installed-manifest.json`, the skill is already installed: stop with the already-installed line. If it exists without that file, stop with the line for a folder /agent-knowledge-hub did not install. Write nothing in either case.
-   - `skills` → run the `akh-copy-skill` command under Folder copy below, with `<target>` replaced by `<base>/skills/<slug>`, `<skill_path>` by the `skill_path` the member check printed, and `<dir>` by the install's directory. It copies the skill folder without a shell, leaving out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source and every symbolic link and special file in it, and refuses a skill path that passes through a symbolic link. `akh-copy: ok` goes on; each `akh-copy: left out <name>` line before it gives the left-out line for that name, the reserved-name form for the three names and the symbolic-link form for any other. `akh-copy: missing` stops with the missing-path line, `akh-copy: refused path` with the linked-path line, `akh-copy: exists` with the folder line, and `akh-copy: reserved <name>` with the filesystem-test line, after the command has removed what it wrote.
+   - `skills` → run the `akh-copy-skill` command under Folder copy below, with `<step>` replaced by `copy`, `<target>` by `<base>/skills/<slug>`, `<skill_path>` by the `skill_path` the member check printed, and `<dir>` by the install's directory. It copies the skill folder without a shell, leaving out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source and every symbolic link and special file in it, and refuses a skill path that passes through a symbolic link. `akh-copy: ok` goes on; each `akh-copy: left out <name>` line before it gives the left-out line for that name, the reserved-name form for the three names and the symbolic-link form for any other. `akh-copy: missing` stops with the missing-path line, `akh-copy: refused path` with the linked-path line, `akh-copy: exists` with the existing-folder line, `akh-copy: reserved <name>` with the filesystem-test line, and `akh-copy: failed`, `akh-copy: refused slug` or no `akh-copy:` line at all with the copy-failed line; the command has then removed what it wrote.
    - `commands` → `~/.claude/commands/<file>`. Leave out a command file that is a symbolic link, and one whose `~/.claude/commands/<file>` already exists and is not a file this skill's manifest records; never replace it.
    - `agents` → `~/.claude/agents/<file>`, under the agent rules below.
    - `mcp-servers` → never added. Write each server's configuration under the server rules below, and show it in the closing message.
@@ -348,14 +392,23 @@ EOF
 
 #### Component check
 
-`plugin.json`'s `commands` and `agents` values name files, and any signed-in user writes them, so their paths are checked before any command takes one: only letters, digits, `.`, `_` and `-`, each part starting with a letter, digit or `_`, no part that is a symbolic link, and nothing outside the plugin root. A string value or each string in a list value is a path relative to the plugin root; a folder lists the `.md` files directly in it, and a symbolic link is left out under Install's own rule. Replace `<plugin.json>`; never change anything else.
+`plugin.json`'s `commands` and `agents` values name files, and any signed-in user writes them, so their paths are checked before any command takes one: only letters, digits, `.`, `_` and `-`, each part starting with a letter, digit or `_`, no part that is a symbolic link, and nothing outside the plugin root, whose own path inside the clone may hold no symbolic link either. A string value or each string in a list value is a path relative to the plugin root; a folder lists the `.md` files directly in it, and a symbolic link is left out under Install's own rule. Replace `<plugin.json>`; never change anything else.
 
 ```sh
-python3 -I - '<plugin.json>' <<'EOF'
+python3 -I - '<dir>' '<plugin.json>' <<'EOF'
 # akh-component-check: list the command and agent files plugin.json names, refusing any path the client does not put in commands
 import json, os, re, sys
-path = sys.argv[1]
-root = os.path.dirname(path)
+d, path = sys.argv[1], sys.argv[2]
+repo, root = os.path.realpath(os.path.join(d, "repo")), os.path.dirname(path)
+walk = os.path.join(d, "repo")
+for part in os.path.relpath(root, walk).split("/"):
+    walk = os.path.join(walk, part)
+    if part in ("..",) or os.path.islink(walk):
+        print("akh-component: refused root")
+        sys.exit(0)
+if os.path.realpath(root) != repo and not os.path.realpath(root).startswith(repo + os.sep):
+    print("akh-component: refused root")
+    sys.exit(0)
 try:
     with open(path, encoding="utf-8") as f:
         p = json.load(f)
@@ -399,10 +452,10 @@ EOF
 #### Folder copy
 
 ```sh
-python3 -I - '<dir>' '<skill_path>' '<target>' <<'EOF'
-# akh-copy-skill: copy a skill folder from the clone without a shell, leaving out links, special files and the names the client never copies
-import os, shutil, stat, sys
-d, skill_path, target = sys.argv[1:4]
+python3 -I - '<step>' '<dir>' '<skill_path>' '<target>' <<'EOF'
+# akh-copy-skill: check a skill folder in the clone, or copy it without a shell, leaving out links, special files and the names the client never copies
+import os, re, shutil, stat, sys
+step, d, skill_path, target = sys.argv[1:5]
 os.umask(0o022)
 RESERVED = (".claude-plugin", ".installed-manifest.json", ".akh-mcp")
 
@@ -413,6 +466,8 @@ def say(text):
 def esc(s):
     return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
 
+if not re.fullmatch(r"[a-z0-9-]{1,200}", os.path.basename(target)):
+    say("refused slug")
 repo = os.path.realpath(os.path.join(d, "repo"))
 src = repo
 for part in [p for p in skill_path.split("/") if p]:
@@ -426,35 +481,44 @@ if not os.path.isdir(src):
     say("missing")
 if os.path.realpath(src) != repo and not os.path.realpath(src).startswith(repo + os.sep):
     say("refused path")
+if step != "copy":
+    say("ok")
 try:
+    os.makedirs(os.path.dirname(target), mode=0o755, exist_ok=True)
     os.mkdir(target, 0o755)
 except FileExistsError:
     say("exists")
+except OSError:
+    say("failed")
 left = []
-
-def copy(s, t, rel):
-    for name in sorted(os.listdir(s)):
-        sp, tp, r = os.path.join(s, name), os.path.join(t, name), rel + name
-        st = os.lstat(sp)
-        if not rel and name in RESERVED:
-            left.append(r)
-        elif stat.S_ISDIR(st.st_mode):
-            os.mkdir(tp, stat.S_IMODE(st.st_mode) & 0o755 | 0o700)
-            copy(sp, tp, r + "/")
-        elif stat.S_ISREG(st.st_mode):
-            with os.fdopen(os.open(sp, os.O_RDONLY | os.O_NOFOLLOW), "rb") as fin, \
-                 os.fdopen(os.open(tp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                                   stat.S_IMODE(st.st_mode) & 0o755 | 0o600), "wb") as fout:
-                shutil.copyfileobj(fin, fout)
-        else:
-            left.append(r)
-
-copy(src, target, "")
+try:
+    todo = [(src, target, "")]
+    while todo:
+        s, t, rel = todo.pop()
+        for name in sorted(os.listdir(s)):
+            sp, tp, r = os.path.join(s, name), os.path.join(t, name), rel + name
+            st = os.lstat(sp)
+            if not rel and (name in RESERVED or (name == ".git" and s == repo)):
+                if name != ".git":
+                    left.append(r)
+            elif stat.S_ISDIR(st.st_mode):
+                os.mkdir(tp, stat.S_IMODE(st.st_mode) & 0o755 | 0o700)
+                todo.append((sp, tp, r + "/"))
+            elif stat.S_ISREG(st.st_mode):
+                with os.fdopen(os.open(sp, os.O_RDONLY | os.O_NOFOLLOW), "rb") as fin, \
+                     os.fdopen(os.open(tp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                       stat.S_IMODE(st.st_mode) & 0o755 | 0o600), "wb") as fout:
+                    shutil.copyfileobj(fin, fout)
+            else:
+                left.append(r)
+except BaseException:
+    shutil.rmtree(target, ignore_errors=True)
+    say("failed")
 for name in RESERVED:
     if os.path.lexists(os.path.join(target, name)):
         shutil.rmtree(target)
         say("reserved " + name)
-for r in left:
+for r in sorted(left):
     print("akh-copy: left out " + esc(r))
 say("ok")
 EOF
@@ -713,7 +777,7 @@ Agent <name> not installed: its name is that of <Claude Code's built-in <name> a
 MCP server "<name>" has no command: <reason, below>. Tell the skill's submitter, or flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.
 Left out of ~/.claude/skills/<slug>/: <.claude-plugin/ | .installed-manifest.json | .akh-mcp/>, which /agent-knowledge-hub never copies from a skill.
 Command <file> not installed: ~/.claude/commands/<file> already exists and is not a file /agent-knowledge-hub installed for <slug>, so it was left unchanged. To use this skill's command instead, compare yours with <address>, move yours elsewhere, and run /agent-knowledge-hub update <slug>.
-Not installed: ~/.claude/skills/<slug>/ already exists and has no record of an install by /agent-knowledge-hub, so nothing was written. Move it elsewhere and run the install again.
+Not installed: ~/.claude/skills/<slug>/ already exists and has no record of an install by /agent-knowledge-hub, so nothing was written. Move it elsewhere and run the install again.   (the existing-folder line)
 Not installed: <slug> is already installed, so nothing was written. To replace it with the current version, run /agent-knowledge-hub update <slug>.
 Not installed: the catalog's pinned commit for <slug> is not a commit ID, so nothing was fetched. Report it at https://agent-knowledge-hub.slac.stanford.edu.   (the bad-pin line)
 Not installed: the pinned commit <sha> of <slug> could not be fetched from <repo_url>, so nothing was written. The repository may no longer have it; tell the skill's submitter.   (akh-pin: fetch-failed)
@@ -722,6 +786,9 @@ Not installed: <slug> is pinned to a commit, and installing a pinned skill needs
 Not installed: the catalog entry for <slug> has a <repo_url | skill_path> that this client does not pass to a command, so nothing was run. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the argument-rule line; `unreadable` gives the same line naming its catalog entry)
 Not installed: git could not get <repo_url>, so nothing was written. If it is a SLAC-internal repository, run gh auth login and see https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access.   (the clone-error line; the access sentence only when visibility is internal, and also after akh-pin: fetch-failed for an internal skill)
 Not installed: <skill_path> in <repo_url> passes through a symbolic link, which /agent-knowledge-hub never follows, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the linked-path line)
+Not installed: copying <slug> failed, so the partial copy was removed and nothing else was written. Run the command again; if it fails again, check that the disk is not full.   (the copy-failed line; in update, `Not updated:` and the update line's sentence on the version you had)
+Not changed: <slug> is not a catalog slug, so nothing was read or deleted.   (the slug line)
+Not removed: the record of what /agent-knowledge-hub installed for <slug> could not be read, so nothing was deleted. Look at <base>/skills/<slug>/ yourself.   (the unreadable-manifest line)
 Not installed: <skill_path> is not in <repo_url>, so nothing was written. Tell the skill's submitter, or flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the missing-path line)
 Left out: a <command | agent> of <slug> whose file name holds characters /agent-knowledge-hub does not pass to a command. Tell the skill's submitter.   (the left-out-component line)
 Left out: <path>, a symbolic link <listed as an agent | listed as a command | in the skill folder>, which /agent-knowledge-hub never reads or copies from a skill. If <slug> needs it, tell the skill's submitter.
@@ -968,21 +1035,54 @@ If the new version fails Install's filesystem test, print the `Not updated:` lin
 `/agent-knowledge-hub remove <slug>`
 `/agent-knowledge-hub remove --workspace <slug>`
 
-Confirm with the user, then:
+Refuse a `<slug>` outside lowercase letters, digits and `-` with the slug line, before anything else. Otherwise confirm with the user, then:
 
 1. Read `<base>/skills/<slug>/.installed-manifest.json` and the installed `plugin.json`. With `--workspace`, run `akh-workspace-exclude` with `<action>` replaced by `remove` now, before anything is deleted.
-2. Run the `akh-remove` command below. It deletes each manifest entry the rule allows, then `<base>/skills/<slug>`, and prints `akh-remove: kept <entry>` for each entry it left in place. The rule: an entry is read by its part after the last `/.claude/`, and deleted only when its first part is `agents` or `commands`, every part holds only letters, digits, `.`, `_` and `-` and is not `.` or `..`, it names a regular file, not a symbolic link or a folder, and its real path lies inside `<base>`. A skill folder that is a symbolic link loses only the link, and its manifest is not read.
+2. Run the `akh-remove` command below. It deletes each manifest entry the rule allows, then `<base>/skills/<slug>`, and prints `akh-remove: kept <entry>` for each entry it left in place. The rule: an entry is read by its part after the last `/.claude/`, and deleted only when its first part is `agents` or `commands`, every part holds only letters, digits, `.`, `_` and `-` and is not `.` or `..`, it names a regular file, not a symbolic link or a folder, and its real path lies inside `<base>`. A skill folder that is a symbolic link loses only the link, and its manifest is not read. `akh-remove: refused slug` stops with the slug line, and `akh-remove: unreadable`, for a manifest that is not a JSON object with list values, is a link, or is over 1 MiB, stops with the unreadable-manifest line, with nothing deleted.
 
 ```sh
 python3 -I - '<base>' '<slug>' <<'EOF'
 # akh-remove: delete the files a skill's manifest lists and its folder, keeping any entry the rule does not allow, and print each one kept
 import json, os, re, shutil, stat, sys
 base, slug = sys.argv[1], sys.argv[2]
-real = os.path.realpath(base)
+if not re.fullmatch(r"[a-z0-9-]{1,200}", slug):
+    print("akh-remove: refused slug")
+    sys.exit(0)
 skill = os.path.join(base, "skills", slug)
+def manifest():
+    """The manifest as a dict with list values, read without following a link, at most 1 MiB, or None."""
+    try:
+        with os.fdopen(os.open(os.path.join(base, "skills", slug, ".installed-manifest.json"),
+                               os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                return None
+            data = f.read((1 << 20) + 1)
+        m = json.loads(data) if len(data) <= 1 << 20 else None
+    except Exception:
+        return None
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+        return None
+    return m
 
 def esc(s):
     return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
+
+def unlink_inside(parts):
+    """Delete <base>/<parts> when it is a regular file, opening every folder on the way without following a link."""
+    fd = os.open(os.path.realpath(base), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            inner = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = inner
+        if not stat.S_ISREG(os.stat(parts[-1], dir_fd=fd, follow_symlinks=False).st_mode):
+            return False
+        os.unlink(parts[-1], dir_fd=fd)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
 
 try:
     st = os.lstat(skill)
@@ -990,26 +1090,18 @@ except FileNotFoundError:
     st = None
 entries = []
 if st is not None and stat.S_ISDIR(st.st_mode):
-    try:
-        with open(os.path.join(skill, ".installed-manifest.json"), encoding="utf-8") as f:
-            m = json.load(f)
-        entries = [e for e in m.get("commands", []) + m.get("agents", []) if isinstance(e, str)]
-    except Exception:
-        entries = []
+    m = manifest()
+    if m is None:
+        print("akh-remove: unreadable")
+        sys.exit(0)
+    entries = m.get("commands", []) + m.get("agents", [])
 for e in entries:
-    rel = e.rsplit("/.claude/", 1)[1] if "/.claude/" in e else e
-    parts = rel.split("/")
-    path = os.path.join(base, rel)
+    rel = e.rsplit("/.claude/", 1)[1] if isinstance(e, str) and "/.claude/" in e else e
+    parts = rel.split("/") if isinstance(rel, str) else []
     allowed = (len(parts) > 1 and parts[0] in ("agents", "commands")
                and all(re.fullmatch(r"[A-Za-z0-9._-]+", p) and p not in (".", "..") for p in parts))
-    try:
-        allowed = allowed and stat.S_ISREG(os.lstat(path).st_mode)
-    except OSError:
-        allowed = False
-    if allowed and os.path.realpath(path).startswith(real + os.sep):
-        os.unlink(path)
-    else:
-        print("akh-remove: kept " + esc(e))
+    if not (allowed and unlink_inside(parts)):
+        print("akh-remove: kept " + esc(str(e)))
 if st is not None and stat.S_ISLNK(st.st_mode):
     os.unlink(skill)
 elif st is not None:

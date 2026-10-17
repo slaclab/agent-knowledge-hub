@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Client: workspace installs and the development catalog (#057)
+
+- **`--workspace`** — `install`, `install skillset`, `list`, `update` and `remove` take `--workspace`, which works on the project's own `.claude/` folder, `<workspace>/.claude/`, instead of `~/.claude/`. A skill installed that way loads only in sessions started in that project. The client makes the folders without group or other write, sets the installed files to `0644`, or `0755` where the skill marks them executable, and adds the skill's folder to the repository's `.git/info/exclude`, so it never shows as untracked; `remove --workspace` takes the line out. A workspace whose path holds a character other than letters, digits, `.`, `_`, `-` and `/` is refused. An MCP server's printed command adds it for that workspace only (`claude mcp add-json --scope local`), a server that runs a file from `${HOME}/.claude/skills/` gets no command, and the closing message names any installed file that refers to `~/.claude/skills/<slug>/`.
+- **`install --exact`** — installs into the workspace exactly the skills and skillsets a list names, for a list the user confirmed elsewhere, such as Cogito's New session dialog. Each item installs only when the catalog's current entry, or the skillset's version and members, equals its line; an item that changed installs nothing and is reported. The command asks nothing.
+- **The development catalog** — with `AKH_INSTANCE=dev` in the session's environment, `hub-request.sh` sends to `https://agent-knowledge-hub-dev.slac.stanford.edu` with `.s3df-dev-access-token`. No other value changes anything, and the production token never goes to the development catalog.
+- **Client 2.4.0** — an existing plugin install keeps the earlier client until you run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
+
+**New docs:** `docs/adr/adr-u44-client-workspace-install.md`.
+
 ## 0.21.0 — 2026-10-16
 
 ### Skillsets: pages for browsing and curating (#006, frontend)

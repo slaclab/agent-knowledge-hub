@@ -42,6 +42,8 @@ Ask your AI assistant what you need, in plain English, and it finds and installs
 
 `install skillset <slug>` installs every skill in a curated skillset, after listing them and asking once.
 
+Add `--workspace` after the command word (`install --workspace <slug>`, `install skillset --workspace <slug>`, and the same for `list`, `update` and `remove`) to install into the project you are working in, `<workspace>/.claude/`, instead of your home: the skill then loads only in sessions started in that project, and the client keeps its files out of git.
+
 No configuration. No manual file copying. A skill that brings an MCP server is the one exception: the client does not add the server, and prints the command that adds it for you to run.
 
 Register the SLAC marketplace once to get started:

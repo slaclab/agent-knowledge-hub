@@ -79,19 +79,13 @@ except KeyError:
     pass
 if base in homes:
     say("refused home")
-new = False
+missing = []
 for name in (".claude", ".claude/skills", ".claude/commands", ".claude/agents"):
     path = os.path.join(ws, name)
     try:
         st = os.lstat(path)
     except FileNotFoundError:
-        if make and name in (".claude", ".claude/skills"):
-            try:
-                os.mkdir(path, 0o700)
-                os.chmod(path, 0o755)
-            except OSError:
-                say("refused folder")
-            new = new or name == ".claude/skills"
+        missing.append(name)
         continue
     except OSError:
         say("refused folder")
@@ -99,23 +93,32 @@ for name in (".claude", ".claude/skills", ".claude/commands", ".claude/agents"):
         say("refused folder")
     if st.st_mode & 0o022:
         say("refused writable " + path)
+new = False
+for name in missing if make else []:
+    if name in (".claude", ".claude/skills"):
+        try:
+            os.mkdir(os.path.join(ws, name), 0o700)
+            os.chmod(os.path.join(ws, name), 0o755)
+        except OSError:
+            say("refused folder")
+        new = new or name == ".claude/skills"
 say("base " + base + (" new" if new else ""))
 EOF
 ```
 
 `<base>` in the commands and steps of this file is the path after `akh-workspace: base`. For a command without `--workspace` it is the absolute path `printf '%s\n' "$HOME/.claude"` prints. Replace `<base>` like every other placeholder; never change anything else in a command.
 
-In a workspace install, read every other `~/.claude/` in this file as `<base>/`, in prose, in the folder checks and in the lines under Install › Closing message, except the home-paths line and an agent line that names an agent in your own `~/.claude/agents/`. And:
+In a workspace install, read every other `~/.claude/` in this file as `<base>/`, in prose, in the folder checks and in the lines under Install › Closing message, except the home-paths line and an agent line that names an agent in your own `~/.claude/agents/`. Every `/agent-knowledge-hub <command>` that a line names carries `--workspace` after its command word. And:
 
 - **Writes.** Start every command you compose that writes under `<base>`, such as the copy in Install step 4, with `umask 022;`, so nothing is ever writable by other accounts.
 - **Agent names.** Run `akh-user-agent-names` once with the workspace's `<base>` and once with the home one, and leave out an agent whose name matches one in either list that this skill's manifest does not record. An agent in the workspace would replace an agent of yours that has its name.
 - **MCP servers.** A server is added for this workspace only. Its block carries the workspace forms of the add line and the "Changed" line, and the still-set-up line its workspace form, all under Install › Closing message. The lead-in's second sentence reads: "The server is then available in this workspace only, in Claude Code sessions you start in it after adding it." A server that uses `${HOME}/.claude/skills/` gets no command, with that no-command reason.
 - **Files that name the home folder.** After the manifest is written, run `akh-home-paths`. When it prints a file, the closing message carries the home-paths line, naming each file.
-- **Modes and git.** After the manifest is written, run `akh-workspace-modes`. When it prints an `akh-workspace: foreign <path>` line, delete `<base>/skills/<slug>` and every file the manifest lists, and stop with the foreign-file line. Otherwise run `akh-workspace-exclude` with `<action>` replaced by `add`. `remove --workspace` runs it with `remove` before it deletes anything. `akh-workspace: not in git` and `akh-workspace: not excluded` need no line.
+- **Modes and git.** After the manifest is written, run `akh-workspace-modes`. When it prints an `akh-workspace: foreign <path>` line, run `akh-remove` (under Remove) and stop with the foreign-file line. Otherwise run `akh-workspace-exclude` with `<action>` replaced by `add`. `remove --workspace` and `update --workspace` run it with `remove` before they delete anything. `akh-workspace: not in git` and `akh-workspace: not excluded` need no line.
 
 ```sh
 python3 -I - '<base>' '<slug>' <<'EOF'
-# akh-workspace-modes: clear group and other write on what a workspace install wrote, and report a link or another account's file in it
+# akh-workspace-modes: clear group and other write, and nothing else, on what a workspace install wrote, and report a link or another account's file in it
 import json, os, stat, sys
 base, slug = sys.argv[1], sys.argv[2]
 uid = os.getuid()
@@ -140,7 +143,7 @@ def tidy(path, report=True):
         st = os.fstat(fd)
         if st.st_uid != uid or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
             return foreign(path) if report else None
-        os.fchmod(fd, 0o755 if stat.S_ISDIR(st.st_mode) or st.st_mode & 0o111 else 0o644)
+        os.fchmod(fd, stat.S_IMODE(st.st_mode) & 0o755)
     finally:
         os.close(fd)
 
@@ -151,6 +154,12 @@ def only_written(folder):
                 return False
     return True
 
+try:
+    if stat.S_ISLNK(os.lstat(skill).st_mode):
+        foreign(skill)
+        sys.exit(0)
+except FileNotFoundError:
+    pass
 for root, dirs, names in os.walk(skill):
     tidy(root)
     for name in dirs + names:
@@ -206,7 +215,7 @@ for i, part in enumerate(["skills/" + slug] + extra):
         stop("not excluded")
     wanted.append("/" + rel + ("/" if i == 0 else ""))
 try:
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), encoding="utf-8") as f:
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), encoding="utf-8", errors="surrogateescape") as f:
         current = f.read()
 except FileNotFoundError:
     current = None
@@ -218,13 +227,14 @@ if action == "add":
     if new:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", errors="surrogateescape") as f:
             f.write(("\n" if lines and lines[-1] != "" else "") + "\n".join(new) + "\n")
     for l in wanted:
         print("akh-workspace: excluded " + l)
 else:
     if any(l in lines for l in wanted):
-        with os.fdopen(os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW), "w", encoding="utf-8") as f:
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW), "w", encoding="utf-8",
+                       errors="surrogateescape") as f:
             f.write("\n".join(l for l in lines if l not in wanted))
     for l in wanted:
         print("akh-workspace: unexcluded " + l)
@@ -236,7 +246,7 @@ python3 -I - '<base>' '<slug>' <<'EOF'
 # akh-home-paths: list the files of a workspace install that name the skill's folder under the home .claude
 import json, os, re, sys
 base, slug = sys.argv[1], sys.argv[2]
-pattern = re.compile(r"(~|\$HOME|\$\{HOME\})/+\.claude/+skills/+%s(?![A-Za-z0-9_-])" % re.escape(slug))
+pattern = re.compile(r"(~|\"?\$HOME\"?|\"?\$\{HOME\}\"?)/+\.claude/+skills/+%s(?![A-Za-z0-9_-])" % re.escape(slug))
 skill = os.path.join(base, "skills", slug)
 files = []
 for root, dirs, names in os.walk(skill):
@@ -264,12 +274,12 @@ EOF
 Lines, in these words:
 
 ```
-Not installed: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.   (the workspace-path line)
-Not installed: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or install without --workspace.   (the home-folder line)
-Not installed: this workspace's .claude/ or .claude/skills/ is a link, is not a folder, is not yours, or could not be made, so nothing was written.   (the workspace-folder line)
-Not installed: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too. Run chmod go-w <path> and install again.   (the writable-folder line)
+Stopped: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.   (the workspace-path line)
+Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or run the command without --workspace.   (the home-folder line)
+Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder, is a link, is not a folder, is not yours, or could not be made, so nothing was written.   (the workspace-folder line)
+Stopped: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too, and nothing was written. Run chmod go-w <path> and run the command again.   (the writable-folder line)
 Not installed: <path> in <slug>'s folder is a link, or belongs to another account, which /agent-knowledge-hub never writes, so the folder was removed and nothing else was written.   (the foreign-file line)
-Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.   (the new-folder line, after the success line, when the base came with new)
+Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.   (the new-folder line, when the base came with new: after the success line, or after the summary line in install skillset and install --exact)
 <slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.   (the home-paths line)
 ```
 ---
@@ -296,7 +306,7 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed. Then run the `akh-component-check` command under Component check below, with `<plugin.json>` replaced by that file's path. In every later command, use only the command and agent paths it prints after `ok`; a refused one is left out, with the left-out-component line. `akh-component: unreadable` stops the install with the argument-rule line.
 4. Check the skill folder, then install components, enforcing path-prefix security on every write:
    - **Folder checks, before anything is written.** If `~/.claude/skills/<slug>/` holds `.installed-manifest.json`, the skill is already installed: stop with the already-installed line. If it exists without that file, stop with the line for a folder /agent-knowledge-hub did not install. Write nothing in either case.
-   - `skills` → copy the skill folder into `~/.claude/skills/<slug>/`, leaving out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source and every symbolic link in it. Right after the copy, before writing anything else, test that none of `.claude-plugin`, `.installed-manifest.json` and `.akh-mcp` exists in `~/.claude/skills/<slug>/`. If one does, delete `~/.claude/skills/<slug>` and stop with the filesystem-test line.
+   - `skills` → run the `akh-copy-skill` command under Folder copy below, with `<target>` replaced by `<base>/skills/<slug>`, `<skill_path>` by the `skill_path` the member check printed, and `<dir>` by the install's directory. It copies the skill folder without a shell, leaving out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source and every symbolic link and special file in it, and refuses a skill path that passes through a symbolic link. `akh-copy: ok` goes on; each `akh-copy: left out <name>` line before it gives the left-out line for that name, the reserved-name form for the three names and the symbolic-link form for any other. `akh-copy: missing` stops with the missing-path line, `akh-copy: refused path` with the linked-path line, `akh-copy: exists` with the folder line, and `akh-copy: reserved <name>` with the filesystem-test line, after the command has removed what it wrote.
    - `commands` → `~/.claude/commands/<file>`. Leave out a command file that is a symbolic link, and one whose `~/.claude/commands/<file>` already exists and is not a file this skill's manifest records; never replace it.
    - `agents` → `~/.claude/agents/<file>`, under the agent rules below.
    - `mcp-servers` → never added. Write each server's configuration under the server rules below, and show it in the closing message.
@@ -338,7 +348,7 @@ EOF
 
 #### Component check
 
-`plugin.json`'s `commands` and `agents` values name files, and any signed-in user writes them, so their paths are checked before any command takes one. A string value or each string in a list value is a path relative to the plugin root; a folder lists the `.md` files directly in it, and a symbolic link is left out under Install's own rule. Replace `<plugin.json>`; never change anything else.
+`plugin.json`'s `commands` and `agents` values name files, and any signed-in user writes them, so their paths are checked before any command takes one: only letters, digits, `.`, `_` and `-`, each part starting with a letter, digit or `_`, no part that is a symbolic link, and nothing outside the plugin root. A string value or each string in a list value is a path relative to the plugin root; a folder lists the `.md` files directly in it, and a symbolic link is left out under Install's own rule. Replace `<plugin.json>`; never change anything else.
 
 ```sh
 python3 -I - '<plugin.json>' <<'EOF'
@@ -355,7 +365,15 @@ except Exception:
     sys.exit(0)
 
 def ok(rel):
-    return bool(re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)*", rel)) and not {".", ".."} & set(rel.split("/"))
+    seg = r"[A-Za-z0-9_][A-Za-z0-9._-]*"
+    if not re.fullmatch(r"%s(/%s)*" % (seg, seg), rel):
+        return False
+    path = root
+    for part in rel.split("/"):
+        path = os.path.join(path, part)
+        if os.path.islink(path):
+            return False
+    return os.path.realpath(os.path.join(root, rel)).startswith(os.path.realpath(root) + os.sep)
 
 for key, kind in (("commands", "command"), ("agents", "agent")):
     value = p.get(key)
@@ -375,6 +393,70 @@ for key, kind in (("commands", "command"), ("agents", "agent")):
             if not name.endswith(".md") or os.path.islink(inner) or not os.path.isfile(inner):
                 continue
             print("akh-component: ok %s %s/%s" % (kind, rel, name) if ok(rel + "/" + name) else "akh-component: refused " + kind)
+EOF
+```
+
+#### Folder copy
+
+```sh
+python3 -I - '<dir>' '<skill_path>' '<target>' <<'EOF'
+# akh-copy-skill: copy a skill folder from the clone without a shell, leaving out links, special files and the names the client never copies
+import os, shutil, stat, sys
+d, skill_path, target = sys.argv[1:4]
+os.umask(0o022)
+RESERVED = (".claude-plugin", ".installed-manifest.json", ".akh-mcp")
+
+def say(text):
+    print("akh-copy: " + text)
+    sys.exit(0)
+
+def esc(s):
+    return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
+
+repo = os.path.realpath(os.path.join(d, "repo"))
+src = repo
+for part in [p for p in skill_path.split("/") if p]:
+    src = os.path.join(src, part)
+    try:
+        if stat.S_ISLNK(os.lstat(src).st_mode):
+            say("refused path")
+    except FileNotFoundError:
+        say("missing")
+if not os.path.isdir(src):
+    say("missing")
+if os.path.realpath(src) != repo and not os.path.realpath(src).startswith(repo + os.sep):
+    say("refused path")
+try:
+    os.mkdir(target, 0o755)
+except FileExistsError:
+    say("exists")
+left = []
+
+def copy(s, t, rel):
+    for name in sorted(os.listdir(s)):
+        sp, tp, r = os.path.join(s, name), os.path.join(t, name), rel + name
+        st = os.lstat(sp)
+        if not rel and name in RESERVED:
+            left.append(r)
+        elif stat.S_ISDIR(st.st_mode):
+            os.mkdir(tp, stat.S_IMODE(st.st_mode) & 0o755 | 0o700)
+            copy(sp, tp, r + "/")
+        elif stat.S_ISREG(st.st_mode):
+            with os.fdopen(os.open(sp, os.O_RDONLY | os.O_NOFOLLOW), "rb") as fin, \
+                 os.fdopen(os.open(tp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                   stat.S_IMODE(st.st_mode) & 0o755 | 0o600), "wb") as fout:
+                shutil.copyfileobj(fin, fout)
+        else:
+            left.append(r)
+
+copy(src, target, "")
+for name in RESERVED:
+    if os.path.lexists(os.path.join(target, name)):
+        shutil.rmtree(target)
+        say("reserved " + name)
+for r in left:
+    print("akh-copy: left out " + esc(r))
+say("ok")
 EOF
 ```
 
@@ -639,6 +721,7 @@ Not installed: <repo_url> served commit <actual> where the catalog pins <sha>, s
 Not installed: <slug> is pinned to a commit, and installing a pinned skill needs git, which this computer does not have. Install git and run the install again.   (the no-git line)
 Not installed: the catalog entry for <slug> has a <repo_url | skill_path> that this client does not pass to a command, so nothing was run. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the argument-rule line; `unreadable` gives the same line naming its catalog entry)
 Not installed: git could not get <repo_url>, so nothing was written. If it is a SLAC-internal repository, run gh auth login and see https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access.   (the clone-error line; the access sentence only when visibility is internal, and also after akh-pin: fetch-failed for an internal skill)
+Not installed: <skill_path> in <repo_url> passes through a symbolic link, which /agent-knowledge-hub never follows, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the linked-path line)
 Not installed: <skill_path> is not in <repo_url>, so nothing was written. Tell the skill's submitter, or flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the missing-path line)
 Left out: a <command | agent> of <slug> whose file name holds characters /agent-knowledge-hub does not pass to a command. Tell the skill's submitter.   (the left-out-component line)
 Left out: <path>, a symbolic link <listed as an agent | listed as a command | in the skill folder>, which /agent-knowledge-hub never reads or copies from a skill. If <slug> needs it, tell the skill's submitter.
@@ -866,12 +949,12 @@ Scan `~/.claude/skills/` and print each skill's slug, version, name, and descrip
 1. If `<base>/skills/<slug>/` exists and holds no `.installed-manifest.json`, stop with Install's line for a folder /agent-knowledge-hub did not install, and remove nothing.
 2. Read the old install: its `.installed-manifest.json`, its `plugin.json`, and every `<base>/skills/<slug>/.akh-mcp/<name>.json`.
 3. Run Install steps 1 to 3 for the new version. If one fails, stop: the old install stays as it was.
-4. Remove step: without asking, delete what Remove deletes, under the same rule.
+4. Remove step: without asking, with `--workspace` run `akh-workspace-exclude` with `remove`, then run `akh-remove`, as Remove does.
 5. Run Install from step 4 on the new clone.
 
 Print Install's closing message, with `Updated <slug> v<old> → v<new>` as the success line. The remove step's lines follow the left-out lines and come before the lead-in:
 
-- The not-removed line for each manifest entry left in place.
+- The not-removed line for each `akh-remove: kept` entry.
 - When the old manifest has `mcp_servers`: the still-set-up line for each name in it that the new version gives no command, because it no longer lists the server or refuses it under Install's server rules.
 - When the old manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name in the old `plugin.json`'s `mcp-servers` list that matches the server-name pattern, whether or not the new version lists it.
 
@@ -888,12 +971,56 @@ If the new version fails Install's filesystem test, print the `Not updated:` lin
 Confirm with the user, then:
 
 1. Read `<base>/skills/<slug>/.installed-manifest.json` and the installed `plugin.json`. With `--workspace`, run `akh-workspace-exclude` with `<action>` replaced by `remove` now, before anything is deleted.
-2. For each entry in the manifest's `commands` and `agents`, read an absolute path by its part after the last `/.claude/`. Delete `<base>/<entry>` only when the entry's first part is `agents` or `commands`, no part is empty, `.` or `..`, it names a regular file, not a symbolic link or a folder, and `realpath` of it begins with `realpath <base>` followed by `/`. Leave every other entry in place, including an absolute path with no `/.claude/` in it.
-3. Delete `<base>/skills/<slug>`, as Install says to delete it.
+2. Run the `akh-remove` command below. It deletes each manifest entry the rule allows, then `<base>/skills/<slug>`, and prints `akh-remove: kept <entry>` for each entry it left in place. The rule: an entry is read by its part after the last `/.claude/`, and deleted only when its first part is `agents` or `commands`, every part holds only letters, digits, `.`, `_` and `-` and is not `.` or `..`, it names a regular file, not a symbolic link or a folder, and its real path lies inside `<base>`. A skill folder that is a symbolic link loses only the link, and its manifest is not read.
+
+```sh
+python3 -I - '<base>' '<slug>' <<'EOF'
+# akh-remove: delete the files a skill's manifest lists and its folder, keeping any entry the rule does not allow, and print each one kept
+import json, os, re, shutil, stat, sys
+base, slug = sys.argv[1], sys.argv[2]
+real = os.path.realpath(base)
+skill = os.path.join(base, "skills", slug)
+
+def esc(s):
+    return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
+
+try:
+    st = os.lstat(skill)
+except FileNotFoundError:
+    st = None
+entries = []
+if st is not None and stat.S_ISDIR(st.st_mode):
+    try:
+        with open(os.path.join(skill, ".installed-manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        entries = [e for e in m.get("commands", []) + m.get("agents", []) if isinstance(e, str)]
+    except Exception:
+        entries = []
+for e in entries:
+    rel = e.rsplit("/.claude/", 1)[1] if "/.claude/" in e else e
+    parts = rel.split("/")
+    path = os.path.join(base, rel)
+    allowed = (len(parts) > 1 and parts[0] in ("agents", "commands")
+               and all(re.fullmatch(r"[A-Za-z0-9._-]+", p) and p not in (".", "..") for p in parts))
+    try:
+        allowed = allowed and stat.S_ISREG(os.lstat(path).st_mode)
+    except OSError:
+        allowed = False
+    if allowed and os.path.realpath(path).startswith(real + os.sep):
+        os.unlink(path)
+    else:
+        print("akh-remove: kept " + esc(e))
+if st is not None and stat.S_ISLNK(st.st_mode):
+    os.unlink(skill)
+elif st is not None:
+    shutil.rmtree(skill)
+print("akh-remove: done")
+EOF
+```
 
 Then print, inside one fenced code block and with Install's escapes:
 
-- The not-removed line for each entry left in place.
+- The not-removed line for each `akh-remove: kept` entry.
 - The still-set-up line for each name in the manifest's `mcp_servers`.
 - When the manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name in the installed `plugin.json`'s `mcp-servers` list that matches the server-name pattern. Print no line for any other name.
 

@@ -750,6 +750,15 @@ class TestWorkspaceBase:
         assert result.stdout.strip() == "akh-workspace: refused home"
         assert not (home / ".claude").exists()
 
+    def test_nothing_is_made_when_a_later_folder_is_refused(self, tmp_path):
+        ws, elsewhere = tmp_path / "proj", tmp_path / "elsewhere"
+        (ws / ".claude").mkdir(parents=True)
+        elsewhere.mkdir()
+        (ws / ".claude" / "commands").symlink_to(elsewhere)
+        result = run_marked("akh-workspace-base", tmp_path, cwd=ws, mode="make")
+        assert result.stdout.strip() == "akh-workspace: refused folder"
+        assert not (ws / ".claude" / "skills").exists()
+
     @pytest.mark.parametrize("layout", ["claude-link", "skills-link", "claude-file"])
     def test_a_link_or_a_file_in_place_of_a_folder_is_refused(self, tmp_path, layout):
         ws, elsewhere = tmp_path / "proj", tmp_path / "elsewhere"
@@ -803,6 +812,28 @@ class TestWorkspaceModes:
         assert result.returncode == 0, result.stderr
         assert not marker.exists()
         assert mode(base / name) == 0o644
+
+    def test_only_write_is_cleared(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        manifest(base, "x")
+        secret = base / "skills" / "x" / "secret"
+        secret.write_text("x")
+        _os.chmod(secret, 0o600)
+        _os.chmod(base / "skills" / "x", 0o700)
+        run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x")
+        assert mode(secret) == 0o600 and mode(base / "skills" / "x") == 0o700
+
+    def test_a_skill_folder_that_is_a_link_is_reported_and_not_walked(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        (base / "skills").mkdir(parents=True)
+        victim = tmp_path / "victim"
+        victim.mkdir()
+        (victim / "f").write_text("x")
+        _os.chmod(victim / "f", 0o666)
+        (base / "skills" / "x").symlink_to(victim)
+        result = run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x")
+        assert result.stdout.strip() == f"akh-workspace: foreign {base / 'skills' / 'x'}"
+        assert mode(victim / "f") == 0o666
 
     def test_a_folder_holding_files_of_others_is_left_alone(self, tmp_path):
         base = tmp_path / "proj" / ".claude"
@@ -894,6 +925,20 @@ class TestWorkspaceExclude:
         installed(base)
         r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
         assert r.stdout.strip() == "akh-workspace: not in git"
+
+    def test_an_exclude_file_that_is_not_utf8_keeps_its_bytes(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        info = repo / ".git" / "info" / "exclude"
+        info.write_bytes(b"/caf\xe9/\n")
+        base = repo / ".claude"
+        installed(base)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: excluded /.claude/skills/x/"
+        assert info.read_bytes() == b"/caf\xe9/\n/.claude/skills/x/\n"
+        run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
+        assert info.read_bytes() == b"/caf\xe9/\n"
 
     def test_a_linked_exclude_file_is_not_written(self, tmp_path):
         repo = tmp_path / "repo"
@@ -1030,6 +1075,7 @@ def test_home_paths_are_listed(tmp_path):
     (skill / "SKILL.md").write_text("Run ${HOME}/.claude/skills/x/run.sh first.\n")
     (skill / "docs" / "tilde.md").write_text("See ~/.claude/skills/x\n")
     (skill / "docs" / "home.md").write_text("PATH=$HOME/.claude/skills/x:$PATH\n")
+    (skill / "docs" / "quoted.md").write_text('sh "$HOME"/.claude/skills/x/run.sh\n')
     (skill / "docs" / "relative.md").write_text("Run .claude/skills/x/run.sh from the project.\n")
     (skill / "docs" / "other.md").write_text("Run ${HOME}/.claude/skills/xy/run.sh.\n")
     (base / "commands").mkdir()
@@ -1038,7 +1084,7 @@ def test_home_paths_are_listed(tmp_path):
     result = run_marked("akh-home-paths", tmp_path, base=str(base), slug="x")
     assert sorted(result.stdout.strip().splitlines()) == sorted(
         str(p) for p in (skill / "SKILL.md", skill / "docs" / "tilde.md", skill / "docs" / "home.md",
-                         base / "commands" / "c.md"))
+                         skill / "docs" / "quoted.md", base / "commands" / "c.md"))
 
 
 WORKSPACE_LINES = [
@@ -1051,9 +1097,9 @@ WORKSPACE_LINES = [
     'claude mcp add-json --scope local <name> "$(cat \'<base>/skills/<slug>/.akh-mcp/<name>.json\')"',
     "Changed since the last install of <slug>. If you added it to this workspace before, run this from the workspace first: claude mcp remove --scope local <name>",
     "<slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.",
-    "Not installed: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.",
-    "Not installed: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or install without --workspace.",
-    "Not installed: this workspace's .claude/ or .claude/skills/ is a link, is not a folder, is not yours, or could not be made, so nothing was written.",
+    "Stopped: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.",
+    "Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or run the command without --workspace.",
+    "Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder, is a link, is not a folder, is not yours, or could not be made, so nothing was written.",
     "Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.",
 ]
 
@@ -1123,6 +1169,21 @@ class TestComponentCheck:
         assert lines == ["akh-component: refused command"]
         assert not marker.exists()
 
+    @pytest.mark.parametrize("name", ["sub/etc/passwd", "sub", "-rf.md", "commands/-x.md", "commands/.hidden.md"])
+    def test_a_path_through_a_link_or_starting_with_a_dash_or_dot_is_refused(self, tmp_path, name):
+        root = tmp_path / "repo" / "plug"
+        root.mkdir(parents=True)
+        (root / "sub").symlink_to("/")
+        lines = run_component_check(tmp_path, {"commands": [name]})
+        assert lines == ["akh-component: refused command"]
+
+    def test_a_link_inside_the_plugin_root_is_not_followed_either(self, tmp_path):
+        root = tmp_path / "repo" / "plug"
+        (root / "commands").mkdir(parents=True)
+        (root / "commands" / "a.md").write_text("x")
+        (root / "alias").symlink_to(root / "commands")
+        assert run_component_check(tmp_path, {"commands": ["alias/a.md"]}) == ["akh-component: refused command"]
+
     def test_an_agent_folder_entry_with_a_bad_name_is_refused(self, tmp_path):
         lines = run_component_check(tmp_path, {"agents": "agents"}, files=["agents/ok.md", "agents/b'd.md"])
         assert lines == ["akh-component: refused agent", "akh-component: ok agent agents/ok.md"]
@@ -1136,7 +1197,7 @@ class TestComponentCheck:
 
 
 MORE_LINES = [
-    "Not installed: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too. Run chmod go-w <path> and install again.",
+    "Stopped: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too, and nothing was written. Run chmod go-w <path> and run the command again.",
     "Not installed: <path> in <slug>'s folder is a link, or belongs to another account, which /agent-knowledge-hub never writes, so the folder was removed and nothing else was written.",
     "Left out: a <command | agent> of <slug> whose file name holds characters /agent-knowledge-hub does not pass to a command. Tell the skill's submitter.",
 ]
@@ -1160,3 +1221,133 @@ def test_destructive_steps_name_the_base():
     for section in (update, remove):
         assert "<base>/skills/<slug>" in section
         assert "~/.claude/skills/<slug>" not in section
+
+
+
+def run_copy(tmp_path: Path, skill_path: str, umask: int | None = None):
+    target = tmp_path / "proj" / ".claude" / "skills" / "x"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return run_marked("akh-copy-skill", tmp_path, umask=umask, dir=str(tmp_path / "d"), skill_path=skill_path,
+                      target=str(target)), target
+
+
+class TestCopySkill:
+    def make_repo(self, tmp_path: Path) -> Path:
+        src = tmp_path / "d" / "repo" / "skills" / "x"
+        (src / "bin").mkdir(parents=True)
+        (src / "SKILL.md").write_text("x")
+        (src / "bin" / "run.sh").write_text("x")
+        _os.chmod(src / "bin" / "run.sh", 0o775)
+        (src / "x'$(touch akh-pwned)'").write_text("data")
+        for reserved in (".claude-plugin", ".akh-mcp"):
+            (src / reserved).mkdir()
+            (src / reserved / "f").write_text("x")
+        (src / ".installed-manifest.json").write_text("{}")
+        (src / "link").symlink_to("/etc/passwd")
+        (src / "dirlink").symlink_to(tmp_path)
+        _os.mkfifo(src / "fifo")
+        return src
+
+    def test_files_are_copied_and_links_reserved_names_and_specials_left_out(self, tmp_path):
+        self.make_repo(tmp_path)
+        result, target = run_copy(tmp_path, "/skills/x", umask=0o002)
+        lines = result.stdout.strip().splitlines()
+        assert lines[-1] == "akh-copy: ok", result.stderr
+        assert sorted(lines[:-1]) == sorted([
+            "akh-copy: left out .akh-mcp", "akh-copy: left out .claude-plugin", "akh-copy: left out .installed-manifest.json",
+            "akh-copy: left out dirlink", "akh-copy: left out fifo", "akh-copy: left out link"])
+        assert sorted(p.name for p in target.iterdir()) == ["SKILL.md", "bin", "x'$(touch akh-pwned)'"]
+        assert mode(target / "bin" / "run.sh") == 0o755 and mode(target / "SKILL.md") == 0o644
+        assert mode(target) == 0o755 and mode(target / "bin") == 0o755
+        assert not (tmp_path / "akh-pwned").exists()
+
+    def test_a_skill_path_through_a_link_is_refused(self, tmp_path):
+        repo = tmp_path / "d" / "repo"
+        repo.mkdir(parents=True)
+        (repo / "sub").symlink_to(tmp_path)
+        (tmp_path / "skills" / "x").mkdir(parents=True)
+        result, target = run_copy(tmp_path, "/sub/skills/x")
+        assert result.stdout.strip() == "akh-copy: refused path"
+        assert not target.exists()
+
+    def test_a_link_inside_the_clone_is_not_followed_either(self, tmp_path):
+        repo = tmp_path / "d" / "repo"
+        (repo / "real" / "x").mkdir(parents=True)
+        (repo / "real" / "x" / "SKILL.md").write_text("x")
+        (repo / "alias").symlink_to(repo / "real")
+        result, target = run_copy(tmp_path, "/alias/x")
+        assert result.stdout.strip() == "akh-copy: refused path"
+        assert not target.exists()
+
+    def test_a_missing_skill_path(self, tmp_path):
+        (tmp_path / "d" / "repo").mkdir(parents=True)
+        result, target = run_copy(tmp_path, "/nothere")
+        assert result.stdout.strip() == "akh-copy: missing"
+
+    def test_an_existing_target_is_not_written(self, tmp_path):
+        self.make_repo(tmp_path)
+        target = tmp_path / "proj" / ".claude" / "skills" / "x"
+        target.mkdir(parents=True)
+        result, _ = run_copy(tmp_path, "/skills/x")
+        assert result.stdout.strip() == "akh-copy: exists"
+        assert list(target.iterdir()) == []
+
+
+def run_remove(tmp_path: Path, base: Path, slug: str = "x"):
+    return run_marked("akh-remove", tmp_path, base=str(base), slug=slug).stdout.strip().splitlines()
+
+
+class TestRemove:
+    def test_listed_files_and_the_skill_folder_are_deleted(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        installed(base, commands=["commands/c.md"], agents=["agents/a.md"])
+        assert run_remove(tmp_path, base) == ["akh-remove: done"]
+        assert not (base / "commands" / "c.md").exists() and not (base / "agents" / "a.md").exists()
+        assert not (base / "skills" / "x").exists()
+
+    def test_an_entry_from_an_earlier_client_is_read_after_its_last_claude(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        installed(base, commands=["commands/c.md"])
+        manifest(base, "x", commands=["/somewhere/.claude/commands/c.md"])
+        assert run_remove(tmp_path, base) == ["akh-remove: done"]
+        assert not (base / "commands" / "c.md").exists()
+
+    def test_a_hostile_entry_is_kept_and_never_reaches_a_shell(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        name = "commands/x'$(touch akh-pwned)'.md"
+        installed(base, commands=[name])
+        assert run_remove(tmp_path, base) == ["akh-remove: kept commands/x'$(touch akh-pwned)'.md", "akh-remove: done"]
+        assert (base / name).exists() and not (tmp_path / "akh-pwned").exists()
+
+    def test_an_entry_through_a_link_or_outside_the_base_is_kept(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "c.md").write_text("mine")
+        installed(base, agents=["agents/a.md"])
+        (base / "commands").symlink_to(outside)
+        manifest(base, "x", commands=["commands/c.md"], agents=["agents/a.md", "agents/../../escape.md", "skills/y"])
+        lines = run_remove(tmp_path, base)
+        assert lines == ["akh-remove: kept commands/c.md", "akh-remove: kept agents/../../escape.md",
+                         "akh-remove: kept skills/y", "akh-remove: done"]
+        assert (outside / "c.md").read_text() == "mine"
+
+    def test_a_skill_folder_that_is_a_link_loses_only_the_link(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        (base / "skills").mkdir(parents=True)
+        victim = tmp_path / "victim"
+        victim.mkdir()
+        (victim / "keep").write_text("x")
+        (base / "skills" / "x").symlink_to(victim)
+        assert run_remove(tmp_path, base) == ["akh-remove: done"]
+        assert not (base / "skills" / "x").is_symlink() and (victim / "keep").exists()
+
+
+def test_fixed_commands_do_the_copy_and_the_deletes():
+    text = skill_text()
+    install = text.split("### Install\n", 1)[1].split("\n### ", 1)[0]
+    update = text.split("### Update", 1)[1].split("\n### ", 1)[0]
+    remove = text.split("### Remove", 1)[1].split("\n### ", 1)[0]
+    assert "akh-copy-skill" in install
+    assert "akh-remove" in update and "akh-remove" in remove
+    assert "akh-workspace-exclude" in update

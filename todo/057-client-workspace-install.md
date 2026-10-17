@@ -127,3 +127,28 @@ the normalised server check, `akh-mcp-file`'s umask) and each break failed a tes
 
 **Kept, as a known cost:** an item confirmed with pin `none` installs its repository's current default
 branch (ADR-U44 › Consequences).
+
+### Problem: the re-review of the fixes, 2026-10-16
+**Encountered:** a combined code and security re-review of `de45bd7..6c2423a`
+**Root cause and solution, each with a test that failed before its fix:**
+
+- **Medium: manifest entries still reached a shell** in Remove, Update and the foreign cleanup, which
+  composed their deletes; a repository can commit a hostile manifest under `.claude/skills/`
+  (proven). The fixed `akh-remove` reads the manifest and deletes only regular files whose real path
+  lies inside the base, keeping and reporting every other entry; all three steps use it.
+- **Medium: a path through a link copied any readable file** into the install, made world-readable by
+  the modes step (proven with `sub -> /`). `akh-component-check` and the new `akh-copy-skill` refuse a
+  path with a symbolic link in any part or one that resolves outside its root, and the modes step
+  clears write bits only, never adding read.
+- **Medium: the folder copy was composed by the model.** `akh-copy-skill` copies without a shell,
+  leaves out links, special files and the reserved names, refuses an existing target, and runs the
+  filesystem test.
+- **Low:** the modes step stops at a skill folder that is a link (proven to walk it before); the base
+  command checks all four folders before making any (proven to leave `skills/` behind); refusal lines
+  read "Stopped:" and name all four folders; lines naming a command carry `--workspace`; Update runs
+  the exclude removal; a non-UTF-8 exclude file keeps its bytes (proven to crash); `"$HOME"` is
+  matched; a path part may not start with `-` or `.`.
+- **Low, documented:** the workspace folder itself may be group-writable (ADR-U44 › Consequences).
+
+458 + 34 = 492 client tests pass after this round; dropping each new link check, the remove rule
+or the write-only mode change fails a test.

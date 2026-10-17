@@ -49,6 +49,9 @@ development servers use dex-dev tokens, which only the development catalog accep
   part, before any command takes one. The same check closes that exposure for user installs, whose
   agent checks took agent paths unchecked. The workspace commands take no placeholder that carries
   text from a skill; they read the manifest themselves.
+- **Fixed commands copy and delete.** The skill folder is copied, and `remove`, `update` and a
+  failed install delete files, with fixed commands that read the manifest and the clone themselves,
+  never follow a link, and delete only regular files whose real path lies inside the base.
 - **No window for other accounts.** Commands the model composes to write under a workspace base start
   with `umask 022`, `akh-mcp-file` sets its own umask, and the base command refuses a `.claude/`
   folder that is a link, belongs to another account or that other accounts can write, and the home
@@ -83,5 +86,7 @@ development servers use dex-dev tokens, which only the development catalog accep
   unpinned skill does; a dialog that offers such items has to say so.
 - A skill whose text names `~/.claude/skills/<slug>/` works only in part from a workspace install;
   the closing message says which files name it.
-- A workspace install's files sit in the user's working tree. Anyone who can write that tree could
-  change them, as they could already change the tree's code.
+- A workspace install's files sit in the user's working tree. Anyone who can write that tree, a
+  group project folder of mode 2775 among them, could change or replace them, as they could already
+  change the tree's code and project settings; the client checks the `.claude/` folders, not the
+  workspace itself.

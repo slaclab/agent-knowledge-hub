@@ -1,7 +1,7 @@
 # TODO #057 — The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; four review rounds done and their findings fixed
+> **Status:** 🏁 Implementation Done — client 2.4.1 on `main`; five review rounds done and their findings fixed
 > **Branch:** `feat/057-client-workspace-install`
 > **PR:** —
 > **Created:** 2026-10-16
@@ -208,3 +208,26 @@ it would have reported every workspace as not in git. It now uses `stdout`/`stde
 
 The two client test files pass, 511 tests, after this round; each fix of the round fails a test when
 removed.
+
+### Problem: the fifth review, after the merge, 2026-10-17
+**Encountered:** a review of `1157b23` and of every route from skill text to a command line, a write
+or a delete
+**Root cause:** the remaining findings sat in steps the model still composed from text a skill or a
+repository controls.
+**Solution, client 2.4.1, each with a test that failed before its fix:**
+
+- **Medium: a link under a workspace's `.claude/commands/` sent a command or agent write outside the
+  install** (proven). `akh-copy-component` writes each file flat into `<base>/commands/` or
+  `<base>/agents/`, opening the folder without following a link, creating the file with `O_EXCL`; the
+  modes step reaches each written entry by descriptor and reports one behind a link.
+- **Medium: server names in a forged manifest reached a printed `claude mcp remove` command.**
+  `akh-remove` prints `server <name>` only for names that fit the server-name pattern and a kept-server
+  line for any other; `akh-server-names` checks the names in `plugin.json` before any reaches
+  `akh-mcp-file`; Update saves the old server configurations with `akh-old-servers`, under checked
+  names, and `akh-mcp-file` decides the "Changed" line itself.
+- **Low:** the GitHub Contents API fallback is gone, so no git stops the install; Install, Update and
+  Rate refuse a non-catalog slug first; `list` runs through `akh-list`; the tree check takes file names
+  that are not UTF-8.
+
+All 15 embedded commands compiled and ran on Python 3.6.8 on sdfiana008, and the client test file
+passes, 337 tests.

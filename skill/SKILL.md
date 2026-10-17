@@ -139,7 +139,7 @@ def manifest():
         m = json.loads(data) if len(data) <= 1 << 20 else None
     except Exception:
         return None
-    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents", "mcp_servers")):
         return None
     return m
 
@@ -159,6 +159,33 @@ def tidy(path, report=True):
         st = os.fstat(fd)
         if st.st_uid != uid or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
             return foreign(path) if report else None
+        os.fchmod(fd, stat.S_IMODE(st.st_mode) & 0o755)
+    finally:
+        os.close(fd)
+
+def open_inside(entry):
+    """A descriptor for an entry below the base, opening every folder on the way without following a link, or None."""
+    fd = os.open(os.path.realpath(base), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        parts = entry.split("/")
+        for part in parts[:-1]:
+            inner = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = inner
+        return os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+def tidy_entry(entry, report=True):
+    fd = open_inside(entry)
+    if fd is None:
+        return foreign(os.path.join(base, entry)) if report else None
+    try:
+        st = os.fstat(fd)
+        if st.st_uid != uid or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
+            return foreign(os.path.join(base, entry)) if report else None
         os.fchmod(fd, stat.S_IMODE(st.st_mode) & 0o755)
     finally:
         os.close(fd)
@@ -185,12 +212,11 @@ for root, dirs, names in os.walk(skill):
         elif name in names:
             tidy(path)
 for entry in sorted(written):
-    tidy(os.path.join(base, entry))
+    tidy_entry(entry)
     parts = entry.split("/")
     for i in range(len(parts) - 1, 0, -1):
-        folder = os.path.join(base, *parts[:i])
-        if only_written(folder):
-            tidy(folder, report=False)
+        if only_written(os.path.join(base, *parts[:i])):
+            tidy_entry("/".join(parts[:i]), report=False)
 EOF
 ```
 
@@ -231,7 +257,7 @@ def manifest():
         m = json.loads(data) if len(data) <= 1 << 20 else None
     except Exception:
         return None
-    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents", "mcp_servers")):
         return None
     return m
 
@@ -298,7 +324,7 @@ def manifest():
         m = json.loads(data) if len(data) <= 1 << 20 else None
     except Exception:
         return None
-    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents", "mcp_servers")):
         return None
     return m
 
@@ -344,18 +370,19 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 `/agent-knowledge-hub install <slug>`
 `/agent-knowledge-hub install --workspace <slug>`
 
-1. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Save the skill's catalog entry with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'`, then run the `akh-member-check` command under Argument check below. Go on only when it prints `akh-member: ok …`, and use the `repo_url`, `skill_path` and `pin` that line prints, never values read from the entry yourself. `akh-member: refused pinned_commit_sha` stops with the bad-pin line, any other `refused` or `unreadable` with the argument-rule line, and both stop before any other command runs.
+1. Refuse a `<slug>` outside lowercase letters, digits and `-` with the slug line, before it goes into any command. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Save the skill's catalog entry with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'`, then run the `akh-member-check` command under Argument check below. Go on only when it prints `akh-member: ok …`, and use the `repo_url`, `skill_path` and `pin` that line prints, never values read from the entry yourself. `akh-member: refused pinned_commit_sha` stops with the bad-pin line, any other `refused` or `unreadable` with the argument-rule line, and both stop before any other command runs.
 2. Get the skill's files into `<dir>/repo`, then read and copy them only from there, and never read, write or copy a symbolic link from it.
    - **Pinned skill** (`pin` is not `none`): run the `akh-pinned-fetch` command under Pinned fetch below. Its last line decides: `akh-pin: ok` goes on to step 3, and `akh-pin: fetch-failed` or `akh-pin: mismatch <actual>` deletes `<dir>` and stops with the matching line, with nothing written. Never get a pinned skill any other way: no `git clone`, no checkout of `FETCH_HEAD` or of a branch, and no GitHub Contents API. When `git` is unavailable, stop with the no-git line.
-   - **Unpinned skill**: run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0 git clone --depth 1 '<repo_url>' '<dir>/repo'`. Fall back to the GitHub Contents API if git is unavailable, writing into `<dir>/repo`. If the clone fails, stop with the clone-error line.
+   - **Unpinned skill**: run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= GCM_INTERACTIVE=0 git clone --depth 1 '<repo_url>' '<dir>/repo'`. When `git` is unavailable, stop with the no-git line; never fetch files another way. If the clone fails, stop with the clone-error line.
    - The three variables make git fail instead of waiting for a password when the repository cannot be read: git asks an askpass program before the terminal, and Git Credential Manager prompts in its own window. A credential a helper already stores still works.
    - The skill folder is `<dir>/repo<skill_path>`. Run `akh-copy-skill` with `<step>` replaced by `check` and its other placeholders as Install step 4 gives them: `akh-copy: missing` stops with the missing-path line, `akh-copy: refused path` with the linked-path line, `akh-copy: refused tree` with the deep-tree line, and `akh-copy: refused slug` with the slug line, before anything is written or removed; any other output but `akh-copy: ok` stops with the copy-failed line.
 3. Read `plugin.json` (or `.claude-plugin/plugin.json`). The directory that holds it is the plugin root. Check `compatible_platforms` — warn if `claude-code` is not listed. Then run the `akh-component-check` command under Component check below, with `<dir>` replaced by the install's directory and `<plugin.json>` by that file's path. In every later command, use only the command and agent paths it prints after `ok`; a refused one is left out, with the left-out-component line. `akh-component: refused root` stops the install with the linked-path line, and `akh-component: unreadable` with the argument-rule line.
 4. Check the skill folder, then install components, enforcing path-prefix security on every write:
    - **Folder checks, before anything is written.** If `~/.claude/skills/<slug>/` holds `.installed-manifest.json`, the skill is already installed: stop with the already-installed line. If it exists without that file, stop with the line for a folder /agent-knowledge-hub did not install. Write nothing in either case.
    - `skills` → run the `akh-copy-skill` command under Folder copy below, with `<step>` replaced by `copy`, `<target>` by `<base>/skills/<slug>`, `<skill_path>` by the `skill_path` the member check printed, and `<dir>` by the install's directory. It copies the skill folder without a shell, leaving out `.claude-plugin/`, `.installed-manifest.json` and `.akh-mcp/` from the source and every symbolic link and special file in it, and refuses a skill path that passes through a symbolic link. `akh-copy: ok` goes on; each `akh-copy: left out <name>` line before it gives the left-out line for that name, the reserved-name form for the three names and the symbolic-link form for any other. `akh-copy: exists` stops with the existing-folder line, `akh-copy: reserved <name>` with the filesystem-test line, `akh-copy: failed partial` with the partial-copy line, and any other output with the copy-failed line; but for `failed partial`, the command has removed what it wrote. In update, a copy that stops here prints the remove step's lines after its stop line, as the filesystem test's `Not updated:` line does.
-   - `commands` → `~/.claude/commands/<file>`. Leave out a command file that is a symbolic link, and one whose `~/.claude/commands/<file>` already exists and is not a file this skill's manifest records; never replace it.
-   - `agents` → `~/.claude/agents/<file>`, under the agent rules below.
+   - `commands` → for each command path `akh-component-check` printed after `ok`, run the `akh-copy-component` command under Component copy below, with `<kind>` replaced by `command` and `<rel>` by that path. It writes the file as `<base>/commands/<file name>`, never through a link and never over a file that exists.
+   - `agents` → for each agent path that passes the agent rules below, the same command with `<kind>` replaced by `agent`, which writes `<base>/agents/<file name>`.
+   - For both, `akh-component: wrote <entry>` gives the manifest entry `<entry>`; `akh-component: exists <entry>` leaves the file out, with the line for a command or agent file that already exists; `akh-component: refused folder` leaves it out with the workspace-folder line; and `akh-component: refused <kind>` with the left-out-component line.
    - `mcp-servers` → never added. Write each server's configuration under the server rules below, and show it in the closing message.
 5. Write `~/.claude/skills/<slug>/.installed-manifest.json` as `{"commands": [...], "agents": [...], "mcp_servers": [...]}`. `commands` and `agents` hold the files this install wrote, as paths relative to `~/.claude/` (for example `agents/reviewer.md`). `mcp_servers` holds the names of the servers whose block carries the add command; write the key even when the list is empty.
 6. Record the install event with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh POST /cli/api/me/installs/<slug> < /dev/null` (fire-and-forget; never aborts the install on failure, including when the user declines to run it).
@@ -453,6 +480,63 @@ for key, kind in (("commands", "command"), ("agents", "agent")):
 EOF
 ```
 
+#### Component copy
+
+```sh
+python3 -I - '<dir>' '<plugin.json>' '<base>' '<kind>' '<rel>' <<'EOF'
+# akh-copy-component: write one command or agent file, flat, into the base, never through a link and never over an existing file
+import os, re, shutil, stat, sys
+d, path, base, kind, rel = sys.argv[1:6]
+os.umask(0o022)
+root = os.path.dirname(path)
+
+def say(text):
+    print("akh-component: " + text)
+    sys.exit(0)
+
+if kind not in ("command", "agent"):
+    say("refused kind")
+seg = r"[A-Za-z0-9_][A-Za-z0-9._-]*"
+ok = bool(re.fullmatch(r"%s(/%s)*" % (seg, seg), rel))
+walk = root
+for part in rel.split("/") if ok else []:
+    walk = os.path.join(walk, part)
+    ok = ok and not os.path.islink(walk)
+if not ok or not os.path.realpath(os.path.join(root, rel)).startswith(os.path.realpath(root) + os.sep):
+    say("refused " + kind)
+folder, name = kind + "s", rel.split("/")[-1]
+try:
+    src = os.open(os.path.join(root, rel), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+except OSError:
+    say("refused " + kind)
+with os.fdopen(src, "rb") as fin:
+    if not stat.S_ISREG(os.fstat(fin.fileno()).st_mode):
+        say("refused " + kind)
+    top = os.open(os.path.realpath(base), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        try:
+            dfd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=top)
+        except FileNotFoundError:
+            os.mkdir(folder, 0o755, dir_fd=top)
+            dfd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=top)
+    except OSError:
+        say("refused folder")
+    finally:
+        os.close(top)
+    try:
+        out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dfd)
+    except FileExistsError:
+        say("exists %s/%s" % (folder, name))
+    except OSError:
+        say("refused folder")
+    finally:
+        os.close(dfd)
+    with os.fdopen(out, "wb") as fout:
+        shutil.copyfileobj(fin, fout)
+say("wrote %s/%s" % (folder, name))
+EOF
+```
+
 #### Folder copy
 
 ```sh
@@ -493,7 +577,7 @@ while todo:
     folder, depth = todo.pop()
     for name in os.listdir(folder):
         inner = os.path.join(folder, name)
-        if len(os.path.relpath(inner, src).encode()) > 1024:
+        if len(os.fsencode(os.path.relpath(inner, src))) > 1024:
             say("refused tree")
         if os.path.isdir(inner) and not os.path.islink(inner):
             if depth + 1 > 64:
@@ -651,8 +735,8 @@ An agent with no `tools` key gets every tool the session has; the closing messag
 
 For each entry in `plugin.json`'s `mcp-servers` list:
 
-1. **Name.** The entry's `name` must match the server-name pattern, `^[A-Za-z0-9][A-Za-z0-9_-]*$`. A name that more than one entry uses, compared without regard to case, gives no command to any of those entries.
-2. **Configuration and file.** For each entry that step 1 accepts, run the `akh-mcp-file` command below, with `<plugin.json>` replaced by the path of the `plugin.json` that Install step 3 read, `<name>` by the entry's name and `<slug>` by the skill's slug. Never build, write or edit the configuration file yourself.
+1. **Name.** Run the `akh-server-names` command after this list, with `<plugin.json>` replaced by the path of the `plugin.json` that Install step 3 read. A name must match the server-name pattern, `^[A-Za-z0-9][A-Za-z0-9_-]*$`, and a name that more than one entry uses, compared without regard to case, gives no command to any of those entries. `akh-server: no-command name <name>` and `akh-server: no-command shared <name>` give that server its no-command reason; `akh-server: unreadable` gives every server the reason for a file that does not match. Only a name the command prints after `akh-server: ok` ever goes into a command.
+2. **Configuration and file.** For each name step 1 printed after `ok`, run the `akh-mcp-file` command below, with `<plugin.json>` replaced by the path of the `plugin.json` that Install step 3 read, `<name>` by that name, `<slug>` by the skill's slug, and `<old>` by `<dir>/old`. Never build, write or edit the configuration file yourself.
 
    The command builds the configuration Claude Code takes. `type` comes from `transport`: `stdio`, `http` or `sse`, and `stdio` when `transport` is absent. For `stdio` it copies `command`, `args` (`[]` when absent) and `env`; for `http` and `sse`, `url` and `headers`. It leaves out every other field; name those fields in the closing message. It refuses an entry in each case the no-command reasons below list, except a name outside the pattern and a shared name, which step 1 handles. Unless the entry is marked `auth.type: slac-sso`, it writes the configuration to `~/.claude/skills/<slug>/.akh-mcp/<name>.json` as JSON, with every character outside U+0020 to U+007E escaped, never replacing a file that exists, and reads it back.
 3. **Result.** The command's exit status decides:
@@ -662,13 +746,41 @@ For each entry in `plugin.json`'s `mcp-servers` list:
    - **127:** `python3` could not be found. The server gets no command and no block, with the reason for a missing `python3`.
    - **Any other status:** the server gets no command and no block, with the reason for a file that does not match.
 
-   For exits 0 and 3, the lines before the last are the block's `Runs:`, `Connects to:`, `env` and `header` lines, already escaped. Put them in the block word for word, and never retype a value from them.
+```sh
+python3 -I - '<plugin.json>' <<'EOF'
+# akh-server-names: print each MCP server name in plugin.json that may go into a command, and the reason any other gets none
+import json, os, re, stat, sys
+def esc(s):
+    return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
+
+try:
+    with os.fdopen(os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), encoding="utf-8") as f:
+        assert stat.S_ISREG(os.fstat(f.fileno()).st_mode)
+        servers = json.loads(f.read(1 << 20)).get("mcp-servers", [])
+    assert isinstance(servers, list)
+except Exception:
+    print("akh-server: unreadable")
+    sys.exit(0)
+names = [str(e.get("name", "")) if isinstance(e, dict) else "" for e in servers]
+lower = [n.lower() for n in names]
+for n in names:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", n):
+        print("akh-server: no-command name " + esc(n))
+    elif lower.count(n.lower()) > 1:
+        print("akh-server: no-command shared " + esc(n))
+    else:
+        print("akh-server: ok " + n)
+EOF
+```
+
+
+   For exits 0 and 3, the lines before the last are the block's `Runs:`, `Connects to:`, `env` and `header` lines, already escaped. Put them in the block word for word, and never retype a value from them. A `changed: yes` line among them is not a block line: it gives the server's block its "Changed" line.
 4. **Block.** In the closing message, print one block for each server that gets a command and for each server marked `auth.type: slac-sso`, which gets its block without a command. A server refused in steps 1 to 3 gets no block, only its no-command line.
 
 The `akh-mcp-file` command:
 
 ```sh
-python3 -I - '<plugin.json>' '<name>' '<base>/skills/<slug>/.akh-mcp' <<'EOF'
+python3 -I - '<plugin.json>' '<name>' '<base>/skills/<slug>/.akh-mcp' '<old>' <<'EOF'
 # akh-mcp-file: builds one server's configuration from plugin.json, writes it, and prints its block lines
 import json, os, posixpath, re, stat, sys
 
@@ -689,7 +801,7 @@ def text_map(v):
 
 def main():
     os.umask(0o022)
-    path, name, folder = sys.argv[1:4]
+    path, name, folder, old = sys.argv[1:5]
     if not re.match(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z", name):
         sys.exit(2)
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), encoding="utf-8") as f:
@@ -757,6 +869,14 @@ def main():
         if json.load(f) != conf:
             os.remove(target)
             sys.exit(2)
+    try:
+        with os.fdopen(os.open(os.path.join(old, name + ".json"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK),
+                       encoding="ascii") as f:
+            previous = json.loads(f.read(8192)) if stat.S_ISREG(os.fstat(f.fileno()).st_mode) else None
+    except Exception:
+        previous = None
+    if previous is not None and previous != conf:
+        lines.append("changed: yes")
     done(0, "file: " + target, lines)
 
 try:
@@ -832,7 +952,7 @@ Not installed: <slug> is already installed, so nothing was written. To replace i
 Not installed: the catalog's pinned commit for <slug> is not a commit ID, so nothing was fetched. Report it at https://agent-knowledge-hub.slac.stanford.edu.   (the bad-pin line)
 Not installed: the pinned commit <sha> of <slug> could not be fetched from <repo_url>, so nothing was written. The repository may no longer have it; tell the skill's submitter.   (akh-pin: fetch-failed)
 Not installed: <repo_url> served commit <actual> where the catalog pins <sha>, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (akh-pin: mismatch)
-Not installed: <slug> is pinned to a commit, and installing a pinned skill needs git, which this computer does not have. Install git and run the install again.   (the no-git line)
+Not installed: installing <slug> needs git, which this computer does not have. Install git and run the install again.   (the no-git line)
 Not installed: the catalog entry for <slug> has a <repo_url | skill_path> that this client does not pass to a command, so nothing was run. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the argument-rule line; `unreadable` gives the same line naming its catalog entry)
 Not installed: git could not get <repo_url>, so nothing was written. If it is a SLAC-internal repository, run gh auth login and see https://agent-knowledge-hub.slac.stanford.edu/guides/slac-github-access.   (the clone-error line; the access sentence only when visibility is internal, and also after akh-pin: fetch-failed for an internal skill)
 Not installed: <skill_path> in <repo_url> passes through a symbolic link, which /agent-knowledge-hub never follows, so nothing was written. Flag the skill at https://agent-knowledge-hub.slac.stanford.edu/skills/<slug>.   (the linked-path line)
@@ -851,6 +971,7 @@ MCP server "<name>" from <slug> is still set up if you added it. To remove it: c
 MCP server "<name>" from <slug> is still set up in this workspace if you added it. To remove it, run this from the workspace: claude mcp remove --scope local <name>   (the still-set-up line, in a workspace install)
 MCP server "<name>" from <slug> may have been added by an earlier version of /agent-knowledge-hub, only for the directory that install ran in, or for the whole git repository that holds it. To remove it, run this from that directory: claude mcp remove --scope local <name>   (the earlier-client line)
 Not removed: <entry>, which the manifest of <slug> lists but which is not a file in ~/.claude/agents/ or ~/.claude/commands/, so it was left in place.   (the not-removed line)
+Not shown: the record of <slug> names a server as <name>, which is not a server name, so no command to remove it is given. claude mcp list shows every MCP server you have.   (the kept-server line)
 ```
 
 `<address>` is the file's address in the repository at the installed commit, `<repo_url>/blob/<commit>/<path>`. One sentence per key: `hooks` — "hooks runs commands or sends requests automatically."; `mcpServers` — "mcpServers connects MCP servers of its own."; `permissionMode` — "permissionMode changes which actions Claude may take without asking you."; any other key — "<key> is a setting /agent-knowledge-hub does not check."
@@ -1058,7 +1179,44 @@ Nothing to install: the list was empty.   (the empty-list line)
 `/agent-knowledge-hub list`
 `/agent-knowledge-hub list --workspace`
 
-Scan `~/.claude/skills/` and print each skill's slug, version, name, and description from frontmatter.
+Run `akh-workspace-base` with `find` for `--workspace`, then the `akh-list` command below, and print its lines without the `akh-list:` prefix. Never list the folder yourself: its names can come from a repository.
+
+```sh
+python3 -I - '<base>' <<'EOF'
+# akh-list: print each installed skill folder's slug and its SKILL.md version, name and description, escaped
+import os, re, stat, sys
+base = sys.argv[1]
+def esc(s):
+    return "".join(c if " " <= c <= "~" else ("\\u%04X" % ord(c) if ord(c) <= 0xFFFF else "\\u{%X}" % ord(c)) for c in s)
+
+folder = os.path.join(base, "skills")
+try:
+    names = sorted(os.listdir(folder))
+except OSError:
+    names = []
+for slug in names:
+    if not re.fullmatch(r"[a-z0-9-]{1,200}", slug) or os.path.islink(os.path.join(folder, slug)):
+        continue
+    try:
+        with os.fdopen(os.open(os.path.join(folder, slug, "SKILL.md"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK),
+                       "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                continue
+            text = f.read(65536).decode("utf-8", "replace")
+    except OSError:
+        continue
+    fields, lines = {}, text.split("\n")
+    if lines[0].strip() == "---":
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            m = re.match(r"(name|description|version):\s*(.*)", line)
+            if m and m.group(1) not in fields:
+                fields[m.group(1)] = m.group(2).strip().strip("\"'")
+    print("akh-list: %s | %s | %s | %s" % (slug, esc(fields.get("version", "")), esc(fields.get("name", "")),
+                                          esc(fields.get("description", ""))))
+EOF
+```
 
 ---
 
@@ -1066,19 +1224,54 @@ Scan `~/.claude/skills/` and print each skill's slug, version, name, and descrip
 `/agent-knowledge-hub update <slug>`
 `/agent-knowledge-hub update --workspace <slug>`
 
-1. If `<base>/skills/<slug>/` exists and holds no `.installed-manifest.json`, stop with Install's line for a folder /agent-knowledge-hub did not install, and remove nothing.
-2. Read the old install: its `.installed-manifest.json`, its `plugin.json`, and every `<base>/skills/<slug>/.akh-mcp/<name>.json`.
-3. Run Install steps 1 to 3 for the new version. If one fails, stop: the old install stays as it was.
+1. Refuse a `<slug>` outside lowercase letters, digits and `-` with the slug line. If `<base>/skills/<slug>/` exists and holds no `.installed-manifest.json`, stop with Install's line for a folder /agent-knowledge-hub did not install, and remove nothing.
+2. Make the install's directory with `mktemp -d` now, `<dir>` below, and save the old install's server configurations with the `akh-old-servers` command after these steps, with `<old>` replaced by `<dir>/old`. Read nothing else of the old install yourself: `akh-remove` reads its manifest, and `akh-server-names` its `plugin.json`, at `<base>/skills/<slug>/plugin.json`.
+3. Run Install steps 1 to 3 for the new version, in that `<dir>`. If one fails, stop: the old install stays as it was.
 4. Remove step: without asking, with `--workspace` run `akh-workspace-exclude` with `remove`, then run `akh-remove`, as Remove does.
 5. Run Install from step 4 on the new clone.
+
+```sh
+python3 -I - '<base>' '<slug>' '<old>' <<'EOF'
+# akh-old-servers: save the old install's server configurations under names that fit the server-name pattern, never through a link
+import json, os, re, stat, sys
+base, slug, old = sys.argv[1:4]
+if not re.fullmatch(r"[a-z0-9-]{1,200}", slug):
+    print("akh-old-server: refused slug")
+    sys.exit(0)
+folder = os.path.join(base, "skills", slug, ".akh-mcp")
+try:
+    names = sorted(os.listdir(folder)) if stat.S_ISDIR(os.lstat(folder).st_mode) else []
+except OSError:
+    names = []
+for fname in names:
+    m = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_-]*)\.json", fname)
+    if not m:
+        continue
+    try:
+        with os.fdopen(os.open(os.path.join(folder, fname), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                continue
+            data = f.read(4097)
+        if len(data) > 4096:
+            continue
+        conf = json.loads(data.decode("ascii"))
+    except Exception:
+        continue
+    os.makedirs(old, mode=0o700, exist_ok=True)
+    with open(os.path.join(old, fname), "w", encoding="ascii") as f:
+        f.write(json.dumps(conf, ensure_ascii=True))
+    print("akh-old-server: " + m.group(1))
+EOF
+```
+
 
 Print Install's closing message, with `Updated <slug> v<old> → v<new>` as the success line. The remove step's lines follow the left-out lines and come before the lead-in:
 
 - The not-removed line for each `akh-remove: kept` entry.
-- When the old manifest has `mcp_servers`: the still-set-up line for each name in it that the new version gives no command, because it no longer lists the server or refuses it under Install's server rules.
-- When the old manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name in the old `plugin.json`'s `mcp-servers` list that matches the server-name pattern, whether or not the new version lists it.
+- The still-set-up line for each `akh-remove: server <name>` that the new version gives no command, because it no longer lists the server or refuses it under Install's server rules, and the kept-server line for each `akh-remove: kept server`.
+- When the old manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name `akh-server-names` prints after `ok` for the old `plugin.json`, run before the remove step, whether or not the new version lists it.
 
-Compare each old `.akh-mcp/<name>.json` with the file Install's server rules write for the new version, as parsed JSON. When they differ, the server's block carries its "Changed" line.
+A server whose `akh-mcp-file` output holds `changed: yes` carries the "Changed" line in its block.
 
 If the new version fails Install's filesystem test, print the `Not updated:` line, then the remove step's lines, with the still-set-up line for every name in the old manifest's `mcp_servers`, because no version of the skill is then installed.
 
@@ -1113,7 +1306,7 @@ def manifest():
         m = json.loads(data) if len(data) <= 1 << 20 else None
     except Exception:
         return None
-    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents")):
+    if not isinstance(m, dict) or not all(isinstance(m.get(k, []), list) for k in ("commands", "agents", "mcp_servers")):
         return None
     return m
 
@@ -1141,7 +1334,7 @@ try:
     st = os.lstat(skill)
 except FileNotFoundError:
     st = None
-entries = []
+entries, m = [], None
 if st is not None and stat.S_ISDIR(st.st_mode):
     m = manifest()
     if m is None:
@@ -1155,6 +1348,11 @@ for e in entries:
                and all(re.fullmatch(r"[A-Za-z0-9._-]+", p) and p not in (".", "..") for p in parts))
     if not (allowed and unlink_inside(parts)):
         print("akh-remove: kept " + esc(str(e)))
+for n in (m or {}).get("mcp_servers", []):
+    if isinstance(n, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", n):
+        print("akh-remove: server " + n)
+    else:
+        print("akh-remove: kept server " + esc(str(n)))
 def remove_tree(top):
     """Delete the folder top and everything in it, never following a link, without recursion."""
     order, todo = [], [top]
@@ -1185,8 +1383,8 @@ EOF
 Then print, inside one fenced code block and with Install's escapes:
 
 - The not-removed line for each `akh-remove: kept` entry.
-- The still-set-up line for each name in the manifest's `mcp_servers`.
-- When the manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name in the installed `plugin.json`'s `mcp-servers` list that matches the server-name pattern. Print no line for any other name.
+- The still-set-up line for each `akh-remove: server <name>`, and the kept-server line for each `akh-remove: kept server`.
+- When the manifest has no `mcp_servers` key, which an earlier client wrote: the earlier-client line for each name `akh-server-names` prints after `ok` for the installed `plugin.json`, run before `akh-remove`. Print no line for any other name.
 
 Remove changes no MCP server. Install's server rules say when a printed command may run.
 
@@ -1195,7 +1393,7 @@ Remove changes no MCP server. Install's server rules say when a printed command 
 ### Rate
 `/agent-knowledge-hub rate <slug> <1-5>`
 
-Send `printf '{"value":%d}' <1-5> | sh ${CLAUDE_SKILL_DIR}/hub-request.sh POST /cli/api/skills/<slug>/rate`.
+Refuse a `<slug>` outside lowercase letters, digits and `-` with the slug line, and a rating that is not a single digit from 1 to 5. Send `printf '{"value":%d}' <1-5> | sh ${CLAUDE_SKILL_DIR}/hub-request.sh POST /cli/api/skills/<slug>/rate`.
 
 ---
 

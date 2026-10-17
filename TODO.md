@@ -57,3 +57,4 @@
 | [053](todo/053-sec-skill-install-sha-checkout-verification.md) | **SEC HIGH** — Verify post-checkout HEAD against the pinned SHA in skill install | ✅ Complete |
 | [056](todo/056-client-description-says-when-to-use.md) | The client's skill description says when to use it | ⬜ Open |
 | [057](todo/057-client-workspace-install.md) | The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog | 🏁 Implementation Done |
+| [058](todo/058-exact-install-compares-skill-path.md) | The exact install compares each skill's path, not only its repository and commit | ⬜ Open |

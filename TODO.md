@@ -55,3 +55,4 @@
 | [051](todo/051-client-confirms-mcp-servers-and-agents.md) | Client leaves MCP servers to the user and refuses agents it cannot vet | 🏁 Implementation Done |
 | [052](todo/052-prod-cli-route-reaches-backend.md) | Production `/cli` requests reach the backend | ✅ Complete |
 | [053](todo/053-sec-skill-install-sha-checkout-verification.md) | **SEC HIGH** — Verify post-checkout HEAD against the pinned SHA in skill install | ✅ Complete |
+| [056](todo/056-client-description-says-when-to-use.md) | The client's skill description says when to use it | ⬜ Open |

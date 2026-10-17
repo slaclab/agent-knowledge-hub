@@ -1,7 +1,7 @@
 """Tests for skill/hub-request.sh, the client's only reader of the S3DF token (#050).
 
-These tests never run the shipped helper. They run a copy in which exactly two lines differ:
-the origin constant points at a fake server on 127.0.0.1, and the real-home lookup points at a
+These tests never run the shipped helper. They run a copy in which exactly three lines differ:
+the two origin constants point at fake servers on 127.0.0.1, and the real-home lookup points at a
 temporary directory. A regressed refusal therefore cannot send the developer's real token to the
 production catalog, and the fake server never prints a header it received (#050, Open Design
 Question 1). The fake token is generated at run time, so no command line holds it.
@@ -30,8 +30,10 @@ SKILL_DIR = Path(__file__).resolve().parents[2] / "skill"
 HELPER = SKILL_DIR / "hub-request.sh"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 ORIGIN_LINE = "origin=https://agent-knowledge-hub.slac.stanford.edu"
+DEV_ORIGIN_LINE = "origin=https://agent-knowledge-hub-dev.slac.stanford.edu"
 HOME_LINE_PREFIX = "home=$(getent passwd"
 TOKEN_FILE = ".s3df-access-token"
+DEV_TOKEN_FILE = ".s3df-dev-access-token"
 
 
 def _shells() -> list[tuple[str, str]]:
@@ -147,21 +149,27 @@ def homes(tmp_path):
     return dirs
 
 
-def make_copy(tmp_path: Path, origin: str, real_home: str) -> Path:
-    """The test copy: the shipped helper with the origin and real-home lines replaced, nothing else."""
+def make_copy(tmp_path: Path, origin: str, real_home: str, dev_origin: str | None = None) -> Path:
+    """The test copy: the shipped helper with its two origin lines and the real-home line replaced,
+    nothing else. The development origin defaults to a closed local port, so no test reaches the
+    real development catalog."""
     out, changed = [], 0
+    dev_origin = dev_origin or f"http://127.0.0.1:{free_port()}"
     for line in HELPER.read_text().splitlines(keepends=True):
         stripped = line.strip()
         indent = line[: len(line) - len(line.lstrip())]
         if stripped == ORIGIN_LINE:
             out.append(f"{indent}origin={origin}\n")
             changed += 1
+        elif stripped == DEV_ORIGIN_LINE:
+            out.append(f"{indent}origin={dev_origin}\n")
+            changed += 1
         elif stripped.startswith(HOME_LINE_PREFIX):
             out.append(f"{indent}home={real_home}\n")
             changed += 1
         else:
             out.append(line)
-    assert changed == 2, "the test copy must differ from the shipped helper on exactly two lines"
+    assert changed == 3, "the test copy must differ from the shipped helper on exactly three lines"
     copy = tmp_path / "hub-request.sh"
     copy.write_text("".join(out))
     return copy
@@ -708,3 +716,45 @@ class TestShippedFiles:
     @pytest.mark.parametrize("line", FR7_LINES)
     def test_skill_md_carries_fr7_messages(self, line):  # FR-7
         assert line in SKILL_MD.read_text()
+
+
+# ---------------------------------------------------------------------------
+# #057 FR-5: the development catalog, chosen by AKH_INSTANCE=dev
+# ---------------------------------------------------------------------------
+
+@needs_proc
+@each_shell
+class TestInstance:
+    def test_dev_instance_sends_the_dev_token_to_the_dev_origin(self, shell, catalog, second, homes, tmp_path):
+        write_token(homes["real"])
+        dev = secrets.token_urlsafe(32)
+        (homes["real"] / DEV_TOKEN_FILE).write_text(dev + "\n")
+        copy = make_copy(tmp_path, f"http://127.0.0.1:{catalog.port}", str(homes["real"]),
+                         f"http://127.0.0.1:{second.port}")
+        result = run([shell, str(copy), "GET", "/cli/api/skills/summary"], clean_env(homes, AKH_INSTANCE="dev"))
+        assert result.returncode == 0
+        assert catalog.requests == []
+        assert len(second.requests) == 1
+        assert second.requests[0]["authorization"] == f"Bearer {dev}", "header mismatch (not printed)"
+
+    @pytest.mark.parametrize("value", ["", "prod", "DEV", "dev ", "staging"])
+    def test_any_other_value_uses_production(self, shell, catalog, second, homes, tmp_path, value):
+        token = write_token(homes["real"])
+        (homes["real"] / DEV_TOKEN_FILE).write_text(secrets.token_urlsafe(32) + "\n")
+        copy = make_copy(tmp_path, f"http://127.0.0.1:{catalog.port}", str(homes["real"]),
+                         f"http://127.0.0.1:{second.port}")
+        result = run([shell, str(copy), "GET", "/cli/api/skills/summary"], clean_env(homes, AKH_INSTANCE=value))
+        assert result.returncode == 0
+        assert second.requests == []
+        assert catalog.requests[0]["authorization"] == f"Bearer {token}", "header mismatch (not printed)"
+
+    def test_dev_instance_never_sends_the_production_token(self, shell, catalog, second, homes, tmp_path):
+        write_token(homes["real"])
+        write_token(homes["session"])
+        copy = make_copy(tmp_path, f"http://127.0.0.1:{catalog.port}", str(homes["real"]),
+                         f"http://127.0.0.1:{second.port}")
+        result = run([shell, str(copy), "GET", "/cli/api/skills/summary"], clean_env(homes, AKH_INSTANCE="dev"))
+        assert result.returncode == 3
+        assert catalog.requests == [] and second.requests == []
+        line = last_err(result)
+        assert str(homes["real"] / DEV_TOKEN_FILE) in line and str(homes["session"] / DEV_TOKEN_FILE) in line

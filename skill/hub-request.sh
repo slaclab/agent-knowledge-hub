@@ -3,9 +3,11 @@
 #
 # The token never appears in a process's arguments or in a file: it reaches curl on file
 # descriptor 3 through a pipe from the printf builtin, and every other command that touches it
-# reads it from the token file or a pipe. Requests go only to the production origin below, which
-# has no override, because anything that could change it (a variable, an argument) could be set
-# by text the model was steered by. A POST body comes on standard input; a GET reads none.
+# reads it from the token file or a pipe. Requests go only to one of the two origins below, the
+# production catalog or, when the environment holds AKH_INSTANCE=dev, its development instance.
+# Each origin takes its own token file, so a value steered text could set chooses only which of
+# the catalog's own instances gets that instance's token, never another host, and never the
+# production token anywhere but production. A POST body comes on standard input; a GET reads none.
 #
 # Exit statuses (skill/SKILL.md › Error handling depends on these):
 #   0  HTTP 2xx: body on stdout
@@ -19,21 +21,27 @@
 # The last line of stderr names the outcome, starting "agent-knowledge-hub:".
 #
 # Decision record: docs/adr/adr-u42-client-token-helper.md. Tests:
-# backend/tests/test_hub_request_helper.py, which run a copy with the origin and real-home lines
-# replaced, never this file.
+# backend/tests/test_hub_request_helper.py, which run a copy with the two origin lines and the
+# real-home line replaced, never this file. The development instance: #057.
 
 # Prologue, before anything else. Tracing and allexport off; functions an exported environment
 # could have defined in place of the commands below removed; every variable this script assigns
 # cleared, because one that arrives exported would carry the token into curl's environment.
 set +aeux
 unset -f printf test command umask ulimit getent id cut tr rm cat mktemp curl
-unset origin home tok f checked name code rc slug rest IFS
+unset origin tokfile home tok f checked name code rc slug rest IFS
 PATH=/usr/bin:/bin
 LC_ALL=C
 export PATH LC_ALL
 ulimit -c 0
 
 origin=https://agent-knowledge-hub.slac.stanford.edu
+tokfile=.s3df-access-token
+case ${AKH_INSTANCE-} in
+    dev)
+        origin=https://agent-knowledge-hub-dev.slac.stanford.edu
+        tokfile=.s3df-dev-access-token ;;
+esac
 
 refuse() {
     printf 'agent-knowledge-hub: refused %s\n' "$1" >&2
@@ -81,7 +89,7 @@ esac
 # the real home that fails the shape check is refused, not skipped.
 home=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)
 checked=
-for f in "${home:+$home/.s3df-access-token}" "${HOME:+$HOME/.s3df-access-token}"; do
+for f in "${home:+$home/$tokfile}" "${HOME:+$HOME/$tokfile}"; do
     case $f in "" | "$checked") continue ;; esac
     checked="${checked:+$checked, }$f"
     if test -f "$f"; then

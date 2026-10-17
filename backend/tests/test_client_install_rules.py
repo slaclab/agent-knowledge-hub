@@ -1210,6 +1210,16 @@ class TestComponentCheck:
                          **{"plugin.json": str(tmp_path / "repo" / ".claude-plugin" / "plugin.json")})
         assert out.stdout.strip() == "akh-component: refused root"
 
+    def test_a_plugin_json_that_is_a_link_is_refused(self, tmp_path):
+        shared = tmp_path / "shared.json"
+        shared.write_text(_json.dumps({"commands": ["c.md"]}))
+        root = tmp_path / "repo" / "plug"
+        root.mkdir(parents=True)
+        (root / "c.md").write_text("x")
+        (root / "plugin.json").symlink_to(shared)
+        out = run_marked("akh-component-check", tmp_path, dir=str(tmp_path), **{"plugin.json": str(root / "plugin.json")})
+        assert out.stdout.strip() == "akh-component: refused root"
+
     def test_unreadable_plugin_json(self, tmp_path):
         root = tmp_path / "repo"
         root.mkdir()
@@ -1316,25 +1326,16 @@ class TestCopySkill:
         assert r.stdout.strip().splitlines()[-1] == "akh-copy: ok", r.stderr
         assert mode(target.parent) == 0o755
 
-    def test_a_deep_tree_is_copied(self, tmp_path):
+    def test_a_tree_at_the_depth_limit_is_copied(self, tmp_path):
         src = tmp_path / "d" / "repo" / "skills" / "x"
         src.mkdir(parents=True)
-        deep = str(src)
-        for _ in range(1100):  # deeper than Python's recursion limit; makedirs would recurse per level
-            deep = _os.path.join(deep, "a")
-            _os.mkdir(deep)
-        with open(_os.path.join(deep, "f"), "w") as f:
-            f.write("x")
+        (src / "SKILL.md").write_text("x")
+        deep = src.joinpath(*["a"] * 64)
+        deep.mkdir(parents=True)
+        (deep / "f").write_text("x")
         result, target = run_copy(tmp_path, "/skills/x")
         assert result.stdout.strip() == "akh-copy: ok", result.stderr
-        copied = _os.path.join(str(target), *["a"] * 1100)
-        with open(_os.path.join(copied, "f")) as f:
-            assert f.read() == "x"
-        for top in (deep, copied):  # tmp_path's own cleanup would recurse too
-            _os.unlink(_os.path.join(top, "f"))
-            for _ in range(1100):
-                _os.rmdir(top)
-                top = _os.path.dirname(top)
+        assert target.joinpath(*["a"] * 64, "f").read_text() == "x"
 
     def test_a_failed_copy_leaves_nothing(self, tmp_path):
         src = self.make_repo(tmp_path)
@@ -1490,3 +1491,111 @@ class TestSlugsAndManifests:
         run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
         run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
         assert info.read_bytes() == b"/a/\r\n/b\rc/\r\n"
+
+
+
+@each_python
+def test_mcp_file_never_reads_a_linked_plugin_json(python, tmp_path):
+    shared = tmp_path / "shared.json"
+    shared.write_text(_json.dumps({"name": "s", "mcp-servers": [{"name": "akh-evil", "command": "sh", "args": ["-c", "id"]}]}))
+    bindir = tmp_path / "pybin"
+    bindir.mkdir(exist_ok=True)
+    if not (bindir / "python3").exists():
+        (bindir / "python3").symlink_to(python)
+    link = tmp_path / "plugin.json"
+    link.symlink_to(shared)
+    base = tmp_path / ".claude"
+    cmd = (command("akh-mcp-file").replace("<plugin.json>", str(link)).replace("<name>", "akh-evil")
+           .replace("<slug>", "s").replace("<base>", str(base)))
+    result = subprocess.run(["/bin/sh", "-c", cmd], env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+                            capture_output=True, timeout=20)
+    assert result.returncode == 2
+    assert not (base / "skills" / "s" / ".akh-mcp" / "akh-evil.json").exists()
+
+
+class TestTreesAndSteps:
+    def test_a_tree_deeper_than_the_limit_is_refused_at_check(self, tmp_path):
+        src = tmp_path / "d" / "repo" / "skills" / "x"
+        src.mkdir(parents=True)
+        (src / "SKILL.md").write_text("x")
+        deep = str(src)
+        for _ in range(65):
+            deep = _os.path.join(deep, "a")
+            _os.mkdir(deep)
+        target = tmp_path / "proj" / ".claude" / "skills" / "x"
+        for step in ("check", "copy"):
+            r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                           target=str(target), step=step)
+            assert r.stdout.strip() == "akh-copy: refused tree"
+        assert not target.exists()
+
+    def test_a_path_longer_than_the_limit_is_refused(self, tmp_path):
+        src = tmp_path / "d" / "repo" / "skills" / "x"
+        src.mkdir(parents=True)
+        (src / ("n" * 200)).mkdir()
+        deep = src / ("n" * 200)
+        for _ in range(5):
+            deep = deep / ("m" * 200)
+            deep.mkdir()
+        target = tmp_path / "proj" / ".claude" / "skills" / "x"
+        r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                       target=str(target), step="check")
+        assert r.stdout.strip() == "akh-copy: refused tree"
+
+    def test_an_unknown_step_is_refused(self, tmp_path):
+        (tmp_path / "d" / "repo" / "skills" / "x").mkdir(parents=True)
+        target = tmp_path / "proj" / ".claude" / "skills" / "x"
+        r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                       target=str(target), step="Copy")
+        assert r.stdout.strip() == "akh-copy: refused step"
+
+    def test_a_skills_path_that_is_a_file_fails(self, tmp_path):
+        src = tmp_path / "d" / "repo" / "skills" / "x"
+        src.mkdir(parents=True)
+        (src / "SKILL.md").write_text("x")
+        base = tmp_path / "proj" / ".claude"
+        base.mkdir(parents=True)
+        (base / "skills").write_text("not a folder")
+        r = run_marked("akh-copy-skill", tmp_path, dir=str(tmp_path / "d"), skill_path="/skills/x",
+                       target=str(base / "skills" / "x"), step="copy")
+        assert r.stdout.strip() == "akh-copy: failed"
+
+    def test_the_git_folder_is_left_out_for_a_dot_skill_path(self, tmp_path):
+        repo = tmp_path / "d" / "repo"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "SKILL.md").write_text("x")
+        result, target = run_copy(tmp_path, "/.")
+        assert result.stdout.strip() == "akh-copy: ok"
+        assert sorted(p.name for p in target.iterdir()) == ["SKILL.md"]
+
+    def test_remove_deletes_a_deep_tree(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        installed(base)
+        deep = str(base / "skills" / "x")
+        for _ in range(1100):
+            deep = _os.path.join(deep, "a")
+            _os.mkdir(deep)
+        assert run_remove(tmp_path, base) == ["akh-remove: done"]
+        assert not (base / "skills" / "x").exists()
+
+    def test_exclude_changes_nothing_for_a_manifest_it_cannot_read(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        base = repo / ".claude"
+        installed(base)
+        run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        before = (repo / ".git" / "info" / "exclude").read_bytes()
+        (base / "skills" / "x" / ".installed-manifest.json").write_text("[]")
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
+        assert r.stdout.strip() == "akh-workspace: unreadable"
+        assert (repo / ".git" / "info" / "exclude").read_bytes() == before
+
+
+def test_python_blocks_use_nothing_newer_than_python_3_6():
+    # The commands run under whatever python3 is first on PATH; RHEL 8's is 3.6.8, which lacks these
+    # (checked on sdfiana008, 2026-10-16: every block compiles and runs there).
+    for block in fenced_blocks(skill_text()):
+        if block.startswith("python3 "):
+            for newer in ("capture_output", "text=True", ":=", "removeprefix", "removesuffix", "is_relative_to"):
+                assert newer not in block, (newer, block.splitlines()[1])

@@ -1,7 +1,7 @@
 # TODO #057 — The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog
 
 > **Priority:** 🟡 P2 — Medium
-> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; three review rounds done and their findings fixed
+> **Status:** 🏁 Implementation Done — client 2.4.0 on branch `feat/057-client-workspace-install`; four review rounds done and their findings fixed
 > **Branch:** `feat/057-client-workspace-install`
 > **PR:** —
 > **Created:** 2026-10-16
@@ -179,3 +179,32 @@ remove rule or the write-only mode change fails a test.
 The two client test files pass, 499 tests, after this round. Two mutations first survived because a
 second guard caught the test case; cases that reach each guard alone were added, and every guard of
 this round now fails a test when removed.
+
+### Problem: the fourth review, 2026-10-16
+**Encountered:** a final focused review of `3ba504b`, reporting medium or worse
+**Root cause and solution, each with a test that failed before its fix:**
+
+- **Medium: a `plugin.json` that is itself a link passed the root anchor**, so server definitions came
+  from a file in a shared folder such as `/tmp` (proven: `Runs: sh -c id` written). The root walk now
+  includes the file name, and `akh-component-check` and `akh-mcp-file` open `plugin.json` without
+  following a link, as a regular file of at most 1 MiB.
+- **Medium: deep trees defeated the cleanup on Python 3.11 and older**, whose `shutil.rmtree`
+  recurses, leaving a partial skill that loads and an install Remove could not delete (proven on
+  3.11). The folder check refuses more than 64 nested folders or a path over 1,024 bytes; both
+  commands remove trees iteratively; the top-level `SKILL.md` is copied last, so a partial copy never
+  loads; an uncleanable partial copy has its own line.
+- **Low:** the clone's `.git` is left out for a skill path of `/.` too (proven); an unknown step is
+  refused (proven to copy nothing and say `ok`); the exclude command changes nothing for a manifest it
+  cannot read, so its removal can run before `akh-remove` stops; `<base>/skills` as a file gives
+  `failed`, not `exists` (proven); Update prints the remove step's lines after a failed copy.
+
+**Python 3.6.** The commands run under whatever `python3` is first on `PATH`, and RHEL 8's is 3.6.8.
+Every embedded block compiled under `/usr/bin/python3` and `/usr/libexec/platform-python` (3.6.8) on
+sdfiana008 on 2026-10-16, and a smoke run of every command there found one defect:
+`akh-workspace-exclude` called `subprocess.run(capture_output=True, text=True)`, which 3.6 lacks, so
+it would have reported every workspace as not in git. It now uses `stdout`/`stderr` pipes and
+`universal_newlines`, the smoke run excluded and removed the lines with `git status` clean, and
+`test_python_blocks_use_nothing_newer_than_python_3_6` guards the known names.
+
+The two client test files pass, 511 tests, after this round; each fix of the round fails a test when
+removed.

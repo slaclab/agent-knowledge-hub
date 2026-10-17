@@ -56,3 +56,4 @@
 | [052](todo/052-prod-cli-route-reaches-backend.md) | Production `/cli` requests reach the backend | ✅ Complete |
 | [053](todo/053-sec-skill-install-sha-checkout-verification.md) | **SEC HIGH** — Verify post-checkout HEAD against the pinned SHA in skill install | ✅ Complete |
 | [056](todo/056-client-description-says-when-to-use.md) | The client's skill description says when to use it | ⬜ Open |
+| [057](todo/057-client-workspace-install.md) | The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog | 🏁 Implementation Done |

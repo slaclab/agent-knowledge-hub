@@ -9,8 +9,8 @@ description: Discover, install, rate, and submit SLAC S3DF catalog skills from w
 
 Interact with the SLAC S3DF skills catalog without leaving your agent session.
 
-**Catalog base URL:** `https://agent-knowledge-hub.slac.stanford.edu/cli`, so every request path begins with `/cli/api/`
-**Skills directory:** `~/.claude/skills/`
+**Catalog base URL:** `https://agent-knowledge-hub.slac.stanford.edu/cli`, so every request path begins with `/cli/api/`. When the session's environment holds `AKH_INSTANCE=dev`, which a host for a development server sets, the helper uses the development catalog, `https://agent-knowledge-hub-dev.slac.stanford.edu/cli`, and the token file `.s3df-dev-access-token` instead.
+**Skills directory:** `~/.claude/skills/`, or the workspace's under § Workspace installs
 **Commands directory:** `~/.claude/commands/`
 **Agents directory:** `~/.claude/agents/`
 **Token file:** `.s3df-access-token` in your account's real home directory (the one `getent passwd` gives), or `~/.s3df-access-token` when the real home has none. The helper below reads it; you never do.
@@ -38,7 +38,137 @@ Rules for every catalog request:
 
 Before the first helper call in a conversation, tell the user, word for word:
 
-> Catalog requests run through ${CLAUDE_SKILL_DIR}/hub-request.sh, a script in this skill that reads your S3DF token and sends it only to https://agent-knowledge-hub.slac.stanford.edu. If Claude Code asks before running it, you can stop the questions: choose "don't ask again" only if the rule it offers starts with sh ${CLAUDE_SKILL_DIR}/hub-request.sh, or add the rule Bash(sh ${CLAUDE_SKILL_DIR}/hub-request.sh *) with /permissions. A rule for all of sh would let any shell command run without asking. After a client update the script's path can change, and Claude Code then asks again until you add the rule for the new path.
+> Catalog requests run through ${CLAUDE_SKILL_DIR}/hub-request.sh, a script in this skill that reads your S3DF token and sends it only to https://agent-knowledge-hub.slac.stanford.edu, or, in a session whose environment selects the development catalog, your development token only to https://agent-knowledge-hub-dev.slac.stanford.edu. If Claude Code asks before running it, you can stop the questions: choose "don't ask again" only if the rule it offers starts with sh ${CLAUDE_SKILL_DIR}/hub-request.sh, or add the rule Bash(sh ${CLAUDE_SKILL_DIR}/hub-request.sh *) with /permissions. A rule for all of sh would let any shell command run without asking. After a client update the script's path can change, and Claude Code then asks again until you add the rule for the new path.
+
+---
+
+## Workspace installs
+
+`install`, `install skillset`, `list`, `update` and `remove` work on `~/.claude/` unless `--workspace` follows the command word. With it, they work on the workspace's own `.claude/` folder, so a skill loads only in sessions whose working folder is that workspace or below it. `install --exact` always works on the workspace (§ Install exactly what was confirmed). The workspace is the folder the session runs in.
+
+Before anything else, run the `akh-workspace-base` command below. It refuses a workspace whose path holds a character other than letters, digits, `.`, `_`, `-` and `/`, because such a path cannot go into the commands below unchanged. Otherwise it makes the workspace's `.claude/` and `.claude/skills/` folders where they are missing, without group or other write, which a folder another account could write would fail in Cogito's checks, and prints the base directory. `akh-workspace: refused` stops with the workspace-path line, with nothing written.
+
+```sh
+python3 -I - <<'EOF'
+# akh-workspace-base: print a workspace install's base directory, made without group or other write, or refuse a path the client does not put in commands
+import os, re, sys
+try:
+    ws = os.path.realpath(os.getcwd())
+    if ws == "/" or not re.fullmatch(r"/[A-Za-z0-9._/-]+", ws):
+        raise ValueError
+    base = os.path.join(ws, ".claude")
+    for path in (base, os.path.join(base, "skills")):
+        if not os.path.lexists(path):
+            os.mkdir(path)
+            os.chmod(path, 0o755)
+except Exception:
+    print("akh-workspace: refused")
+    sys.exit(0)
+print("akh-workspace: base " + base)
+EOF
+```
+
+`<base>` in the commands of this file is the path after `akh-workspace: base`. For a command without `--workspace` it is the absolute path `printf '%s\n' "$HOME/.claude"` prints. Replace `<base>` like every other placeholder; never change anything else in a command.
+
+In a workspace install, read every `~/.claude/` in this file as `<base>/`, in prose, in the folder checks and in the lines under Install › Closing message, with these differences:
+
+- **Agent names.** Run `akh-user-agent-names` once with the workspace's `<base>` and once with the home one, and leave out an agent whose name matches one in either list that this skill's manifest does not record. An agent in the workspace would replace an agent of yours that has its name.
+- **MCP servers.** A server is added for this workspace only. Its block carries the workspace form of the add line, and the still-set-up line its workspace form, both under Install › Closing message. The lead-in's second sentence reads: "The server is then available in this workspace only, in Claude Code sessions you start in it after adding it." A server whose command or arguments run a file from `${HOME}/.claude/skills/` gets no command, with that no-command reason.
+- **Files that name the home folder.** After the copy, run `akh-home-paths`. When it prints a file, the closing message carries the home-paths line, naming each file.
+- **Modes and git.** After the manifest is written, run `akh-workspace-modes` with `<files>` replaced by the manifest's `commands` and `agents` entries, separated by spaces, then `akh-workspace-exclude` with `<action>` replaced by `add`. `remove --workspace` runs `akh-workspace-exclude` with `remove` after it deletes the skill's folder. `akh-workspace: not in git` and `akh-workspace: not excluded` need no line.
+
+```sh
+python3 -I - '<base>' '<slug>' '<files>' <<'EOF'
+# akh-workspace-modes: clear group and other write on what a workspace install wrote, never following a link
+import os, stat, sys
+base, slug, files = sys.argv[1], sys.argv[2], [f for f in sys.argv[3].split() if f]
+uid = os.getuid()
+
+def mine(path):
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return st if st.st_uid == uid and not stat.S_ISLNK(st.st_mode) else None
+
+def tidy(path):
+    st = mine(path)
+    if st is not None and stat.S_ISDIR(st.st_mode):
+        os.chmod(path, 0o755)
+    elif st is not None and stat.S_ISREG(st.st_mode):
+        os.chmod(path, 0o755 if st.st_mode & 0o111 else 0o644)
+
+for root, dirs, names in os.walk(os.path.join(base, "skills", slug)):
+    tidy(root)
+    for name in names:
+        tidy(os.path.join(root, name))
+written = {f for f in files if f.split("/")[0] in ("commands", "agents") and ".." not in f.split("/")}
+for f in written:
+    tidy(os.path.join(base, f))
+for folder in ("commands", "agents"):
+    path = os.path.join(base, folder)
+    if mine(path) is not None and os.path.isdir(path):
+        entries = {folder + "/" + n for n in os.listdir(path)}
+        if entries and entries <= written:
+            tidy(path)
+EOF
+```
+
+```sh
+python3 -I - '<base>' '<slug>' '<action>' <<'EOF'
+# akh-workspace-exclude: add or remove the line in the repository's info/exclude that keeps a workspace install out of git
+import os, re, subprocess, sys
+base, slug, action = sys.argv[1:4]
+ws = os.path.dirname(base)
+
+def git(*args):
+    try:
+        r = subprocess.run(["git", "-C", ws, *args], capture_output=True, text=True, timeout=20,
+                           env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+    except Exception:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+top, path = git("rev-parse", "--show-toplevel"), git("rev-parse", "--git-path", "info/exclude")
+if not top or not path:
+    print("akh-workspace: not in git")
+    sys.exit(0)
+path = path if os.path.isabs(path) else os.path.join(ws, path)
+rel = os.path.relpath(os.path.join(os.path.realpath(base), "skills", slug), os.path.realpath(top))
+if rel.startswith("..") or not re.fullmatch(r"[A-Za-z0-9._/-]+", rel):
+    print("akh-workspace: not excluded")
+    sys.exit(0)
+line = "/" + rel + "/"
+try:
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+except FileNotFoundError:
+    lines = []
+if action == "add":
+    if line not in lines:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(("\n" if lines and lines[-1] != "" else "") + line + "\n")
+    print("akh-workspace: excluded " + line)
+else:
+    if line in lines:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(l for l in lines if l != line))
+    print("akh-workspace: unexcluded " + line)
+EOF
+```
+
+```sh
+# akh-home-paths: list the files of a workspace install that name the skill's folder under the home .claude
+grep -rlF '.claude/skills/<slug>/' '<base>/skills/<slug>' 2>/dev/null
+```
+
+Lines, in these words:
+
+```
+Not installed: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.   (the workspace-path line)
+<slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.   (the home-paths line)
+```
 
 ---
 
@@ -53,6 +183,7 @@ Fetch the summary with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skill
 
 ### Install
 `/agent-knowledge-hub install <slug>`
+`/agent-knowledge-hub install --workspace <slug>`
 
 1. Make a new directory with `mktemp -d`, never a fixed path or a directory that already exists; `<dir>` below is the path it prints. Save the skill's catalog entry with `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'`, then run the `akh-member-check` command under Argument check below. Go on only when it prints `akh-member: ok …`, and use the `repo_url`, `skill_path` and `pin` that line prints, never values read from the entry yourself. `akh-member: refused pinned_commit_sha` stops with the bad-pin line, any other `refused` or `unreadable` with the argument-rule line, and both stop before any other command runs.
 2. Get the skill's files into `<dir>/repo`, then read and copy them only from there, and never read, write or copy a symbolic link from it.
@@ -158,8 +289,8 @@ END { if (closed && n == 1 && name ~ /^[A-Za-z0-9_-]+$/) { print name; exit 0 } 
 Then list the agents the user already has:
 
 ```sh
-find ~/.claude/agents/ -type f -name '*.md' -exec env LC_ALL=C awk '
-# akh-user-agent-names: prints the path and name of each agent file under ~/.claude/agents/
+find '<base>'/agents/ -type f -name '*.md' -exec env LC_ALL=C awk '
+# akh-user-agent-names: prints the path and name of each agent file under <base>/agents/
 FNR == 1 { infm = ($(0) == "---"); next }
 infm && $(0) == "---" { nextfile }
 infm && /^name:/ { v = substr($(0), 6); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
@@ -199,7 +330,7 @@ For each entry in `plugin.json`'s `mcp-servers` list:
 The `akh-mcp-file` command:
 
 ```sh
-python3 -I - '<plugin.json>' '<name>' ~/.claude/skills/'<slug>'/.akh-mcp <<'EOF'
+python3 -I - '<plugin.json>' '<name>' '<base>/skills/<slug>/.akh-mcp' <<'EOF'
 # akh-mcp-file: builds one server's configuration from plugin.json, writes it, and prints its block lines
 import json, os, re, sys
 
@@ -240,11 +371,17 @@ def main():
             done(1, "refused: its args is not in the form Claude Code accepts (args must be a list of text values)")
         if "env" in e and not text_map(e["env"]):
             done(1, "refused: its env is not in the form Claude Code accepts (each env or header value must be text)")
+        home = os.path.realpath(os.path.join(os.path.expanduser("~"), ".claude", "skills"))
+        workspace = not os.path.realpath(folder).startswith(home + os.sep)
         for what, value in [("command", e["command"])] + [("argument", a) for a in args]:
             if re.search(r"^~|^\$(?!\{)|=~|=\$(?!\{)", value):
                 done(1, "refused: its %s %s starts with ~ or $, which Claude Code does not expand, so it would run "
                         "whatever file has that name in the directory a session starts in; the submitter should write "
                         "${HOME} instead" % (what, esc(value)))
+            if workspace and "${HOME}/.claude/skills/" in value:
+                done(1, "refused: its %s %s runs a file from ${HOME}/.claude/skills/, which a workspace install does "
+                        "not create; install %s without --workspace to use this server"
+                        % (what, esc(value), os.path.basename(os.path.dirname(folder))))
         conf["command"], conf["args"] = e["command"], args
         if "env" in e:
             conf["env"] = e["env"]
@@ -326,6 +463,8 @@ MCP server "<name>" (<stdio | http | sse>) — not added
   This server needs your S3DF sign-in, which /agent-knowledge-hub cannot yet pass to an MCP server, so there is no command to add it.   (auth.type slac-sso; no command line follows)
   To add it, run:
     claude mcp add-json --scope user <name> "$(cat ~/.claude/skills/<slug>/.akh-mcp/<name>.json)"
+  To add it to this workspace, run this from the workspace:   (a workspace install, in place of the two lines above)
+    claude mcp add-json --scope local <name> "$(cat '<base>/skills/<slug>/.akh-mcp/<name>.json')"
 ```
 
 The command reads the configuration from the file you wrote, so the shell never parses a value from the skill's author.
@@ -354,6 +493,7 @@ Left out: <path>, a symbolic link <listed as an agent | listed as a command | in
 Not installed: <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. Tell the skill's submitter.   (the filesystem test, in install)
 Not updated: the new version of <slug> held <name>, which /agent-knowledge-hub never copies from a skill, so the copy of its folder was removed and nothing else was written. The update had already removed the version you had; MCP servers you added for it are still set up, and claude mcp list shows them. Tell the skill's submitter.   (the filesystem test, in update)
 MCP server "<name>" from <slug> is still set up if you added it. To remove it: claude mcp remove --scope user <name>   (claude mcp list shows every MCP server you have)   (the still-set-up line)
+MCP server "<name>" from <slug> is still set up in this workspace if you added it. To remove it, run this from the workspace: claude mcp remove --scope local <name>   (the still-set-up line, in a workspace install)
 MCP server "<name>" from <slug> may have been added by an earlier version of /agent-knowledge-hub, only for the directory that install ran in, or for the whole git repository that holds it. To remove it, run this from that directory: claude mcp remove --scope local <name>   (the earlier-client line)
 Not removed: <entry>, which the manifest of <slug> lists but which is not a file in ~/.claude/agents/ or ~/.claude/commands/, so it was left in place.   (the not-removed line)
 ```
@@ -367,6 +507,7 @@ The no-command reasons:
 - a missing `command` or `url` — "it has no <command | url>, which a <stdio | http or sse> server needs"
 - a value of the wrong type — "its <args | env | headers> is not in the form Claude Code accepts (<args must be a list of text values | each env or header value must be text>)"
 - a `~` or `$` path — "its <command | argument> <value> starts with ~ or $, which Claude Code does not expand, so it would run whatever file has that name in the directory a session starts in; the submitter should write ${HOME} instead"
+- a home skills path, in a workspace install — "its <command | argument> <value> runs a file from ${HOME}/.claude/skills/, which a workspace install does not create; install <slug> without --workspace to use this server"
 - a file over 4,096 bytes — "its configuration is too long to show in full"
 - a shared name — "another MCP server in <slug> has the same name, or one that differs only in capital letters", printed once for each spelling of the name
 - a file that does not match — "the configuration file /agent-knowledge-hub wrote did not match the skill's entry"
@@ -376,6 +517,7 @@ The no-command reasons:
 
 ### Install skillset
 `/agent-knowledge-hub install skillset <slug>`
+`/agent-knowledge-hub install skillset --workspace <slug>`
 
 Installs every skill of a curated skillset, in the order its curator chose. The member list is chosen by the skillset's owner, who can be any signed-in user, and it can change after the user last looked at the skillset page, so the list this command prints before it asks is the only point where the user sees what will be installed.
 
@@ -434,8 +576,132 @@ The skillset lead-in takes the place of the first line of Install's lead-in; its
 
 ---
 
+### Install exactly what was confirmed
+`/agent-knowledge-hub install --exact`
+
+Installs into the workspace exactly the skills a list names, a list the user confirmed elsewhere, such as Cogito's New session dialog, which sends this command. The lines after the command are the list, one item per line:
+
+```
+skill <slug> <repo_url> <pin>
+skillset <slug> <version>
+member <slug> <repo_url> <pin>
+```
+
+`<pin>` is a 40-character commit ID or `none`, and a skillset's `member` lines follow its `skillset` line in the skillset's order. An item installs only when the catalog's current entry equals its line, and nothing installs from an item that differs. The command asks nothing: the list is what the user agreed to, and a question here would take the user's next message as its answer.
+
+1. Run `akh-workspace-base` as § Workspace installs says, and use its base.
+2. Make a new directory with `mktemp -d`; `<dir>` below is the path it prints. Write the list's lines, exactly as the command's text gives them, to `<dir>/expected.txt` with a quoted here-document, and run the `akh-exact` command below with `<step>` replaced by `plan`. `akh-exact: refused line <n>` and `akh-exact: unreadable` stop with the list line, and `akh-exact: empty` with the empty-list line.
+3. For each `akh-exact: fetch skill <slug>` line, run `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill-<slug>.json'`, and for each `akh-exact: fetch skillset <slug>` line, `sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skillsets/<slug> > '<dir>/skillset-<slug>.json'`. Any other HTTP status leaves the file as the helper wrote it, which the next step reports as changed. The sign-in cases stop the whole command.
+4. Run `akh-exact` with `<step>` replaced by `check`. Print the changed-skill or changed-skillset line for each `akh-exact: changed` line. The last line, `akh-exact: install <slug> …`, lists the skills to install, in order, or `none`.
+5. For each listed skill, `<i>` its position, run Install from step 1 in `<dir>/<i>` with the workspace's base, saving the entry with `cp '<dir>/skill-<slug>.json' '<dir>/<i>/skill.json'` in place of step 1's request. A skill already installed is skipped, and so is a skill whose folder exists without a record of an install by /agent-knowledge-hub, keeping that folder. Print one line per skill in Install skillset's words, and every way Install stops fails only that skill.
+6. Print Install skillset's summary line and recap lines, then the closing-message lines of every installed skill, as Install skillset's step 6 does.
+
+```sh
+python3 -I - '<dir>' '<step>' <<'EOF'
+# akh-exact: plan reads the confirmed list and prints each catalog entry to fetch; check compares the list with the fetched entries and prints what to install
+import json, re, sys
+d, step = sys.argv[1], sys.argv[2]
+SLUG, REPO, PIN = r"[a-z0-9][a-z0-9-]{0,199}", r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+", r"[0-9a-f]{40}|none"
+ITEM = re.compile(r"(skill|member) (%s) (%s) (%s)|skillset (%s) ([0-9]{1,9})" % (SLUG, REPO, PIN, SLUG))
+
+def parse():
+    with open(d + "/expected.txt", encoding="utf-8") as f:
+        rows = f.read().split("\n")
+    items = []
+    for n, row in enumerate(rows, 1):
+        if row == "":
+            continue
+        m = ITEM.fullmatch(row)
+        if m is None or (m.group(1) == "member" and (not items or items[-1][0] != "skillset")):
+            return n, None
+        if m.group(5):
+            items.append(["skillset", m.group(5), int(m.group(6)), []])
+        elif m.group(1) == "member":
+            items[-1][3].append((m.group(2), m.group(3), m.group(4)))
+        else:
+            items.append(["skill", m.group(2), m.group(3), m.group(4)])
+    return 0, items
+
+def load(name):
+    try:
+        with open("%s/%s.json" % (d, name), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def why(slug, repo, pin):
+    e = load("skill-" + slug)
+    if not isinstance(e, dict) or e.get("slug") != slug:
+        return "missing"
+    if e.get("repo_url") != repo:
+        return "repo_url"
+    if (e.get("pinned_commit_sha") or "none") != pin:
+        return "pin"
+    return None
+
+try:
+    bad, items = parse()
+except Exception:
+    print("akh-exact: unreadable")
+    sys.exit(0)
+if items is None:
+    print("akh-exact: refused line %d" % bad)
+    sys.exit(0)
+if not items:
+    print("akh-exact: empty")
+    sys.exit(0)
+if step == "plan":
+    fetch = []
+    for it in items:
+        for entry in ["%s %s" % (it[0], it[1])] + (["skill " + m[0] for m in it[3]] if it[0] == "skillset" else []):
+            if entry not in fetch:
+                fetch.append(entry)
+    for entry in fetch:
+        print("akh-exact: fetch " + entry)
+    sys.exit(0)
+install = []
+for it in items:
+    if it[0] == "skill":
+        reason = why(it[1], it[2], it[3])
+        print("akh-exact: changed skill %s %s" % (it[1], reason) if reason else "akh-exact: ok skill " + it[1])
+        install += [] if reason else [it[1]]
+        continue
+    s = load("skillset-" + it[1])
+    members = s.get("skills") if isinstance(s, dict) and s.get("slug") == it[1] else None
+    now = [m.get("slug") if isinstance(m, dict) else None for m in members] if isinstance(members, list) else None
+    if now is None:
+        reason = "missing"
+    elif s.get("version") != it[2]:
+        reason = "version"
+    elif now != [m[0] for m in it[3]]:
+        reason = "members"
+    else:
+        reason = next(("member %s %s" % (m[0], r) for m in it[3] for r in [why(*m)] if r), None)
+    print("akh-exact: changed skillset %s %s" % (it[1], reason) if reason
+          else "akh-exact: ok skillset %s %d members" % (it[1], len(it[3])))
+    install += [] if reason else [m[0] for m in it[3]]
+order = []
+for slug in install:
+    if slug not in order:
+        order.append(slug)
+print("akh-exact: install " + (" ".join(order) if order else "none"))
+EOF
+```
+
+Lines, in these words:
+
+```
+✗ <slug>: not installed, because its catalog entry changed after you confirmed it (<repo_url | pin | missing>). Pick it again to see the current entry.   (the changed-skill line)
+✗ skillset <slug>: nothing installed from it, because it changed after you confirmed it (<version | members | member <member> <repo_url | pin | missing> | missing>). Pick it again to see the current skillset.   (the changed-skillset line)
+Not installed: the list of skills to install could not be read (line <n>), so nothing was written.   (the list line; `unreadable` gives it without the line number)
+Nothing to install: the list was empty.   (the empty-list line)
+```
+
+---
+
 ### List installed
 `/agent-knowledge-hub list`
+`/agent-knowledge-hub list --workspace`
 
 Scan `~/.claude/skills/` and print each skill's slug, version, name, and description from frontmatter.
 
@@ -443,6 +709,7 @@ Scan `~/.claude/skills/` and print each skill's slug, version, name, and descrip
 
 ### Update
 `/agent-knowledge-hub update <slug>`
+`/agent-knowledge-hub update --workspace <slug>`
 
 1. If `~/.claude/skills/<slug>/` exists and holds no `.installed-manifest.json`, stop with Install's line for a folder /agent-knowledge-hub did not install, and remove nothing.
 2. Read the old install: its `.installed-manifest.json`, its `plugin.json`, and every `~/.claude/skills/<slug>/.akh-mcp/<name>.json`.
@@ -464,6 +731,7 @@ If the new version fails Install's filesystem test, print the `Not updated:` lin
 
 ### Remove
 `/agent-knowledge-hub remove <slug>`
+`/agent-knowledge-hub remove --workspace <slug>`
 
 Confirm with the user, then:
 

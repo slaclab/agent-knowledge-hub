@@ -175,7 +175,7 @@ def test_user_agent_names_are_listed_recursively(awk, tmp_path):  # FR-2 name cl
     (nested / "reviewer.md").write_bytes(b"---\nname: my-reviewer\n---\n")
     (home / ".claude" / "agents" / "plain.md").write_bytes(b"---\nname: \"Quoted Name\"\n---\n")
     (home / ".claude" / "agents" / "notes.txt").write_bytes(b"---\nname: ignored\n---\n")
-    result = run_command(command("akh-user-agent-names"), awk, tmp_path, home=str(home))
+    result = run_command(command("akh-user-agent-names"), awk, tmp_path, home=str(home), base=str(home / ".claude"))
     assert result.returncode == 0
     lines = sorted(result.stdout.decode().splitlines())
     assert lines == sorted([f"{nested / 'reviewer.md'}\tmy-reviewer", f"{home / '.claude' / 'agents' / 'plain.md'}\tQuoted Name"])
@@ -185,7 +185,7 @@ def test_user_agent_names_are_listed_recursively(awk, tmp_path):  # FR-2 name cl
 def test_user_agent_names_with_no_agents_folder(awk, tmp_path):
     home = tmp_path / "empty-home"
     home.mkdir()
-    result = run_command(command("akh-user-agent-names"), awk, tmp_path, home=str(home))
+    result = run_command(command("akh-user-agent-names"), awk, tmp_path, home=str(home), base=str(home / ".claude"))
     assert result.stdout == b""
 
 
@@ -290,8 +290,12 @@ SERVERS = [
 ]
 
 
-def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None) -> tuple[subprocess.CompletedProcess, Path]:
+def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None,
+                 base: Path | None = None) -> tuple[subprocess.CompletedProcess, Path]:
+    """Run akh-mcp-file with HOME at tmp_path; `base` defaults to the user install's, HOME/.claude."""
     import json
+
+    base = base or tmp_path / ".claude"
 
     plugin = tmp_path / "plugin.json"
     plugin.write_text(json.dumps({"name": "s", "mcp-servers": SERVERS if servers is None else servers},
@@ -300,10 +304,11 @@ def run_mcp_file(python: str, tmp_path: Path, name: str, servers=None) -> tuple[
     bindir.mkdir(exist_ok=True)
     if not (bindir / "python3").exists():
         (bindir / "python3").symlink_to(python)
-    cmd = command("akh-mcp-file").replace("<plugin.json>", str(plugin)).replace("<name>", name).replace("<slug>", "s")
+    cmd = (command("akh-mcp-file").replace("<plugin.json>", str(plugin)).replace("<name>", name)
+           .replace("<slug>", "s").replace("<base>", str(base)))
     env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     result = subprocess.run(["/bin/sh", "-c", cmd], env=env, capture_output=True, timeout=20)
-    return result, tmp_path / ".claude/skills/s/.akh-mcp" / f"{name}.json"
+    return result, base / "skills/s/.akh-mcp" / f"{name}.json"
 
 
 def out_lines(result) -> list[str]:
@@ -653,3 +658,310 @@ class TestInstallSkillsetSection:
         install = skill_text().split("### Install\n", 1)[1].split("\n### ", 1)[0]
         assert "sh ${CLAUDE_SKILL_DIR}/hub-request.sh GET /cli/api/skills/<slug> > '<dir>/skill.json'" in install
         assert "akh-member-check" in install
+
+
+
+# ---------------------------------------------------------------------------
+# #057 — workspace installs, and installing exactly what the user confirmed
+# ---------------------------------------------------------------------------
+
+import json as _json
+import os as _os
+import stat as _stat
+
+GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
+
+
+def run_marked(marker: str, tmp_path: Path, cwd: Path | None = None, umask: int | None = None,
+               **substitutions: str) -> subprocess.CompletedProcess:
+    """Run a SKILL.md command through sh with python3 on PATH, placeholders replaced, nothing else."""
+    bindir = tmp_path / "pybin"
+    bindir.mkdir(exist_ok=True)
+    if not (bindir / "python3").exists():
+        (bindir / "python3").symlink_to(_pythons()[0])
+    cmd = command(marker)
+    for key, value in substitutions.items():
+        cmd = cmd.replace(f"<{key}>", value)
+    env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path / "home")}
+    pre = (lambda: _os.umask(umask)) if umask is not None else None
+    return subprocess.run(["/bin/sh", "-c", cmd], env=env, cwd=cwd or tmp_path, capture_output=True,
+                          text=True, timeout=30, preexec_fn=pre)
+
+
+def mode(path: Path) -> int:
+    return _stat.S_IMODE(_os.lstat(path).st_mode)
+
+
+class TestWorkspaceBase:
+    def test_base_is_the_workspace_claude_folder_made_without_group_write(self, tmp_path):
+        ws = tmp_path / "proj"
+        ws.mkdir()
+        result = run_marked("akh-workspace-base", tmp_path, cwd=ws, umask=0o002)
+        assert result.stdout.strip().splitlines() == [f"akh-workspace: base {ws.resolve()}/.claude"]
+        assert mode(ws / ".claude") == 0o755 and mode(ws / ".claude" / "skills") == 0o755
+
+    def test_existing_folders_keep_their_modes(self, tmp_path):
+        ws = tmp_path / "proj"
+        (ws / ".claude" / "skills").mkdir(parents=True)
+        _os.chmod(ws / ".claude", 0o775)
+        result = run_marked("akh-workspace-base", tmp_path, cwd=ws)
+        assert result.stdout.strip() == f"akh-workspace: base {ws.resolve()}/.claude"
+        assert mode(ws / ".claude") == 0o775
+
+    @pytest.mark.parametrize("name", ["my proj", "it's", "a$b", "tab\there"])
+    def test_a_path_the_client_does_not_put_in_commands_is_refused(self, tmp_path, name):
+        ws = tmp_path / name
+        ws.mkdir()
+        result = run_marked("akh-workspace-base", tmp_path, cwd=ws)
+        assert result.stdout.strip() == "akh-workspace: refused"
+        assert not (ws / ".claude").exists()
+
+    def test_root_is_refused(self, tmp_path):
+        assert run_marked("akh-workspace-base", tmp_path, cwd=Path("/")).stdout.strip() == "akh-workspace: refused"
+
+
+class TestWorkspaceModes:
+    def test_install_loses_group_and_other_write(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        skill = base / "skills" / "x"
+        (skill / "bin").mkdir(parents=True)
+        (skill / "SKILL.md").write_text("x")
+        (skill / "bin" / "run.sh").write_text("x")
+        _os.chmod(skill / "bin" / "run.sh", 0o775)
+        _os.chmod(skill / "SKILL.md", 0o666)
+        for d in (skill, skill / "bin"):
+            _os.chmod(d, 0o777)
+        (base / "commands").mkdir()
+        (base / "commands" / "x.md").write_text("x")
+        _os.chmod(base / "commands", 0o775)
+        _os.chmod(base / "commands" / "x.md", 0o664)
+        result = run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x", files="commands/x.md")
+        assert result.returncode == 0, result.stderr
+        assert mode(skill) == 0o755 and mode(skill / "bin") == 0o755
+        assert mode(skill / "SKILL.md") == 0o644 and mode(skill / "bin" / "run.sh") == 0o755
+        assert mode(base / "commands" / "x.md") == 0o644 and mode(base / "commands") == 0o755
+
+    def test_a_folder_holding_files_of_others_is_left_alone(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        (base / "agents").mkdir()
+        (base / "agents" / "theirs.md").write_text("x")
+        (base / "agents" / "ours.md").write_text("x")
+        _os.chmod(base / "agents", 0o775)
+        run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x", files="agents/ours.md")
+        assert mode(base / "agents") == 0o775
+
+    def test_a_link_is_never_followed(self, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.write_text("x")
+        _os.chmod(outside, 0o666)
+        (base / "skills" / "x" / "link").symlink_to(outside)
+        run_marked("akh-workspace-modes", tmp_path, base=str(base), slug="x", files="")
+        assert mode(outside) == 0o666
+
+
+def git(*args, cwd: Path) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, env={**_os.environ, **GIT_ENV}, check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def exclude_lines(repo: Path) -> list[str]:
+    path = repo / ".git" / "info" / "exclude"
+    return [l for l in path.read_text().splitlines() if l and not l.startswith("#")] if path.exists() else []
+
+
+class TestWorkspaceExclude:
+    def test_top_level_workspace_line_added_once_and_removed(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        base = repo / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        for _ in range(2):
+            r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+            assert r.stdout.strip() == "akh-workspace: excluded /.claude/skills/x/", r.stderr
+        assert exclude_lines(repo) == ["/.claude/skills/x/"]
+        assert git("status", "--porcelain", "--untracked-files=all", cwd=repo) == ""
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
+        assert r.stdout.strip() == "akh-workspace: unexcluded /.claude/skills/x/"
+        assert exclude_lines(repo) == []
+
+    def test_subfolder_workspace(self, tmp_path):
+        repo = tmp_path / "repo"
+        (repo / "sub").mkdir(parents=True)
+        git("init", "-q", cwd=repo)
+        base = repo / "sub" / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: excluded /sub/.claude/skills/x/"
+        assert exclude_lines(repo) == ["/sub/.claude/skills/x/"]
+
+    def test_worktree_writes_the_common_exclude_file(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", "-b", "main", cwd=repo)
+        (repo / "f").write_text("x")
+        git("add", "f", cwd=repo)
+        git("commit", "-q", "-m", "f", cwd=repo)
+        wt = tmp_path / "wt"
+        git("worktree", "add", "-q", "-b", "w", str(wt), cwd=repo)
+        base = wt / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: excluded /.claude/skills/x/"
+        assert "/.claude/skills/x/" in exclude_lines(repo)
+        assert git("status", "--porcelain", "--untracked-files=all", cwd=wt) == ""
+
+    def test_outside_git(self, tmp_path):
+        base = tmp_path / "plain" / ".claude"
+        (base / "skills" / "x").mkdir(parents=True)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: not in git"
+
+
+SHA = "b" * 40
+REPO_A = "https://github.com/slaclab/a"
+REPO_B = "https://github.com/slaclab/b"
+
+
+def exact(tmp_path: Path, expected: str, entries: dict | None = None, sets: dict | None = None):
+    d = tmp_path / "dir"
+    d.mkdir(exist_ok=True)
+    (d / "expected.txt").write_text(expected)
+    for slug, entry in (entries or {}).items():
+        (d / f"skill-{slug}.json").write_text(entry if isinstance(entry, str) else _json.dumps(entry))
+    for slug, entry in (sets or {}).items():
+        (d / f"skillset-{slug}.json").write_text(_json.dumps(entry))
+    plan = run_marked("akh-exact", tmp_path, dir=str(d), step="plan").stdout.strip().splitlines()
+    check = run_marked("akh-exact", tmp_path, dir=str(d), step="check").stdout.strip().splitlines()
+    return plan, check
+
+
+def entry(slug, repo=REPO_A, pin=SHA):
+    return {"slug": slug, "repo_url": repo, "skill_path": "/", "pinned_commit_sha": pin}
+
+
+class TestExactInstall:
+    def test_matching_skill_and_set_install_in_order(self, tmp_path):
+        expected = (f"skill solo {REPO_A} {SHA}\n"
+                    "skillset kit 4\n"
+                    f"member m1 {REPO_B} none\n"
+                    f"member solo {REPO_A} {SHA}\n")
+        plan, check = exact(tmp_path, expected,
+                            entries={"solo": entry("solo"), "m1": entry("m1", REPO_B, None)},
+                            sets={"kit": {"slug": "kit", "version": 4, "skills": [{"slug": "m1"}, {"slug": "solo"}]}})
+        assert plan == ["akh-exact: fetch skill solo", "akh-exact: fetch skillset kit", "akh-exact: fetch skill m1"]
+        assert check == ["akh-exact: ok skill solo", "akh-exact: ok skillset kit 2 members",
+                         "akh-exact: install solo m1"]
+
+    @pytest.mark.parametrize("now,why", [
+        (entry("solo", REPO_B), "repo_url"),
+        (entry("solo", pin="c" * 40), "pin"),
+        (entry("solo", pin=None), "pin"),
+        ('{"detail": "Not found"}', "missing"),
+        ("not json", "missing"),
+    ])
+    def test_a_changed_skill_installs_nothing(self, tmp_path, now, why):
+        _, check = exact(tmp_path, f"skill solo {REPO_A} {SHA}\n", entries={"solo": now})
+        assert check == [f"akh-exact: changed skill solo {why}", "akh-exact: install none"]
+
+    @pytest.mark.parametrize("now,why", [
+        ({"slug": "kit", "version": 5, "skills": [{"slug": "m1"}]}, "version"),
+        ({"slug": "kit", "version": 4, "skills": [{"slug": "m1"}, {"slug": "m2"}]}, "members"),
+        ({"slug": "kit", "version": 4, "skills": []}, "members"),
+    ])
+    def test_a_changed_set_installs_none_of_its_members(self, tmp_path, now, why):
+        expected = f"skillset kit 4\nmember m1 {REPO_A} {SHA}\nskill other {REPO_B} none\n"
+        _, check = exact(tmp_path, expected, entries={"m1": entry("m1"), "other": entry("other", REPO_B, None)},
+                         sets={"kit": now})
+        assert check == [f"akh-exact: changed skillset kit {why}", "akh-exact: ok skill other",
+                         "akh-exact: install other"]
+
+    def test_a_set_with_a_changed_member_installs_none_of_its_members(self, tmp_path):
+        expected = f"skillset kit 4\nmember m1 {REPO_A} {SHA}\nmember m2 {REPO_A} {SHA}\n"
+        _, check = exact(tmp_path, expected, entries={"m1": entry("m1"), "m2": entry("m2", REPO_B)},
+                         sets={"kit": {"slug": "kit", "version": 4, "skills": [{"slug": "m1"}, {"slug": "m2"}]}})
+        assert check == ["akh-exact: changed skillset kit member m2 repo_url", "akh-exact: install none"]
+
+    @pytest.mark.parametrize("expected", [
+        f"skill Bad {REPO_A} {SHA}\n",
+        f"skill x;touch {{marker}} {REPO_A} {SHA}\n",
+        f"skill x https://evil.example/a {SHA}\n",
+        f"skill x {REPO_A} main\n",
+        f"member x {REPO_A} {SHA}\n",
+        "skillset kit four\n",
+        f"skill x {REPO_A} {SHA} extra\n",
+    ])
+    def test_a_line_outside_the_grammar_refuses_the_whole_list(self, tmp_path, expected):
+        marker = tmp_path / "akh-pwned"
+        plan, check = exact(tmp_path, expected.format(marker=marker))
+        assert plan == ["akh-exact: refused line 1"]
+        assert check == ["akh-exact: refused line 1"]
+        assert not marker.exists()
+
+    def test_an_empty_list(self, tmp_path):
+        plan, check = exact(tmp_path, "\n")
+        assert plan == ["akh-exact: empty"] and check == ["akh-exact: empty"]
+
+
+@each_python
+class TestMcpFileInAWorkspace:
+    def test_a_server_running_a_file_from_the_home_skills_folder_is_refused(self, python, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        servers = [{"name": "akh-home", "command": "/bin/sh", "args": ["${HOME}/.claude/skills/s/run.sh"]}]
+        result, target = run_mcp_file(python, tmp_path, "akh-home", servers, base=base)
+        assert result.returncode == 1
+        assert out_lines(result) == ["refused: its argument ${HOME}/.claude/skills/s/run.sh runs a file from "
+                                     "${HOME}/.claude/skills/, which a workspace install does not create; install "
+                                     "s without --workspace to use this server"]
+        assert not target.exists()
+
+    def test_other_servers_are_written_under_the_workspace(self, python, tmp_path):
+        base = tmp_path / "proj" / ".claude"
+        servers = [{"name": "akh-plain", "command": "/bin/true", "args": ["--x"]}]
+        result, target = run_mcp_file(python, tmp_path, "akh-plain", servers, base=base)
+        assert result.returncode == 0, result.stderr
+        assert out_lines(result)[-1] == f"file: {target}"
+
+
+def test_home_paths_are_listed(tmp_path):
+    base = tmp_path / "proj" / ".claude"
+    skill = base / "skills" / "x"
+    (skill / "docs").mkdir(parents=True)
+    (skill / "SKILL.md").write_text("Run ${HOME}/.claude/skills/x/run.sh first.\n")
+    (skill / "docs" / "ok.md").write_text("Nothing here.\n")
+    result = run_marked("akh-home-paths", tmp_path, base=str(base), slug="x")
+    assert result.stdout.strip().splitlines() == [str(skill / "SKILL.md")]
+
+
+WORKSPACE_LINES = [
+    "`/agent-knowledge-hub install --workspace <slug>`",
+    "`/agent-knowledge-hub install skillset --workspace <slug>`",
+    "`/agent-knowledge-hub install --exact`",
+    "`/agent-knowledge-hub list --workspace`",
+    "`/agent-knowledge-hub update --workspace <slug>`",
+    "`/agent-knowledge-hub remove --workspace <slug>`",
+    'claude mcp add-json --scope local <name> "$(cat \'<base>/skills/<slug>/.akh-mcp/<name>.json\')"',
+    "claude mcp remove --scope local <name>",
+    "<slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.",
+    "Not installed: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.",
+]
+
+
+class TestWorkspaceSection:
+    @pytest.mark.parametrize("line", WORKSPACE_LINES)
+    def test_words(self, line):
+        assert line in skill_text()
+
+    def test_every_marked_command_that_touches_the_base_takes_it_as_a_placeholder(self):
+        for marker in ("akh-mcp-file", "akh-user-agent-names", "akh-workspace-modes", "akh-workspace-exclude",
+                       "akh-home-paths"):
+            block = command(marker)
+            assert "<base>" in block, marker
+            assert "~/.claude" not in block.replace(f"# {marker}", ""), marker
+
+    def test_exact_install_asks_nothing(self):
+        section = skill_text().split("### Install exactly what was confirmed", 1)[1].split("\n---", 1)[0]
+        assert "(y/N)" not in section and "ask" not in section.lower().replace("asks nothing", "")

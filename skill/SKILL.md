@@ -348,7 +348,7 @@ Lines, in these words:
 
 ```
 Stopped: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.   (the workspace-path line)
-Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or run the command without --workspace.   (the home-folder line)
+Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder; with install, install skillset, list, update or remove, running the command without --workspace instead also fixes it.   (the home-folder line; install --exact has no form without --workspace, so only the first sentence applies to it)
 Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder, is a link, is not a folder, is not yours, or could not be made, so nothing was written.   (the workspace-folder line)
 Stopped: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too, and nothing was written. Run chmod go-w <path> and run the command again.   (the writable-folder line)
 Not installed: <path> in <slug>'s folder is a link, or belongs to another account, which /agent-knowledge-hub never writes, so the folder was removed and nothing else was written.   (the foreign-file line)

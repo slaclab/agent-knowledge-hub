@@ -58,3 +58,4 @@
 | [056](todo/056-client-description-says-when-to-use.md) | The client's skill description says when to use it | ⬜ Open |
 | [057](todo/057-client-workspace-install.md) | The client installs into a workspace, installs exactly a confirmed list, and reaches the development catalog | 🏁 Implementation Done |
 | [058](todo/058-exact-install-compares-skill-path.md) | The exact install compares each skill's path, not only its repository and commit | ⬜ Open |
+| [059](todo/059-workspace-install-links-agents-skills.md) | The workspace install links `.agents/skills` to `.claude/skills` | 🏁 Implementation Done |

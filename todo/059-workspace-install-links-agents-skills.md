@@ -2,7 +2,7 @@
 
 > **Priority:** 🟡 P2 — Medium
 > **Status:** 🏁 Implementation Done
-> **Branch:** `feat/059-agents-skills-link`
+> **Branch:** `main`
 > **PR:** —
 > **Created:** 2026-10-29
 > **Shipped:** —
@@ -58,7 +58,7 @@ A workspace install writes to `<workspace>/.claude/skills`, which Claude Code re
 
 ## Results
 
-`backend/tests/test_client_install_rules.py` on this branch: 352 passed, 1 failed. The failure, `TestWorkspaceSection::test_words[line10]`, fails on `main` at `474d8db` as well: the home-folder stop message in `skill/SKILL.md` was reworded in client 2.4.2 and the expected line in `WORKSPACE_LINES` still carries the old wording. It is not fixed here.
+`backend/tests/test_client_install_rules.py`: 353 passed, 0 failed. Before commit `397f5be` the file had one failure, `TestWorkspaceSection::test_words[line10]`, because client 2.4.2 reworded the home-folder stop message and the expected line carried the old wording; that commit updates the line.
 
 Run with `PYTHONPATH=<a folder holding pytest> python3 -m pytest --noconftest -p no:cacheprovider backend/tests/test_client_install_rules.py`; the file imports only the standard library and pytest, so `--noconftest` skips the database fixtures.
 
@@ -67,5 +67,6 @@ Run with `PYTHONPATH=<a folder holding pytest> python3 -m pytest --noconftest -p
 - [x] `akh-agents-link` and its tests
 - [x] `akh-workspace-exclude` covers the link
 - [x] Closing-message line, Workspace installs prose and CHANGELOG entry
-- [ ] Merged to `main`, pushed to `slaclab/agent-knowledge-hub`
+- [x] Merged to `main`
+- [ ] Pushed to `slaclab/agent-knowledge-hub`: no credential on the machines that built it, so the owner pushes
 - [ ] Cogito re-pins the commit (Cogito TODO #285 slice 2)

@@ -1231,7 +1231,7 @@ WORKSPACE_LINES = [
     "Changed since the last install of <slug>. If you added it to this workspace before, run this from the workspace first: claude mcp remove --scope local <name>",
     "<slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.",
     "Stopped: this workspace's path holds characters the client does not put in commands, so nothing was written. Start the session in a folder whose path uses only letters, digits, ., _, - and /.",
-    "Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or run the command without --workspace.",
+    "Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder; with install, install skillset, list, update or remove, running the command without --workspace instead also fixes it.",
     "Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder, is a link, is not a folder, is not yours, or could not be made, so nothing was written.",
     "Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.",
     "Also linked .agents/skills to .claude/skills in this workspace, so Codex, OpenCode and other tools that read .agents/skills load the same skills.",

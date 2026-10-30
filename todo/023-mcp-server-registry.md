@@ -515,6 +515,30 @@ Choice: claude mcp add snippet in GUI vs leave to installer skill
 
 <!-- Add entries as you hit walls. -->
 
+### Finding: an external data point for ADR-U36's own caveat
+
+**Encountered:** 2026-10-16, via `research/reports/oct2026-skill-hub-batch-vs-akh.md` finding A-3.
+
+ADR-U36 already states, correctly, that `/.well-known/mcp-server.json` is "a local convention for
+this project, not a ratified MCP specification," and that the MCP spec instead defines
+`/.well-known/oauth-protected-resource` per RFC 9728 — but only for OAuth 2.0 protected-resource
+metadata, a narrower scope than Pass 3's general auth/access/service discovery goal. This was a
+correct, board-reviewed caveat at the time, not an error.
+
+The new report adds external evidence that RFC 9728 discovery is something real MCP servers
+implement in practice: `research/concepts/agenticskills-find-skills.md` §5 records that
+agenticskills.io's own automated audit of 79 `http`/`sse` MCP servers found 10 of 79 (13%) exposing
+valid OAuth 2.1 metadata at that exact well-known path.
+
+**Recommended refinement, not yet built or re-reviewed:** keep Pass 3's existing best-effort,
+non-blocking design (ADR-U36's core decision), but have it probe RFC 9728's
+`/.well-known/oauth-protected-resource` specifically to confirm or enrich `auth.type=oauth2` entries,
+*in addition to or instead of* the invented `/.well-known/mcp-server.json` path for the broader
+auth/access/service fields. This is a scope change to an already board-approved design (not a
+drop-in URL swap — RFC 9728's payload shape is OAuth-resource metadata, not this project's own
+`auth`/`access` schema), so it should go back through research/security review rather than being
+silently implemented, if picked up.
+
 ---
 
 ## Board Review

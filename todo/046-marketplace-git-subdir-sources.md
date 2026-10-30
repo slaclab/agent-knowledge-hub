@@ -38,6 +38,16 @@ As of 2026-10-14, read from the code:
 
 1. Every plugin entry installs exactly its skill folder.
 2. Every pinned skill installs at its `pinned_commit_sha`.
+3. The minimum Claude Code version this route depends on is stated, not left implicit. **Added
+   2026-10-16**, per `research/reports/oct2026-skill-hub-batch-vs-akh.md` finding I-1: until FR-1
+   emits a `sha`, this route has no pin for CVE-2026-86063 (`research/concepts/plugin4shell.md`) to
+   bypass, since Claude Code installs the default branch's tip either way. Once FR-1 ships, the pin's
+   integrity rests entirely on Claude Code's own fixed `git checkout` (patched in 2.1.179) — a
+   marketplace cannot enforce this client-side guarantee itself. State ≥2.1.179 as the minimum
+   version this route requires, in the Definition of Done and in `README.md` once this task and #047
+   ship. **Unconfirmed, flagged as this report's Open Question 6:** whether the 2.1.179 fix covers a
+   `git-subdir` source specifically, or only the `github` source type Air Security's disclosure
+   describes — verify before relying on the stated minimum for this task's `git-subdir` design.
 
 ## Non-Goals
 
@@ -66,6 +76,7 @@ As of 2026-10-14, read from the code:
 
 - [ ] FR-1 to FR-3 built; AC-1, AC-3, and AC-4 pass, and AC-2 is recorded once with the Claude Code version used
 - [ ] `PRD.md` › `marketplace.json` manifest shows the new source shape
+- [ ] Minimum Claude Code version (≥2.1.179, pending confirmation it covers `git-subdir` — Goal 3) stated in this file and in `README.md`
 - [ ] CHANGELOG entry
 
 ---
@@ -96,4 +107,5 @@ As of 2026-10-14, read from the code:
 - **Cogito TODO #200 (`slaclab/cogito`), hub request H-2:** needed by Cogito users of the plugin route and by Cogito's Open Question 3. No Cogito slice waits for it. Cogito's own image does not load skills through the marketplace or at `pinned_commit_sha`; it pins each skill by commit in a lock file of its own, because a submitter can re-pin their own skill (#017).
 - **#017 (Skill version pinning):** supplies `pinned_commit_sha`.
 - **#006 (Skillsets):** its References record the `github` source fields this task relies on, and its Slice 4 relies on the `version` rule in Open Design Question 3.
-- **#047 (marketplace.json reachable from Claude Code):** the two together give Claude Code users a marketplace route that installs the right content.
+- **#047 (marketplace.json reachable from Claude Code):** the two together give Claude Code users a marketplace route that installs the right content. Its option B meets Goal 3's minimum version automatically; option A needs it written into `README.md` explicitly (`oct2026-skill-hub-batch-vs-akh.md` § Effect on #046, #047 and #048).
+- **#053 (verify post-checkout HEAD in skill install) and `research/reports/oct2026-skill-hub-batch-vs-akh.md`:** #053 and this task cover the two places AKH's pin can be bypassed — #053 on the per-skill clone-based installer, this task's Goal 3 on the native marketplace route. The report also notes that on the native route, Claude Code loads the installed folder as a full plugin, which can carry bundled hooks and MCP server configuration that AKH's own client strips (#051) — worth stating explicitly which plugin components an entry may carry on this route when FR-1 is implemented.

@@ -775,6 +775,139 @@ class TestWorkspaceBase:
         assert result.stdout.strip() == "akh-workspace: refused folder"
 
 
+class TestAgentsLink:
+    """`akh-agents-link` makes `.agents/skills` a link to `.claude/skills` and changes nothing else."""
+
+    def workspace(self, tmp_path):
+        ws = tmp_path / "proj"
+        (ws / ".claude" / "skills").mkdir(parents=True)
+        return ws
+
+    def run(self, tmp_path, ws, **kwargs):
+        return run_marked("akh-agents-link", tmp_path, cwd=ws, base=str(ws.resolve() / ".claude"), **kwargs)
+
+    def test_links_agents_skills_to_claude_skills(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        result = self.run(tmp_path, ws, umask=0o002)
+        assert result.stdout.strip() == "akh-workspace: linked .agents/skills"
+        assert _os.readlink(ws / ".agents" / "skills") == "../.claude/skills"
+        assert (ws / ".agents" / "skills").resolve() == (ws / ".claude" / "skills").resolve()
+        assert mode(ws / ".agents") == 0o755
+
+    def test_a_skill_written_through_the_link_lands_in_claude_skills(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        self.run(tmp_path, ws)
+        (ws / ".claude" / "skills" / "x").mkdir()
+        (ws / ".claude" / "skills" / "x" / "SKILL.md").write_text("x")
+        assert (ws / ".agents" / "skills" / "x" / "SKILL.md").read_text() == "x"
+
+    def test_a_second_run_prints_nothing_and_changes_nothing(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        self.run(tmp_path, ws)
+        result = self.run(tmp_path, ws)
+        assert result.stdout == ""
+        assert _os.readlink(ws / ".agents" / "skills") == "../.claude/skills"
+
+    def test_an_agents_folder_that_exists_is_used_without_changing_its_mode(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        (ws / ".agents").mkdir(mode=0o750)
+        (ws / ".agents").chmod(0o750)
+        result = self.run(tmp_path, ws)
+        assert result.stdout.strip() == "akh-workspace: linked .agents/skills"
+        assert mode(ws / ".agents") == 0o750
+
+    def test_a_real_agents_skills_folder_is_left_as_it_is(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        (ws / ".agents" / "skills" / "mine").mkdir(parents=True)
+        result = self.run(tmp_path, ws)
+        assert result.stdout == ""
+        assert not (ws / ".agents" / "skills").is_symlink()
+        assert (ws / ".agents" / "skills" / "mine").is_dir()
+
+    def test_an_agents_skills_link_elsewhere_is_left_as_it_is(self, tmp_path):
+        ws, elsewhere = self.workspace(tmp_path), tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (ws / ".agents").mkdir()
+        (ws / ".agents" / "skills").symlink_to(elsewhere)
+        result = self.run(tmp_path, ws)
+        assert result.stdout == ""
+        assert _os.readlink(ws / ".agents" / "skills") == str(elsewhere)
+        assert list(elsewhere.iterdir()) == []
+
+    def test_a_dangling_agents_skills_link_is_left_as_it_is(self, tmp_path):
+        ws = self.workspace(tmp_path)
+        (ws / ".agents").mkdir()
+        (ws / ".agents" / "skills").symlink_to(tmp_path / "gone")
+        assert self.run(tmp_path, ws).stdout == ""
+        assert _os.readlink(ws / ".agents" / "skills") == str(tmp_path / "gone")
+
+    @pytest.mark.parametrize("layout", ["agents-link", "agents-writable", "agents-file"])
+    def test_an_agents_path_the_client_must_not_write_is_left_alone(self, tmp_path, layout):
+        ws, elsewhere = self.workspace(tmp_path), tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        if layout == "agents-link":
+            (ws / ".agents").symlink_to(elsewhere)
+        elif layout == "agents-writable":
+            (ws / ".agents").mkdir()
+            (ws / ".agents").chmod(0o775)
+        else:
+            (ws / ".agents").write_text("x")
+        result = self.run(tmp_path, ws)
+        assert result.stdout == ""
+        assert list(elsewhere.iterdir()) == []
+        assert not _os.path.lexists(ws / ".agents" / "skills")
+
+    def test_a_claude_skills_that_is_a_link_gets_no_link_to_it(self, tmp_path):
+        ws, elsewhere = tmp_path / "proj", tmp_path / "elsewhere"
+        (ws / ".claude").mkdir(parents=True)
+        elsewhere.mkdir()
+        (ws / ".claude" / "skills").symlink_to(elsewhere)
+        assert self.run(tmp_path, ws).stdout == ""
+        assert not (ws / ".agents").exists()
+
+    def test_a_base_that_is_not_dot_claude_gets_nothing(self, tmp_path):
+        ws = tmp_path / "proj"
+        (ws / "other" / "skills").mkdir(parents=True)
+        result = run_marked("akh-agents-link", tmp_path, cwd=ws, base=str(ws.resolve() / "other"))
+        assert result.stdout == ""
+        assert not (ws / ".agents").exists()
+
+    def test_the_link_is_excluded_from_git_and_stays_excluded_after_a_remove(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        base = repo / ".claude"
+        installed(base)
+        run_marked("akh-agents-link", tmp_path, cwd=repo, base=str(repo.resolve() / ".claude"))
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip().splitlines() == ["akh-workspace: excluded /.claude/skills/x/",
+                                                 "akh-workspace: excluded /.agents/skills"], r.stderr
+        assert git("status", "--porcelain", "--untracked-files=all", cwd=repo) == ""
+        run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="remove")
+        assert exclude_lines(repo) == ["/.agents/skills"]
+
+    def test_a_workspace_without_the_link_excludes_only_the_skill(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        base = repo / ".claude"
+        installed(base)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: excluded /.claude/skills/x/"
+
+    def test_a_link_to_somewhere_else_is_not_excluded(self, tmp_path):
+        repo, elsewhere = tmp_path / "repo", tmp_path / "elsewhere"
+        repo.mkdir()
+        elsewhere.mkdir()
+        git("init", "-q", cwd=repo)
+        (repo / ".agents").mkdir()
+        (repo / ".agents" / "skills").symlink_to(elsewhere)
+        base = repo / ".claude"
+        installed(base)
+        r = run_marked("akh-workspace-exclude", tmp_path, base=str(base), slug="x", action="add")
+        assert r.stdout.strip() == "akh-workspace: excluded /.claude/skills/x/"
+
+
 class TestWorkspaceModes:
     def test_install_loses_group_and_other_write(self, tmp_path):
         base = tmp_path / "proj" / ".claude"
@@ -1101,6 +1234,7 @@ WORKSPACE_LINES = [
     "Stopped: this session runs in your home folder, whose .claude/ is your own install, not a workspace's, so nothing was written. Start the session in a project folder, or run the command without --workspace.",
     "Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder, is a link, is not a folder, is not yours, or could not be made, so nothing was written.",
     "Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.",
+    "Also linked .agents/skills to .claude/skills in this workspace, so Codex, OpenCode and other tools that read .agents/skills load the same skills.",
 ]
 
 
@@ -1111,13 +1245,13 @@ class TestWorkspaceSection:
 
     def test_every_marked_command_that_touches_the_base_takes_it_as_a_placeholder(self):
         for marker in ("akh-mcp-file", "akh-user-agent-names", "akh-workspace-modes", "akh-workspace-exclude",
-                       "akh-home-paths"):
+                       "akh-home-paths", "akh-agents-link"):
             block = command(marker)
             assert "<base>" in block, marker
             assert "~/.claude" not in block.split("\n", 2)[2], marker
 
     def test_no_placeholder_carries_text_from_a_skill(self):
-        for marker in ("akh-workspace-modes", "akh-workspace-exclude", "akh-home-paths"):
+        for marker in ("akh-workspace-modes", "akh-workspace-exclude", "akh-home-paths", "akh-agents-link"):
             assert set(re.findall(r"<([a-z.]+)>", command(marker))) <= {"base", "slug", "action"}, marker
 
     def test_exact_install_asks_nothing(self):

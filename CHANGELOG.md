@@ -12,6 +12,8 @@
 - **Client 2.4.1** — an existing plugin install keeps the earlier client until you run `/plugin marketplace update SLAC-Agent-Knowledge-Hub` in a session, or `claude plugin update agent-knowledge-hub@SLAC-Agent-Knowledge-Hub` in a shell.
 - **Client 2.4.2: the home-folder stop message no longer promises `--exact` a way out it doesn't have** — `install --exact` always works on the workspace and has no form without `--workspace`, so the stop message a home-folder session gets now names only the five commands that do have one (`install`, `install skillset`, `list`, `update`, `remove`), instead of telling every caller to run without `--workspace`.
 
+- **Client 2.4.3: a workspace install links `.agents/skills` to `.claude/skills`** — Codex, OpenCode and other tools that read `.agents/skills` load the skills a workspace install writes, with no change to where the client writes them. The client makes the link only when nothing is at `.agents/skills`, leaves an existing `.agents/skills` as it is, and adds it to the repository's `info/exclude` with the installed skill (#059).
+
 **New docs:** `docs/adr/adr-u44-client-workspace-install.md`.
 
 ## 0.21.0 — 2026-10-16

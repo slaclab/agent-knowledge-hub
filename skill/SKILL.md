@@ -53,6 +53,8 @@ Before anything else, run the `akh-workspace-base` command below, with `<mode>` 
 - a `.claude/`, `.claude/skills/`, `.claude/commands/` or `.claude/agents/` that is a link, is not a folder, belongs to another account, or cannot be made (`refused folder`, the workspace-folder line);
 - one of those folders that other accounts can write (`refused writable <path>`, the writable-folder line).
 
+After the manifest is written, a workspace install also links `.agents/skills` to `.claude/skills` when nothing is at `.agents/skills`, so Codex, OpenCode and any other tool that reads `.agents/skills` loads the same skills (`akh-agents-link`, under Modes and git). The real folder stays `.claude/skills`, which every command below opens without following a link; an `.agents/skills` that already exists is left as it is.
+
 Each refusal stops the command with its line, with nothing written. With `make`, the command makes `.claude/` and `.claude/skills/` where they are missing, with mode `0755`, and adds `new` after the base when it made `.claude/skills/`: Claude Code then reads it only from the next session, which the new-folder line says.
 
 ```sh
@@ -116,7 +118,7 @@ In a workspace install, read every other `~/.claude/` in this file as `<base>/`,
 - **Agent names.** Run `akh-user-agent-names` once with the workspace's `<base>` and once with the home one, and leave out an agent whose name matches one in either list that this skill's manifest does not record. An agent in the workspace would replace an agent of yours that has its name.
 - **MCP servers.** A server is added for this workspace only. Its block carries the workspace forms of the add line and the "Changed" line, and the still-set-up line its workspace form, all under Install › Closing message. The lead-in's second sentence reads: "The server is then available in this workspace only, in Claude Code sessions you start in it after adding it." A server that uses `${HOME}/.claude/skills/` gets no command, with that no-command reason.
 - **Files that name the home folder.** After the manifest is written, run `akh-home-paths`. When it prints a file, the closing message carries the home-paths line, naming each file.
-- **Modes and git.** After the manifest is written, run `akh-workspace-modes`. When it prints an `akh-workspace: foreign <path>` line, run `akh-remove` (under Remove) and stop with the foreign-file line. Otherwise run `akh-workspace-exclude` with `<action>` replaced by `add`. `remove --workspace` and `update --workspace` run it with `remove` before they delete anything. `akh-workspace: not in git` and `akh-workspace: not excluded` need no line.
+- **Modes and git.** After the manifest is written, run `akh-workspace-modes`. When it prints an `akh-workspace: foreign <path>` line, run `akh-remove` (under Remove) and stop with the foreign-file line. Otherwise run `akh-agents-link`, then `akh-workspace-exclude` with `<action>` replaced by `add`. `akh-agents-link` prints `akh-workspace: linked .agents/skills` when it made the link, which the linked line in Install › Closing message reports, and nothing otherwise. `remove --workspace` and `update --workspace` run it with `remove` before they delete anything. `akh-workspace: not in git` and `akh-workspace: not excluded` need no line.
 
 ```sh
 python3 -I - '<base>' '<slug>' <<'EOF'
@@ -221,6 +223,37 @@ EOF
 ```
 
 ```sh
+python3 -I - '<base>' <<'EOF'
+# akh-agents-link: link the workspace's .agents/skills to .claude/skills when nothing is there, so tools that read .agents/skills load the same skills
+import os, stat, sys
+base = sys.argv[1]
+ws = os.path.dirname(base)
+agents, link = os.path.join(ws, ".agents"), os.path.join(ws, ".agents", "skills")
+
+def usable(path):
+    """True for a folder that is not a link, is the account's own and cannot be written by others."""
+    st = os.lstat(path)
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and not st.st_mode & 0o022
+
+try:
+    if os.path.basename(base) != ".claude" or not usable(os.path.join(base, "skills")) or os.path.lexists(link):
+        sys.exit(0)
+    if os.path.lexists(agents):
+        if not usable(agents):
+            sys.exit(0)
+    else:
+        os.mkdir(agents, 0o700)
+        fd = os.open(agents, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        os.fchmod(fd, 0o755)
+        os.close(fd)
+    os.symlink("../.claude/skills", link)
+    print("akh-workspace: linked .agents/skills")
+except OSError:
+    pass
+EOF
+```
+
+```sh
 python3 -I - '<base>' '<slug>' '<action>' <<'EOF'
 # akh-workspace-exclude: add or remove the lines in the repository's info/exclude that keep a workspace install out of git
 import json, os, re, stat, subprocess, sys
@@ -281,6 +314,11 @@ except FileNotFoundError:
 except OSError:
     stop("not excluded")
 lines = current.split("\n") if current is not None else []
+link = os.path.join(ws, ".agents", "skills")
+if action == "add" and os.path.islink(link) and os.readlink(link) == "../.claude/skills":
+    rel = os.path.relpath(os.path.join(os.path.realpath(ws), ".agents", "skills"), os.path.realpath(top))
+    if not rel.startswith("..") and re.fullmatch(r"[A-Za-z0-9._/-]+", rel):
+        wanted.append("/" + rel)
 if action == "add":
     new = [l for l in wanted if l not in lines]
     if new:
@@ -353,6 +391,7 @@ Stopped: this workspace's .claude/, or its skills/, commands/ or agents/ folder,
 Stopped: <path> can be changed by other accounts (group or other write), so a skill installed below it could be too, and nothing was written. Run chmod go-w <path> and run the command again.   (the writable-folder line)
 Not installed: <path> in <slug>'s folder is a link, or belongs to another account, which /agent-knowledge-hub never writes, so the folder was removed and nothing else was written.   (the foreign-file line)
 Claude Code reads a workspace's .claude/skills/ folder only when a session starts, and this install made it, so the skills load in the next session you start in this workspace.   (the new-folder line, when the base came with new: after the success line, or after the summary line in install skillset and install --exact)
+Also linked .agents/skills to .claude/skills in this workspace, so Codex, OpenCode and other tools that read .agents/skills load the same skills.   (the linked line, when `akh-agents-link` printed `akh-workspace: linked .agents/skills`: right after the new-folder line, or where it would be)
 <slug> refers to ~/.claude/skills/<slug>/ in <files>, which a workspace install does not create, so those parts may not work. Install it without --workspace to use them.   (the home-paths line)
 ```
 ---

@@ -169,7 +169,7 @@ skillclaw restore hermes      # revert Hermes config changes
 
 ## Applied in
 
-*(none yet — newly catalogued)*
+- [reports/oct2026-skill-hub-batch-vs-akh.md](../reports/oct2026-skill-hub-batch-vs-akh.md) — `format_skills_compact` and `retrieve(top_k=6)` cited as precedent for token-cost display and top-k search (A-4, A-5)
 
 ## Sources
 

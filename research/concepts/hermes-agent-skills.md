@@ -248,7 +248,7 @@ SkillClaw patches `~/.hermes/config.yaml` to route LLM traffic through its proxy
 
 ## Applied in
 
-*(none yet — newly catalogued)*
+- [reports/oct2026-skill-hub-batch-vs-akh.md](../reports/oct2026-skill-hub-batch-vs-akh.md) — `skills_guard.py` categories as the rule specification for AKH's server-side scan (A-2); `HubLockFile` as the precedent for recording the installed commit (A-1 e)
 
 ## Sources
 

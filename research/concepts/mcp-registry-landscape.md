@@ -248,6 +248,7 @@ Recommended approach: at server install time, persist each `ToolDefinition` (nam
 
 ## Applied in
 - [reports/mcp-registry-for-akh.md](../reports/mcp-registry-for-akh.md) — what AKH and cogito should steal, defer, and skip
+- [reports/oct2026-skill-hub-batch-vs-akh.md](../reports/oct2026-skill-hub-batch-vs-akh.md) — re-scopes the tool-level indexing gap to acquisition first (A-8). Corrects §6: AKH does not call `tools/list` at install time or anywhere else; the client never adds or starts an MCP server (#051)
 
 ---
 
